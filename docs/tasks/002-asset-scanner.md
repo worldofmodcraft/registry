@@ -284,3 +284,247 @@ Scanner + signature table + contract schema + tests/fixtures + `docs/validation/
 
   **Status: acceptance criteria 1–7 all demonstrated; ready for review.** Commit follows on this
   branch (not pushed — see the pre-existing note above on `gh` token push access).
+
+---
+# Spec amendment — round 2 (manager, 2026-09-02)
+
+Independent adversarial review got Blizzard payloads **accepted** three ways, all reproduced by
+the manager. Root cause is a **defect in this spec**, not in the implementation: round 1 asked for
+"identify every file's real type by magic bytes", and a magic-byte-at-offset-0 sniffer is exactly
+what was built. The spec never said what the scanner must actually guarantee. It does now.
+
+## The guarantee, stated properly
+A file is accepted only if **the entire file is a well-formed instance of a whitelisted format**.
+Not "its first bytes look right" — the whole file, to EOF, with nothing left over.
+
+This is deliberately *not* "scan the file for forbidden signatures". Byte-scanning produces false
+positives (compressed pixel data legitimately contains arbitrary byte sequences) and false
+negatives (trivially defeated by compressing or offsetting the payload). Proving well-formedness
+is both stricter and quieter: a PNG with a DBC glued after IEND fails because it is not a valid
+PNG, not because we recognised the DBC.
+
+## Additional acceptance criteria (round 1's seven still stand)
+
+8. **No unvalidated tail.** For each accepted format, parsing reaches the structural end of the
+   file and the file ends there. Demonstrated for each of PNG, OGG, glTF, GLB: a valid file of
+   that type with an appended DBC payload is **rejected**, naming trailing data as the reason.
+9. **Truncated-but-valid-prefix is rejected.** A file consisting only of a whitelisted signature
+   and nothing else — 8 bytes of PNG header, 4 bytes of `OggS` — is rejected, not accepted.
+10. **The text bucket is bounded by the same rule.** A text-classified file is inspected in full,
+    not by a 4096-byte prefix. A file of benign text followed at any offset by binary content is
+    rejected. State the size ceiling above which full inspection is refused, and reject rather
+    than accept beyond it.
+11. **The GLB walk recurses.** An embedded payload that is itself a container (GLB/glTF) is
+    validated as a container, not classified by a header sniff. Demonstrated: a GLB whose
+    bufferView payload is a fake glTF header followed by a DBC payload is rejected.
+12. **Signature constants are verified against on-disk byte order.** WoW's chunked formats
+    (WMO, ADT, WDT) store chunk tags **byte-reversed**: wow.export compares `readUInt32LE()`
+    against `0x4D564552`, so the bytes on disk are `REVM`, not `MVER`. The current
+    `_mver_mohd()` compares the forward string and therefore can never match a real WMO.
+    Fix it, and rebuild `build_wmo()` from the corrected sequence — the fixture currently
+    reproduces the same wrong convention, which is why 21 passing tests never caught it.
+    Accept **both** byte orders where a format is genuinely ambiguous, and say which is which.
+13. **Fixtures must not be derived from the implementation.** Every rejection fixture is built
+    from an independently cited byte sequence. A test whose expected value comes from the code it
+    tests proves only self-consistency — that is how finding 4 survived a green suite.
+14. **`docs/validation/asset-scanner.md` states the real limits.** Whatever residual gap remains
+    after the above (size ceilings, formats not fully parsed) is disclosed in Known Limitations.
+    A security document that omits the bypasses is worse than none, because it stops people looking.
+
+## Also forbidden here (added)
+- Classifying any file, at any nesting depth, from a bounded prefix when the file is small enough
+  to inspect fully.
+- Reporting a criterion as met on fixtures the implementation itself generated.
+
+---
+# Round-2 remediation log (2026-09-03, implementer/sonnet)
+
+## Summary of what was wrong and what changed
+
+Independent adversarial review found three real bypasses (padding past the 4096-byte probe
+window; a whitelisted header followed by an arbitrary tail, including a bare signature with
+nothing else; a GLB embedded-payload check that header-sniffed instead of recursively
+validating) plus a fourth defect (the WMO matcher compared on-disk bytes against the forward
+ASCII string `"MVER"`/`"MOHD"`, but the cited source reads the tag as a little-endian integer
+that unpacks to the byte-reversed `"REVM"`/`"DHOM"` — so the matcher could never match a real
+WMO file; it still failed closed as `UNKNOWN`, but never named the format, and the fixture
+builder reproduced the identical wrong byte order, which is why the bug survived a 21-test green
+suite).
+
+Root cause of the first three (per the manager's amendment, which I agree with after reviewing
+it against the original spec text): round 1's spec said "identify every file's real type by
+magic bytes" and never stated a guarantee beyond that — a signature-at-offset-0 sniffer satisfies
+the letter of that spec completely. The amendment fixes the spec; this entry documents the fix
+to the implementation.
+
+**New guarantee (implemented in full):** a file is accepted only if the *entire* file is a
+well-formed instance of a whitelisted format — parsing reaches that format's true structural end
+and the file ends exactly there, never "the first N bytes look right".
+
+## Architecture change
+
+- **`tools/validation/scan_assets.py`** gained a `Window`/`ByteWindow`/`MemoryByteWindow`
+  abstraction: a bounded, seekable `[start, start+length)` view that answers `read_at` and
+  `sub_window`. Every full-file validator (`validate_png_fully`, `validate_ogg_fully`,
+  `validate_text_fully`, `validate_glb_fully`) operates on a window, not directly on a file. A
+  top-level file is one window over the whole file; an embedded GLB payload (a bufferView slice
+  of the BIN chunk, or a base64-decoded `data:` URI) is *also* just a window. The single dispatch
+  function `classify_window(window, depth)` is used for both top-level files and every embedded
+  payload at every nesting depth — this is what makes GLB recursion real (round-2 criterion 11)
+  rather than a second, weaker code path.
+- **PNG**: full chunk-stream walk from the signature to `IEND` (length/type/data/CRC per the W3C
+  PNG spec's chunk layout, verified 2026-09-02 by fetching `https://www.w3.org/TR/png/#5Chunk-layout`);
+  first chunk must be `IHDR` of exactly 13 bytes; the file must end exactly at `IEND`. Chunk
+  *payload* bytes are never read (only 8-byte headers), so this is fast and bounded-memory
+  regardless of image size (measured: a 1 MB incompressible-content PNG scans in ~56 ms).
+- **OGG**: full page-stream walk using RFC 3533 §6's exact 27-byte fixed header + segment table +
+  lacing-value payload-length layout (re-verified 2026-09-02 by fetching the RFC directly for the
+  precise field layout, not just the capture pattern this time); the file must end exactly on a
+  page boundary. Page payload bytes are never read either.
+- **TEXT**: `validate_text_fully` streams the *entire* file through an incremental UTF-8 decoder
+  (`codecs.getincrementaldecoder`) in bounded 64 KiB blocks, checking every byte for disallowed
+  control characters — not a 4096-byte prefix. This is the direct fix for finding 1.
+- **GLB**: `validate_glb_fully` is structurally the same bounds-checked chunk walk as round 1
+  (kept — the manager confirmed this part was exact and well-tested), but
+  `_walk_embedded_images` now recurses into `classify_window` for every embedded payload instead
+  of calling the old prefix-only `classify_header`. An embedded GLB-shaped payload is therefore
+  fully re-parsed as a container (including its *own* embedded payloads, bounded by
+  `MAX_GLB_NESTING_DEPTH = 8`), not waved through on a magic-byte match.
+- **New named ceilings** (all disclosed in `docs/validation/asset-scanner.md`): `MAX_FULL_SCAN_BYTES`
+  = 256 MiB (files over this are rejected outright, never partially scanned and accepted — this
+  is round-2 criterion 10's explicit requirement); `MAX_CHUNK_COUNT` = 100,000 (bounds
+  chunk/page iteration count independently of file size, since chunk-skipping means the byte
+  ceiling alone doesn't bound a pathological zero-length-chunk file); `MAX_GLB_NESTING_DEPTH` = 8.
+- **`tools/validation/magic.py`**: every one of the five Blizzard signatures is now derived
+  mechanically via `struct.pack("<I", hex_constant)` from the exact integer named in its cited
+  source, rather than a hand-typed ASCII literal — this is the direct fix for finding 4, applied
+  to all five (not just WMO) since the same class of error could recur elsewhere. Confirmed by
+  running the derivation on all five: only WMO's on-disk bytes differ from the forward ASCII
+  spelling (`REVM`/`DHOM` vs `MVER`/`MOHD`); DBC/MPQ/BLP/M2 were already correct. The WMO matcher
+  now accepts both the on-disk-verified reversed order and the forward spelling defensively, and
+  reports which one matched (`wmo_match_orientation`).
+- **`tests/validation/fixture_builder.py`**: every Blizzard-format fixture is now built the same
+  way — `struct.pack("<I", ...)` on an independently re-stated hex constant, with its own
+  citation comment, and the module **never imports `tools/validation/magic.py`** (enforced by a
+  new test, `Criterion13FixturesIndependentlyDerived`, using AST inspection rather than a naive
+  text grep after that grep produced its own false positive on this file's prose). `build_wmo()`
+  is replaced by `build_wmo_reversed()` (the on-disk-verified form) and `build_wmo_forward()` (the
+  defensive-fallback form), plus a dedicated regression test
+  (`test_wmo_fixture_bytes_are_actually_reversed_on_disk`) asserting the reversed fixture's first
+  4 bytes are literally `b"REVM"`, not `b"MVER"`.
+
+## What was deliberately kept unchanged (per the manager's explicit instruction)
+
+GLB structural bounds checking (declared length vs. real size, the `0xFFFFFFFF` overflow
+fixture, truncated chunk headers) — logic untouched, only re-parented onto the `Window`
+abstraction. The counters (`files_inspected == accepted + rejected`, skips counted with
+reasons, no silent drops). The stdlib `schema_check.py` validator. The legitimately-skipped
+`test_runs_with_network_namespace_unshared` test and its honest skip reason. All of round 1's
+21 tests still pass unchanged in intent (one assertion's expected substring was updated from
+"file's actual size" to "file/region's actual size" — a wording change only, to cover embedded
+sub-regions using the same message, not a behaviour change; verified by re-running all of round
+1's original `/tmp/wom-scan-demo` fixture trees against the new scanner and confirming identical
+accept/reject/exit-code/counter output, including a byte-identical SHA-256 on the criterion-1
+whitelist tree's report both before and after this change).
+
+## Round-2 acceptance criteria — each demonstrated by a command actually run
+
+All commands below were run from `/home/ludwig/wt/registry-task-002`. Fixtures built via
+`tools/validation/fixture_builder.py` (imported directly) into `/tmp/wom-scan-demo2/`.
+
+8. **No unvalidated tail.** `python3 tools/validation/scan_assets.py /tmp/wom-scan-demo2/c8_trailing`
+   → exit 1, all 4 rejected as `MALFORMED`: PNG+DBC → "20 byte(s) of trailing data after the PNG
+   stream's IEND chunk"; OGG+DBC → fails parsing the DBC bytes as a second page ("header
+   truncated"), a legitimate rejection since DBC bytes never form a valid `OggS` page; glTF
+   text padded past 4096 bytes then DBC → "disallowed binary byte 0x00 found at offset 4100"
+   (proving the *full* validator caught it, not the cheap probe: offset 4100 > `HEADER_PROBE_SIZE`
+   4096); GLB+DBC → "GLB header declares total length 120 but the file/region is 140 byte(s)".
+   Also the exact bypass-2 wording ("8-byte PNG signature + full DBC payload") demonstrated
+   separately: `/tmp/wom-scan-demo2/c_bypass2/data.png` → rejected, "first PNG chunk must be
+   IHDR, found b'\x00\x00\x00\x00'". Also `Criterion8NoUnvalidatedTail` (5 tests).
+9. **Truncated-but-valid-prefix rejected.** `.../c9_truncated` (8-byte PNG signature only,
+   4-byte `OggS` only) → exit 1, both rejected as `MALFORMED` ("PNG stream ends ... without an
+   IEND chunk"; "shorter than a minimal Ogg page header"). Also `Criterion9TruncatedValidPrefixRejected`
+   (3 tests, including a GLB analogue: header only, no JSON chunk).
+10. **Text bucket bounded but full.** `.../c10_padding` (exact finding-1 repro: 4096 bytes of Lua
+    comments then raw DBC) → exit 1, rejected at offset 4100, past the old probe window — this
+    fixture would have been silently accepted by the round-1 scanner. Ceiling stated
+    (`MAX_FULL_SCAN_BYTES = 268435456` bytes / 256 MiB, named constant in `scan_assets.py` and in
+    `docs/validation/asset-scanner.md`) and enforced (`Criterion10TextBucketBoundedButFull.
+    test_size_ceiling_is_a_named_constant_and_enforced`: a sparse file one byte over the ceiling
+    is rejected outright with the ceiling named in the reason, not truncated-and-accepted).
+11. **GLB walk recurses.** `.../c11_nested/trap.glb` (bufferView payload = fake `glTF` header,
+    correctly sized, containing DBC bytes as "chunk 0") → exit 1, rejected: "embedded payload in
+    GLB BIN chunk (image[0], bufferView[0]) at file offset 224: GLB chunk 0 declares length
+    1128416343 byte(s) ... past the file/region's actual size of 256 byte(s)". 1128416343 decimal
+    = `0x43424457` = the `WDBC` magic reinterpreted as a little-endian chunk length — direct proof
+    the recursive parser actually attempted to parse the DBC bytes as a GLB chunk (not merely
+    checked the fake outer magic and stopped). Also `Criterion11GlbWalkRecurses` (2 tests).
+12. **WMO byte order.** `.../c12_wmo` (both `reversed_screenshot.png` and `forward_screenshot.png`)
+    → exit 1, both named `WMO` (not `UNKNOWN`), each reason stating which orientation matched
+    ("matched the on-disk chunk-tag byte order: reversed." / "...: forward."). Also
+    `Criterion12WmoByteOrder` (3 tests, including the fixture-bytes-are-really-reversed regression
+    guard).
+13. **Fixtures independently derived.** `Criterion13FixturesIndependentlyDerived` (2 tests): AST
+    inspection proves `fixture_builder.py` contains no `import`/`from` statement naming `magic`
+    (a naive text-substring check was tried first and produced a false positive on this file's
+    own prose describing the independence rule — fixed to use `ast.walk`); a second test confirms
+    the file states its own citations (AzerothCore, StormLib, wow.export) rather than only citing
+    magic.py.
+14. **Limitations disclosed.** `docs/validation/asset-scanner.md`'s "Known limitations" section
+    states, in the log's own words, the residual gaps: chunk/page checksums not verified (and
+    why that specific gap doesn't reopen the trailing-data bypass this round closed); OGG
+    logical-stream continuity not verified; PNG pixel/palette semantics not decoded; the TEXT
+    bucket is format-agnostic (no JSON/Lua grammar check); non-base64 `data:` URIs not sniffed;
+    the 256 MiB / 100,000-chunk / 8-level-nesting ceilings named explicitly. Also
+    `Criterion14LimitationsDisclosed` (2 tests) checking the section exists, is non-trivial
+    (>200 chars), and actually mentions "CRC", "checksum", and the numeric ceiling value.
+
+Round 1's criteria 1–7 re-verified end-to-end against the rewritten scanner using the original
+`/tmp/wom-scan-demo/` fixture trees: identical accept/reject/exit-code/counter output in every
+case, including a byte-identical SHA-256 (`50eb3478...09cdabe3`) on the criterion-1 whitelist
+tree's report, both before and after this change.
+
+## Test suite
+
+`python3 -m unittest discover -s tests/validation -v` → **40 tests, 39 passed, 1 skipped**
+(`test_runs_with_network_namespace_unshared`, same legitimate sandbox limitation as round 1 —
+kept, not touched). Full output tail:
+```
+Ran 40 tests in 1.613s
+OK (skipped=1)
+```
+
+## New design decisions (booked, not silently shipped)
+
+- **`MAX_FULL_SCAN_BYTES = 256 MiB`, `MAX_CHUNK_COUNT = 100,000`, `MAX_GLB_NESTING_DEPTH = 8`**:
+  none of these numbers come from an ADR or the task spec (which only says "state the size
+  ceiling" without naming one) — they are my engineering judgement, documented with reasoning in
+  both `scan_assets.py`'s comments and `docs/validation/asset-scanner.md`. Flagging in case
+  Ludwig wants a different ceiling for a specific real asset class (e.g. a longer music track).
+  **Lean: ★ proceed as built** — generous for any realistic WotLK-era mod asset, and the ceiling
+  is a named, visible, easily-changed constant, not a buried magic number.
+- **PNG/OGG checksum verification was deliberately NOT added.** I considered computing PNG chunk
+  CRCs and Ogg page checksums for extra rigor, but concluded the specific bypass this round closes
+  (arbitrary trailing bytes) is fully closed by framing-to-EOF validation alone — CRC checking
+  would not have stopped a well-crafted attack (which would simply compute a correct CRC for its
+  wrapper) and adds real implementation risk (getting a checksum algorithm's polynomial/variant
+  wrong is exactly the kind of "invented from memory" mistake this task already had one instance
+  of, with WMO's byte order). Disclosed explicitly in Known Limitations rather than silently
+  scoped out. **Lean: ★ proceed as built**, but flagging since it's a scope judgement call, not a
+  requirement from the amendment text.
+- **Data-URI embedded payload offsets are reported relative to the decoded buffer, not as a file
+  offset** (there isn't one — the bytes only exist after decoding base64 text). The reason string
+  says so explicitly ("this payload is decoded from base64 text and has no single file byte
+  offset of its own"). Same category as round-1's Q2; **lean: ★ proceed as built**.
+
+## File scope
+
+Same declared scope as round 1: `tools/validation/{scan_assets.py,magic.py}`,
+`contracts/validation-report.schema.json` (untouched this round — the report *shape* did not
+change, only what triggers which verdict), `tests/validation/**`,
+`docs/validation/asset-scanner.md`, and this task file's log. No file outside that scope was
+touched.
+
+**Status: round-2 criteria 8–14 all demonstrated; round-1 criteria 1–7 re-verified unaffected.
+Ready for re-review.**

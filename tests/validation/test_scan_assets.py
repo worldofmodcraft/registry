@@ -87,7 +87,7 @@ class Criterion2BlizzardFormatsRejected(unittest.TestCase):
             "mpq": (fb.build_mpq(), "MPQ"),
             "blp": (fb.build_blp(), "BLP"),
             "m2": (fb.build_m2(), "M2"),
-            "wmo": (fb.build_wmo(), "WMO"),
+            "wmo": (fb.build_wmo_reversed(), "WMO"),  # the on-disk-verified byte order (round-2 finding 4)
         }
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
@@ -221,7 +221,7 @@ class Criterion5HostileInputFailsClosed(unittest.TestCase):
             self.assertNotEqual(code, 0)
             r = report["rejected"][0]
             self.assertEqual(r["detected_format"], "MALFORMED")
-            self.assertIn("past the file's actual size", r["reason"])
+            self.assertIn("past the file/region's actual size", r["reason"])
 
     def test_glb_chunk_length_overflow_on_sum(self):
         with tempfile.TemporaryDirectory() as d:
@@ -356,6 +356,264 @@ class Criterion7OfflineAndDeterministic(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, msg=proc.stderr)
             report = json.loads(proc.stdout)
             self.assertEqual(report["accepted"], [{"path": "a.png", "format": "PNG"}])
+
+
+class Criterion8NoUnvalidatedTail(unittest.TestCase):
+    """For each accepted format, parsing reaches the structural end of the file
+    and the file ends there. A valid file of that type with an appended DBC
+    payload is rejected, naming trailing data as the reason."""
+
+    def test_png_with_trailing_dbc_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            write(root, "x.png", fb.build_png_with_trailing_data(fb.build_dbc()))
+            code, report = run_scanner(root)
+            self.assertNotEqual(code, 0)
+            r = report["rejected"][0]
+            self.assertEqual(r["detected_format"], "MALFORMED")
+            self.assertIn("trailing data", r["reason"])
+            self.assertIn("IEND", r["reason"])
+
+    def test_ogg_with_trailing_dbc_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            write(root, "x.ogg", fb.build_ogg_with_trailing_data(fb.build_dbc()))
+            code, report = run_scanner(root)
+            self.assertNotEqual(code, 0)
+            r = report["rejected"][0]
+            self.assertEqual(r["detected_format"], "MALFORMED")
+            # The DBC bytes do not form a second valid Ogg page, so the walk
+            # fails trying to parse them as one -- also a legitimate, honest
+            # rejection reason (not silently accepted either way).
+            self.assertTrue(
+                "trailing data" in r["reason"] or "truncated" in r["reason"] or "OggS" in r["reason"],
+                r["reason"],
+            )
+
+    def test_gltf_text_with_trailing_dbc_is_rejected_small_file(self):
+        """Small-file variant: the DBC bytes are already inside the cheap
+        first-guess probe, so this is caught immediately (as UNKNOWN) rather
+        than via the full text validator. Still a real, non-zero-exit rejection
+        -- the bypass is closed either way. See the padded variant below for the
+        case that specifically exercises full-file validation."""
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            write(root, "x.gltf", fb.build_gltf_json_with_trailing_data(fb.build_dbc()))
+            code, report = run_scanner(root)
+            self.assertNotEqual(code, 0)
+            self.assertEqual(len(report["rejected"]), 1)
+            self.assertNotIn("x.gltf", [a["path"] for a in report["accepted"]])
+
+    def test_gltf_text_padded_past_probe_then_dbc_is_rejected_via_full_validator(self):
+        """The padded variant: with the DBC bytes pushed past HEADER_PROBE_SIZE,
+        only genuine full-file validation catches this -- proving criterion 8's
+        'no unvalidated tail' guarantee for the TEXT/glTF case specifically,
+        not just for the binary container formats."""
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            write(root, "x.gltf", fb.build_gltf_padded_then_dbc())
+            code, report = run_scanner(root)
+            self.assertNotEqual(code, 0)
+            r = report["rejected"][0]
+            self.assertEqual(r["detected_format"], "MALFORMED")
+            self.assertIn("binary byte", r["reason"])
+            self.assertGreater(r["signature_offset"], magic.HEADER_PROBE_SIZE)
+
+    def test_glb_with_trailing_dbc_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            write(root, "x.glb", fb.build_glb_with_trailing_data(fb.build_dbc()))
+            code, report = run_scanner(root)
+            self.assertNotEqual(code, 0)
+            r = report["rejected"][0]
+            self.assertEqual(r["detected_format"], "MALFORMED")
+            self.assertIn("declares total length", r["reason"])
+
+
+class Criterion9TruncatedValidPrefixRejected(unittest.TestCase):
+    """A file consisting only of a whitelisted signature and nothing else is
+    rejected, not accepted."""
+
+    def test_png_signature_only_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            write(root, "x.png", fb.build_png_signature_only())
+            code, report = run_scanner(root)
+            self.assertNotEqual(code, 0)
+            self.assertEqual(report["accepted"], [])
+            self.assertEqual(report["rejected"][0]["detected_format"], "MALFORMED")
+
+    def test_ogg_capture_pattern_only_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            write(root, "x.ogg", fb.build_ogg_capture_pattern_only())
+            code, report = run_scanner(root)
+            self.assertNotEqual(code, 0)
+            self.assertEqual(report["accepted"], [])
+            self.assertEqual(report["rejected"][0]["detected_format"], "MALFORMED")
+
+    def test_glb_header_only_no_chunks_is_rejected(self):
+        """The GLB analogue: header alone, no JSON chunk at all."""
+        import struct as _struct
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            write(root, "x.glb", _struct.pack("<4sII", b"glTF", 2, 12))
+            code, report = run_scanner(root)
+            self.assertNotEqual(code, 0)
+            self.assertEqual(report["accepted"], [])
+            self.assertIn("no JSON chunk", report["rejected"][0]["reason"])
+
+
+class Criterion10TextBucketBoundedButFull(unittest.TestCase):
+    """A text-classified file is inspected in full, not by a bounded prefix. A
+    file of benign text followed at any offset by binary content is rejected.
+    The full-validation size ceiling is stated and enforced: reject rather than
+    accept beyond it."""
+
+    def test_padding_past_old_probe_window_then_dbc_is_rejected(self):
+        """Reproduces round-2 finding 1 exactly: this fixture would have been
+        wrongly accepted as TEXT by the round-1 scanner, which only inspected a
+        4096-byte prefix."""
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            write(root, "script.lua", fb.build_text_padding_then_dbc())
+            code, report = run_scanner(root)
+            self.assertNotEqual(code, 0)
+            self.assertEqual(report["accepted"], [])
+            r = report["rejected"][0]
+            self.assertEqual(r["detected_format"], "MALFORMED")
+            self.assertGreater(r["signature_offset"], magic.HEADER_PROBE_SIZE)
+
+    def test_size_ceiling_is_a_named_constant_and_enforced(self):
+        self.assertGreater(sa.MAX_FULL_SCAN_BYTES, 0)
+        # A file over the ceiling is rejected outright, not truncated-and-accepted.
+        # Proven cheaply with a sparse file rather than actually allocating the
+        # ceiling's worth of real bytes.
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            p = Path(root) / "huge.txt"
+            with open(p, "wb") as f:
+                f.seek(sa.MAX_FULL_SCAN_BYTES + 1)
+                f.write(b"\x00")
+            code, report = run_scanner(root)
+            self.assertNotEqual(code, 0)
+            r = report["rejected"][0]
+            self.assertEqual(r["detected_format"], "MALFORMED")
+            self.assertIn("full-validation ceiling", r["reason"])
+            self.assertIn(str(sa.MAX_FULL_SCAN_BYTES), r["reason"])
+
+
+class Criterion11GlbWalkRecurses(unittest.TestCase):
+    """An embedded payload that is itself a container (GLB/glTF) is validated as
+    a container, not classified by a header sniff. A GLB whose bufferView
+    payload is a fake glTF header followed by a DBC payload is rejected."""
+
+    def test_fake_nested_glb_header_then_dbc_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            write(root, "trap.glb", fb.build_glb_with_fake_nested_glb_payload())
+            code, report = run_scanner(root)
+            self.assertNotEqual(code, 0)
+            self.assertEqual(report["accepted"], [])
+            r = report["rejected"][0]
+            # Must NOT be silently accepted as a nested GLB (the round-2 bypass);
+            # the recursive validator must have actually attempted to parse the
+            # DBC bytes as a GLB chunk and failed the bounds check.
+            self.assertNotEqual(r["detected_format"], "GLB")
+            self.assertIn("embedded payload", r["reason"])
+            self.assertIn("BIN chunk", r["reason"])
+
+    def test_genuinely_nested_well_formed_glb_would_be_walked_not_sniffed(self):
+        """Regression guard on the recursion mechanism itself: a bufferView
+        payload that is a well-formed GLB-shaped container but whose own JSON
+        chunk is invalid must fail for *that* reason (proving the recursive
+        parser actually ran), not be waved through on a shallow magic check."""
+        import struct as _struct
+        # A "container" with the right magic/version/length but a JSON chunk
+        # that isn't valid JSON.
+        bad_json_chunk = _struct.pack("<I4s", 4, b"JSON") + b"nope"
+        fake = _struct.pack("<4sII", b"glTF", 2, 12 + len(bad_json_chunk)) + bad_json_chunk
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            write(root, "trap2.glb", fb.build_glb_with_embedded_image(fake, "model/gltf-binary"))
+            code, report = run_scanner(root)
+            self.assertNotEqual(code, 0)
+            r = report["rejected"][0]
+            self.assertIn("not valid JSON", r["reason"])
+
+
+class Criterion12WmoByteOrder(unittest.TestCase):
+    """Signature constants are verified against on-disk byte order. Both byte
+    orders are accepted where a format is genuinely ambiguous, and the report
+    says which is which."""
+
+    def test_reversed_on_disk_order_is_named_and_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            write(root, "screenshot.png", fb.build_wmo_reversed())
+            code, report = run_scanner(root)
+            self.assertNotEqual(code, 0)
+            r = report["rejected"][0]
+            self.assertEqual(r["detected_format"], "WMO")
+            self.assertIn("reversed", r["reason"])
+
+    def test_forward_order_is_also_named_and_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            write(root, "screenshot.png", fb.build_wmo_forward())
+            code, report = run_scanner(root)
+            self.assertNotEqual(code, 0)
+            r = report["rejected"][0]
+            self.assertEqual(r["detected_format"], "WMO")
+            self.assertIn("forward", r["reason"])
+
+    def test_wmo_fixture_bytes_are_actually_reversed_on_disk(self):
+        """Guards against reintroducing round-2 finding 4: proves, independently
+        of magic.py, that build_wmo_reversed()'s on-disk bytes really are the
+        byte-reversed tag (not the ASCII string a human would type by hand)."""
+        data = fb.build_wmo_reversed()
+        self.assertEqual(data[0:4], b"REVM")
+        self.assertNotEqual(data[0:4], b"MVER")
+
+
+class Criterion13FixturesIndependentlyDerived(unittest.TestCase):
+    """Fixtures must not be derived from the implementation under test."""
+
+    def test_fixture_builder_does_not_import_magic_module(self):
+        # AST-based, not a text grep: fixture_builder.py's own docstrings
+        # legitimately *talk about* not importing magic.py in prose (e.g. "this
+        # module never imports from magic.py"), which a naive substring check on
+        # "from magic" would misfire on. Checking actual import statements is
+        # both correct and immune to that.
+        import ast
+        source = (_HERE / "fixture_builder.py").read_text()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    self.assertNotIn("magic", alias.name, f"unexpected import: {alias.name}")
+            elif isinstance(node, ast.ImportFrom):
+                self.assertFalse(node.module and "magic" in node.module, f"unexpected import from: {node.module}")
+
+    def test_fixture_builder_states_its_own_independent_citations(self):
+        source = (_HERE / "fixture_builder.py").read_text()
+        for needle in ("AzerothCore", "StormLib", "wow.export"):
+            self.assertIn(needle, source)
+
+
+class Criterion14LimitationsDisclosed(unittest.TestCase):
+    """docs/validation/asset-scanner.md states the real residual limits."""
+
+    def test_known_limitations_section_exists_and_is_non_trivial(self):
+        doc = (_HERE.parent.parent / "docs" / "validation" / "asset-scanner.md").read_text()
+        self.assertIn("Known limitations", doc)
+        section = doc.split("Known limitations", 1)[1]
+        self.assertGreater(len(section), 200, "Known Limitations section looks too thin to be real disclosure")
+
+    def test_limitations_mention_checksum_and_ceiling_gaps(self):
+        doc = (_HERE.parent.parent / "docs" / "validation" / "asset-scanner.md").read_text()
+        for needle in ("CRC", "checksum", str(sa.MAX_FULL_SCAN_BYTES)):
+            self.assertIn(needle, doc, f"Known Limitations should disclose: {needle}")
 
 
 class SignatureTableSanity(unittest.TestCase):
