@@ -50,6 +50,39 @@ def write(root: Path, rel: str, data: bytes) -> Path:
     return p
 
 
+def find_magic_import(source: str):
+    """Return a description of the first import statement in `source` that binds
+    tools/validation/magic.py, or None if there is none.
+
+    Round-3 criterion 18: the original version of this check looked only at
+    `ImportFrom.module`, so `from tools.validation import magic` -- which binds the
+    real module -- passed undetected. The fix is to check the *imported symbols*
+    (`node.names`) as well as the module path, for both statement forms.
+    """
+    import ast
+
+    def hit(name: str) -> bool:
+        # Match the module by path segment, so `magic`, `tools.validation.magic` and
+        # `magic.foo` all count while `magical_thinking` does not.
+        return "magic" in name.split(".")
+
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if hit(alias.name):
+                    return f"import {alias.name}"
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            if module and hit(module):
+                return f"from {module} import ..."
+            for alias in node.names:
+                # `from tools.validation import magic` -- the module name is in the
+                # *symbol*, not in node.module. This is the case criterion 18 names.
+                if hit(alias.name):
+                    return f"from {'.' * node.level}{module} import {alias.name}"
+    return None
+
+
 class Criterion1WhitelistAccepted(unittest.TestCase):
     """A tree with valid PNG, OGG, glTF (.gltf JSON), GLB, .md, .json, .lua, .txt
     scans clean, exit code 0."""
@@ -585,15 +618,37 @@ class Criterion13FixturesIndependentlyDerived(unittest.TestCase):
         # module never imports from magic.py"), which a naive substring check on
         # "from magic" would misfire on. Checking actual import statements is
         # both correct and immune to that.
-        import ast
-        source = (_HERE / "fixture_builder.py").read_text()
-        tree = ast.parse(source)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    self.assertNotIn("magic", alias.name, f"unexpected import: {alias.name}")
-            elif isinstance(node, ast.ImportFrom):
-                self.assertFalse(node.module and "magic" in node.module, f"unexpected import from: {node.module}")
+        offender = find_magic_import((_HERE / "fixture_builder.py").read_text())
+        self.assertIsNone(offender, f"unexpected import binding magic.py: {offender}")
+
+    def test_the_import_check_itself_catches_a_from_package_import(self):
+        # Round-3 criterion 18. The previous version of the check above inspected
+        # only ImportFrom.module, so `from tools.validation import magic` -- which
+        # binds the real module under the plain name `magic` -- sailed straight
+        # through it. The bug was in the test, so the demonstration has to be a
+        # mutated *source*, not a mutated fixture file: each form below really does
+        # bind tools/validation/magic.py, and each must be caught.
+        for source, label in [
+            ("import magic\n", "import magic"),
+            ("import magic as m\n", "aliased import"),
+            ("from magic import SIGNATURES\n", "from magic import ..."),
+            ("from tools.validation import magic\n", "from-package import (criterion 18)"),
+            ("from tools.validation import magic as m\n", "from-package aliased import"),
+            ("from ..tools.validation import magic\n", "relative from-package import"),
+            ("if True:\n    from tools.validation import magic\n", "nested from-package import"),
+        ]:
+            with self.subTest(label):
+                self.assertIsNotNone(find_magic_import(source), f"{label} was not detected")
+
+    def test_the_import_check_does_not_misfire_on_prose_or_unrelated_names(self):
+        for source, label in [
+            ('"""this module never imports from magic.py"""\n', "prose in a docstring"),
+            ("import struct\nimport zlib\n", "unrelated imports"),
+            ("magic = 3\n", "a local variable called magic"),
+            ("from pathlib import Path  # not magic\n", "a comment mentioning magic"),
+        ]:
+            with self.subTest(label):
+                self.assertIsNone(find_magic_import(source), f"{label} was wrongly flagged")
 
     def test_fixture_builder_states_its_own_independent_citations(self):
         source = (_HERE / "fixture_builder.py").read_text()
@@ -614,6 +669,318 @@ class Criterion14LimitationsDisclosed(unittest.TestCase):
         doc = (_HERE.parent.parent / "docs" / "validation" / "asset-scanner.md").read_text()
         for needle in ("CRC", "checksum", str(sa.MAX_FULL_SCAN_BYTES)):
             self.assertIn(needle, doc, f"Known Limitations should disclose: {needle}")
+
+
+class Criterion15PngChunkTypeWhitelist(unittest.TestCase):
+    """ADR-0120 clause 1: only IHDR/PLTE/IDAT/IEND plus a short named safe list.
+    Unknown, private and unlisted chunks are rejected, including ancillary chunks
+    that are harmless elsewhere."""
+
+    def _scan_one(self, name: str, data: bytes):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, name, data)
+            code, report = run_scanner(root)
+        return code, report
+
+    def test_reviewers_zblz_png_is_rejected_and_names_the_chunk(self):
+        # The exact round-3 finding: a valid PNG (signature, IHDR, IDAT, IEND,
+        # correct CRCs, no trailing bytes) whose private ancillary chunk carries a
+        # complete magic-intact DBC. Round 2 accepted this with exit code 0.
+        payload = fb.build_dbc()
+        code, report = self._scan_one("art.png", fb.build_png_with_extra_chunk(b"zBLZ", payload))
+        self.assertEqual(code, 1)
+        self.assertEqual(report["summary"]["files_accepted"], 0)
+        rej = report["rejected"][0]
+        self.assertIn("zBLZ", rej["reason"], "the rejection must name the offending chunk")
+        self.assertIn("ancillary", rej["reason"])
+        self.assertTrue(rej["remedy"])
+
+    def test_a_plain_png_is_still_accepted(self):
+        # A scanner that rejects everything is not a win.
+        code, report = self._scan_one("plain.png", fb.build_png())
+        self.assertEqual(code, 0, report)
+        self.assertEqual([a["format"] for a in report["accepted"]], ["PNG"])
+
+    def test_every_safe_list_chunk_is_accepted_at_its_spec_fixed_length(self):
+        cases = {
+            b"gAMA": (45455).to_bytes(4, "big"),
+            b"sRGB": bytes([0]),
+            b"pHYs": (2835).to_bytes(4, "big") + (2835).to_bytes(4, "big") + bytes([1]),
+        }
+        self.assertEqual(set(cases) | {b"tRNS"}, set(sa.PNG_SAFE_LIST_REASONS),
+                         "a safe-list entry exists that this test does not exercise")
+        for tag, data in cases.items():
+            with self.subTest(tag.decode()):
+                code, report = self._scan_one("a.png", fb.build_png_with_extra_chunk(tag, data))
+                self.assertEqual(code, 0, report)
+
+    def test_safe_list_chunks_are_rejected_at_any_other_length(self):
+        # The safe list admits *types at a fixed length*, never types as containers.
+        for tag, data in [
+            (b"gAMA", b"\x00" * 40),
+            (b"sRGB", b"\x00" * 40),
+            (b"pHYs", b"\x00" * 40),
+            (b"tRNS", b"\x00" * 40),  # colour type 0 fixes tRNS at 2 bytes
+        ]:
+            with self.subTest(tag.decode()):
+                code, report = self._scan_one("a.png", fb.build_png_with_extra_chunk(tag, data))
+                self.assertEqual(code, 1, report)
+                self.assertIn(tag.decode(), report["rejected"][0]["reason"])
+
+    def test_unlisted_public_ancillary_chunks_are_rejected(self):
+        # ADR-0120 clause 4 accepts this cost explicitly: colour profiles, text
+        # metadata and unusual-but-valid chunks are refused, and the author re-exports.
+        for tag, data in [
+            (b"tEXt", b"Comment\x00hello"),
+            (b"iTXt", b"Comment\x00\x00\x00\x00\x00hello"),
+            (b"zTXt", b"Comment\x00\x00xxxx"),
+            (b"iCCP", b"p\x00\x00" + b"\x00" * 40),
+            (b"eXIf", b"MM\x00*" + b"\x00" * 20),
+            (b"tIME", b"\x07\xe6\x09\x03\x00\x00\x00"),
+            (b"bKGD", b"\x00\x00"),
+        ]:
+            with self.subTest(tag.decode()):
+                code, report = self._scan_one("a.png", fb.build_png_with_extra_chunk(tag, data))
+                self.assertEqual(code, 1, report)
+                self.assertIn(tag.decode(), report["rejected"][0]["reason"])
+
+    def test_idat_cannot_be_used_as_the_container_instead(self):
+        # Closing the private-chunk route only moves the payload if IDAT -- the one
+        # permitted chunk whose length the spec does not fix -- is left uninspected.
+        dbc = fb.build_dbc()
+        with self.subTest("surplus inside the zlib stream"):
+            code, report = self._scan_one("a.png", fb.build_png_with_idat_payload(b"\x00\x00" + dbc))
+            self.assertEqual(code, 1, report)
+            self.assertIn("inflates to more than", report["rejected"][0]["reason"])
+        with self.subTest("raw bytes after the zlib stream, inside the chunk"):
+            code, report = self._scan_one("a.png", fb.build_png_with_bytes_after_zlib_stream(dbc))
+            self.assertEqual(code, 1, report)
+            self.assertIn("follow the end of the PNG's IDAT zlib stream", report["rejected"][0]["reason"])
+
+    def test_a_decompression_bomb_is_rejected_without_materialising_it(self):
+        import resource
+        data = fb.build_png_decompression_bomb(64 * 1024 * 1024)
+        self.assertLess(len(data), 100 * 1024, "the fixture itself must stay tiny")
+        code, report = self._scan_one("bomb.png", data)
+        self.assertEqual(code, 1, report)
+        self.assertIn("inflates to more than", report["rejected"][0]["reason"])
+        # The scanner runs in a subprocess, so its peak memory is visible as the
+        # children's high-water mark (KiB on Linux). Had the 64 MiB raster been
+        # materialised to reject it, this would be far above the bound.
+        child_peak_kib = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+        self.assertLess(child_peak_kib, 200 * 1024,
+                        f"scanner subprocess peaked at {child_peak_kib} KiB -- the IDAT "
+                        f"decompression bound is not holding")
+
+    def test_a_second_copy_of_a_single_occurrence_chunk_is_rejected(self):
+        code, report = self._scan_one("a.png", fb.build_png_with_extra_chunk(b"IHDR", b"\x00" * 13))
+        self.assertEqual(code, 1, report)
+        self.assertIn("second 'IHDR'", report["rejected"][0]["reason"])
+
+    def test_safe_list_reasons_are_documented(self):
+        # ADR-0120 clause 1: "every entry on that list carries a written reason for
+        # its inclusion". The reason strings live in the code; this asserts the doc
+        # carries them verbatim, so the two cannot drift apart.
+        doc = (_HERE.parent.parent / "docs" / "validation" / "asset-scanner.md").read_text()
+        for tag, reason in sa.PNG_SAFE_LIST_REASONS.items():
+            with self.subTest(tag.decode()):
+                self.assertIn(tag.decode(), doc)
+                self.assertIn(reason, doc, f"{tag.decode()}'s written reason is not in the docs")
+
+    def test_permitted_set_is_exactly_the_core_four_plus_the_safe_list(self):
+        self.assertEqual(
+            sa.PNG_PERMITTED_CHUNKS,
+            {b"IHDR", b"PLTE", b"IDAT", b"IEND", b"tRNS", b"gAMA", b"sRGB", b"pHYs"},
+        )
+        self.assertLessEqual(len(sa.PNG_SAFE_LIST_REASONS), 6, "the safe list is supposed to be short")
+
+
+    def test_the_content_whitelist_applies_inside_a_glb_too(self):
+        # The whole point of the shared classify_window dispatcher: a rule added at
+        # the top level must not be missing one layer down. A GLB whose embedded
+        # texture is the zBLZ PNG is rejected, naming the chunk, at depth.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "model.glb", fb.build_glb_with_embedded_image(
+                fb.build_png_with_extra_chunk(b"zBLZ", fb.build_dbc())))
+            code, report = run_scanner(root)
+        self.assertEqual(code, 1, report)
+        rej = report["rejected"][0]
+        self.assertIn("zBLZ", rej["reason"])
+        self.assertIn("embedded payload in GLB", rej["reason"])
+        self.assertTrue(rej["remedy"])
+
+    def test_a_glb_with_a_plain_embedded_png_is_still_accepted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "model.glb", fb.build_glb_with_embedded_image(fb.build_png()))
+            code, report = run_scanner(root)
+        self.assertEqual(code, 0, report)
+
+
+class Criterion16OggPayloadsMustBeVorbisOrOpus(unittest.TestCase):
+    """ADR-0120 clause 2: a page whose payload is not a recognised codec stream is
+    rejected."""
+
+    def _scan_one(self, name: str, data: bytes):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, name, data)
+            code, report = run_scanner(root)
+        return code, report
+
+    def test_reviewers_dbc_payload_ogg_is_rejected(self):
+        # The exact round-3 finding: a structurally perfect Ogg page (RFC 3533
+        # section 6) whose lacing-declared payload is a complete DBC. Round 2
+        # accepted this with exit code 0.
+        code, report = self._scan_one("hit.ogg", fb.build_ogg_page_with_payload(fb.build_dbc()))
+        self.assertEqual(code, 1)
+        rej = report["rejected"][0]
+        self.assertIn("neither a Vorbis identification header", rej["reason"])
+        self.assertIn("WDBC", rej["reason"])
+        self.assertTrue(rej["remedy"])
+
+    def test_an_arbitrary_payload_page_is_rejected(self):
+        code, report = self._scan_one("hit.ogg", fb.build_ogg_arbitrary_payload_page())
+        self.assertEqual(code, 1, report)
+
+    def test_a_real_vorbis_file_is_accepted(self):
+        code, report = self._scan_one("real.ogg", fb.build_ogg())
+        self.assertEqual(code, 0, report)
+        self.assertEqual([a["format"] for a in report["accepted"]], ["OGG"])
+
+    def test_a_real_opus_file_is_accepted(self):
+        code, report = self._scan_one("real.opus", fb.build_ogg_opus())
+        self.assertEqual(code, 0, report)
+        self.assertEqual([a["format"] for a in report["accepted"]], ["OGG"])
+
+    def test_the_real_fixtures_are_the_third_party_bytes_they_claim_to_be(self):
+        # Criterion 13's rule applied to files rather than to code: if either fixture
+        # is ever regenerated locally it stops being independent evidence, so the
+        # digests recorded alongside them are asserted here.
+        import hashlib
+        expected = {}
+        for line in (_HERE / "fixtures" / "sha256sums.txt").read_text().split("\n"):
+            if line.strip():
+                digest, name = line.split()
+                expected[name] = digest
+        self.assertEqual(len(expected), 2)
+        for name, digest in expected.items():
+            with self.subTest(name):
+                actual = hashlib.sha256((_HERE / "fixtures" / name).read_bytes()).hexdigest()
+                self.assertEqual(actual, digest)
+
+    def test_binary_content_in_a_comment_tag_is_rejected(self):
+        # Vorbis comments and Opus tags are the one variable-length, author-supplied
+        # region of a codec header. They must be text, or they are just another
+        # private chunk with a different name.
+        import struct as _struct
+        real = fb.build_ogg_opus()
+        good_tag = b"TITLE=hello"
+        bad_tag = fb.build_dbc()
+        tags_packet = (b"OpusTags" + _struct.pack("<I", 5) + b"Lavf5"
+                       + _struct.pack("<I", 1) + _struct.pack("<I", len(bad_tag)) + bad_tag)
+        # rebuild page 1 (the tags page) of the real file with a binary tag
+        head_end = 27 + real[26] + sum(real[27:27 + real[26]])
+        page1 = real[head_end:]
+        nseg1 = page1[26]
+        body_start = 27 + nseg1
+        segs = []
+        remaining = len(tags_packet)
+        while remaining > 255:
+            segs.append(255)
+            remaining -= 255
+        segs.append(remaining)
+        rebuilt = page1[:26] + bytes([len(segs)]) + bytes(segs) + tags_packet
+        tail_start = body_start + sum(page1[27:27 + nseg1])
+        code, report = self._scan_one("t.opus", real[:head_end] + rebuilt + page1[tail_start:])
+        self.assertEqual(code, 1, report)
+        self.assertIn("not printable UTF-8 text", report["rejected"][0]["reason"])
+        # sanity: the same surgery with a *text* tag is still accepted, so the test
+        # above is detecting the binary content and not the surgery itself.
+        ok_packet = (b"OpusTags" + _struct.pack("<I", 5) + b"Lavf5"
+                     + _struct.pack("<I", 1) + _struct.pack("<I", len(good_tag)) + good_tag)
+        rebuilt_ok = page1[:26] + bytes([1]) + bytes([len(ok_packet)]) + ok_packet
+        code, report = self._scan_one("t.opus", real[:head_end] + rebuilt_ok + page1[tail_start:])
+        self.assertEqual(code, 0, report)
+
+
+class Criterion17RejectionsAreActionable(unittest.TestCase):
+    """ADR-0120 clause 3: every rejection names the offending element and the remedy."""
+
+    def test_every_rejection_carries_a_remedy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "zblz.png", fb.build_png_with_extra_chunk(b"zBLZ", fb.build_dbc()))
+            write(root, "text.png", fb.build_png_with_extra_chunk(b"tEXt", b"a\x00b"))
+            write(root, "idat.png", fb.build_png_with_idat_payload(b"\x00\x00" + fb.build_dbc()))
+            write(root, "dbcpayload.ogg", fb.build_ogg_page_with_payload(fb.build_dbc()))
+            write(root, "bare.ogg", fb.build_ogg_capture_pattern_only())
+            write(root, "tail.ogg", fb.build_ogg_with_trailing_data(fb.build_dbc()))
+            write(root, "real.dbc", fb.build_dbc())
+            write(root, "real_mpq.png", fb.build_mpq())
+            write(root, "real_blp.png", fb.build_blp())
+            write(root, "real_m2.png", fb.build_m2())
+            write(root, "real_wmo.png", fb.build_wmo_reversed())
+            write(root, "empty.png", b"")
+            write(root, "tiny.bin", b"\x01\x02\x03")
+            write(root, "mystery.bin", b"\x00\xff" * 64)
+            write(root, "padded.lua", fb.build_text_padding_then_dbc())
+            code, report = run_scanner(root)
+        self.assertEqual(code, 1)
+        self.assertGreaterEqual(len(report["rejected"]), 15)
+        for rej in report["rejected"]:
+            with self.subTest(rej["path"]):
+                self.assertTrue(rej["remedy"].strip(), "empty remedy")
+                self.assertNotIn("BUG:", rej["remedy"], sa._MISSING_REMEDY)
+                self.assertGreater(len(rej["remedy"]), 40, "a remedy has to say what to do")
+
+    def test_the_remedy_is_a_separate_contract_field(self):
+        # So a caller (a PR comment, an upload form) can surface it without
+        # re-parsing prose out of `reason`.
+        item = REPORT_SCHEMA["properties"]["rejected"]["items"]
+        self.assertIn("remedy", item["required"])
+        self.assertEqual(item["properties"]["remedy"]["minLength"], 1)
+
+    def test_a_blizzard_format_rejection_says_what_to_supply_instead(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "screenshot.png", fb.build_blp())
+            code, report = run_scanner(root)
+        self.assertEqual(code, 1)
+        rej = report["rejected"][0]
+        self.assertEqual(rej["detected_format"], "BLP")
+        self.assertIn("supply your own asset", rej["remedy"])
+
+
+class Criterion19KnownLimitationsStatesWhatIsNotRead(unittest.TestCase):
+    """The doc must say which bytes are inspected and which are not, per format --
+    not frame content-blindness as a checksum nicety."""
+
+    def setUp(self):
+        self.doc = (_HERE.parent.parent / "docs" / "validation" / "asset-scanner.md").read_text()
+
+    def test_there_is_a_per_format_read_or_not_read_section(self):
+        self.assertIn("What is read and what is not", self.doc)
+        section = self.doc.split("What is read and what is not", 1)[1]
+        for needle in ("PNG", "Ogg", "GLB", "TEXT"):
+            self.assertIn(needle, section)
+
+    def test_the_specific_uninspected_regions_are_named(self):
+        for needle in (
+            "IDAT",                     # PNG pixel bytes
+            "setup header",             # Vorbis codebooks
+            "audio packet",             # Ogg audio payloads
+            "re-encoding on ingest",    # ADR-0120's recorded stronger option
+        ):
+            self.assertIn(needle, self.doc, f"Known limitations should name: {needle}")
+
+    def test_crc_is_framed_as_irrelevant_not_as_the_residual_gap(self):
+        # Criterion 19 forbids the softer framing ("a corrupted CRC would still be
+        # accepted"), which reads as though checksums were the missing piece. ADR-0120
+        # is explicit that a CRC detects corruption, never smuggling.
+        self.assertIn("detect corruption, not smuggling", self.doc)
 
 
 class SignatureTableSanity(unittest.TestCase):

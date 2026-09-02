@@ -64,6 +64,158 @@ compressing or offsetting the payload). Proving well-formedness is both stricter
 and quieter: a PNG with a DBC glued on after `IEND` is rejected because it is not
 a valid PNG, not because the scanner went looking for the DBC inside it.
 
+## Spec amendment — round 3: content whitelisting, not container framing
+
+Round 2 closed "bytes after the file ends". Independent adversarial review then moved the
+same violation *inside* the container and got Blizzard payloads accepted twice more:
+
+1. **A valid PNG carrying a DBC in a private chunk.** Correct signature, `IHDR`, `IDAT`,
+   `IEND`, correct CRCs on every chunk, no trailing bytes — plus one private ancillary
+   chunk, `zBLZ`, whose declared-length data was a complete, magic-intact DBC file. Every
+   PNG decoder in the world opens and displays it. Round 2 accepted it, exit code 0.
+2. **A valid Ogg page whose payload was a DBC.** A structurally perfect page per RFC 3533
+   §6, whose lacing-declared payload *was* the DBC's bytes. Accepted, exit code 0.
+
+Neither was a bug in the round-2 implementation: both files are well-formed by their own
+container specifications, because PNG and Ogg both permit arbitrary bytes inside private
+chunks and codec payloads. A validator that verifies framing answers "is this a
+syntactically valid container?" when the question is "does this carry only permitted
+content?".
+
+[**ADR-0120**](../decisions/0120-content-whitelist-not-container-framing.md) settles it by
+decision rather than by another attempt at wording:
+
+> An accepted asset contains only content of types the platform has explicitly permitted.
+
+Magic-byte typing decides what a file *is*; content whitelisting decides what it may
+*contain*. Both must pass.
+
+**Verifying CRCs is not the fix, and is deliberately not implemented.** An attacker computes
+the correct CRC over their own payload. CRCs detect corruption, not smuggling. This was
+suggested in review; ADR-0120 rejects it explicitly.
+
+### PNG: the permitted chunk types
+
+Only these chunk types may appear at all. Anything else — unknown, private, or merely
+unlisted — is a rejection, *including* ancillary chunks that are harmless in other contexts.
+
+| Chunk | Role | Length constraint enforced |
+|---|---|---|
+| `IHDR` | Image header | Exactly 13 bytes; dimensions non-zero; colour type in {0,2,3,4,6}; bit depth legal for that colour type; compression and filter method 0; interlace 0 or 1 |
+| `PLTE` | Palette | Non-empty multiple of 3, at most 768 bytes; required for colour type 3, forbidden for 0 and 4; must precede `IDAT` |
+| `IDAT` | The compressed pixel data | Must be present, in one consecutive run; the concatenated zlib stream must inflate to **exactly** the byte count `IHDR` implies, and must end exactly where the last `IDAT` ends |
+| `IEND` | End marker | Exactly 0 bytes; the file must end here |
+
+Plus the **safe list**. It is short by design, and every entry is admitted under a rule with
+two halves, both required:
+
+- **(a)** the PNG specification fixes the chunk's length at a handful of bytes, *and* this
+  scanner enforces that exact length — so a permitted *type* can never be reused as a
+  general-purpose container; and
+- **(b)** either the chunk changes how the image renders, or refusing it would reject the
+  unconditional default output of ordinary image editors.
+
+"Harmless" alone is never sufficient. Each entry's written reason follows.
+
+### `tRNS`
+
+Transparency. For an indexed-colour image this is the only place alpha exists at all, and for greyscale/truecolour it carries the single colour-key value; dropping it visibly changes the image, and no re-export preserves the art without it. The spec fixes its length exactly from IHDR's colour type (2 bytes greyscale, 6 bytes truecolour, at most one byte per palette entry for indexed), and this scanner enforces that length, so the chunk cannot be reused as a general-purpose container.
+
+### `gAMA`
+
+Image gamma: one 4-byte unsigned integer, length fixed by the spec and enforced here. Four bytes cannot carry smuggled content, and without it an image authored on a non-2.2 pipeline renders at the wrong brightness in the client.
+
+### `pHYs`
+
+Physical pixel dimensions: two 4-byte unsigned integers and a one-byte unit specifier, 9 bytes, length fixed by the spec and enforced here, unit value range enforced here. This one is admitted under half (b)'s second branch: it does not affect how the client renders a texture, but essentially every image editor writes it unconditionally (9% of a 91-file real-world corpus, 66% of the World of Warcraft add-on PNGs surveyed), and a rule that rejects an editor's default export teaches authors to reach for byte-stripping tools rather than to comply. The price is 9 spec-fixed bytes per file.
+
+### `sRGB`
+
+sRGB rendering intent: one enumerated byte (0-3), length fixed by the spec and enforced here, value range enforced here. One byte cannot carry smuggled content. It is on the list because it is the small, fixed-length alternative to iCCP -- authors who need to declare colour intent can do so without an embedded profile.
+
+Prevalence figures in those reasons come from a survey of every PNG on the development
+machine (91 files that parse as PNG) plus the World of Warcraft add-on corpus at
+`/mnt/e/wow-ebonhold` (9 files), counted by chunk type. The survey is reproduced in the task
+log; the headline numbers are `IHDR`/`IDAT`/`IEND` 100%, `PLTE` 67%, `tRNS` 59%, `pHYs` 9%
+(66% in the add-on corpus), `iTXt` 4%, `iCCP` 4%, `eXIf`/`tEXt` 3%, `tIME`/`sBIT` 2%.
+
+**Deliberately *not* on the list**, with the reason:
+
+| Chunk | Why not |
+|---|---|
+| `iCCP` | An embedded ICC profile is an arbitrary-length compressed blob — exactly the shape of the `zBLZ` attack, with a respectable name. ADR-0120 §4 names colour profiles as an accepted cost. |
+| `tEXt`, `zTXt`, `iTXt` | Free-form (and, for two of them, compressed) text of unbounded length. Text metadata is named in ADR-0120 §4 as an accepted cost. |
+| `eXIf` | An arbitrary TIFF-structured metadata blob with its own nested container inside it. |
+| `bKGD`, `hIST`, `sBIT`, `tIME`, `cHRM`, `cICP`, `sPLT` | Fixed or bounded length, and genuinely harmless — but half (b) fails: the client does not render differently without them and they are not written unconditionally by ordinary exporters. ADR-0120 is explicit that harmless-elsewhere is not a qualification. |
+| `acTL`, `fcTL`, `fdAT` | APNG animation. Out of scope for this platform's textures; adding them means deciding what an animation frame may contain, which is a separate decision. |
+| `iDOT` | An undocumented Apple extension seen in 3% of the corpus. Undocumented means its permitted contents cannot be stated, so it cannot be permitted. |
+| anything else | Private, unregistered, or simply not listed. |
+
+### Ogg: the payload must be Vorbis or Opus
+
+Page framing (RFC 3533 §6) is still validated exactly as in round 2 — it is what bounds the
+file and catches trailing data. On top of it, every logical bitstream must now identify
+itself as a codec this platform permits:
+
+- The **first packet** of each logical bitstream (assembled across pages from the segment
+  table's lacing values, so a header packet that spans pages is handled) must be either a
+  Vorbis identification header (`\x01vorbis`, 30 bytes, version 0, non-zero channels and
+  sample rate, in-range block sizes, framing bit set) or an Opus one (`OpusHead`, RFC 7845
+  §5.1, major version 0, non-zero channels, length fixed by the channel mapping family).
+- The **comment header** must follow (`\x03vorbis` / `OpusTags`), and is parsed in full:
+  vendor string and every tag must be printable UTF-8 text, tag count at most 1024, and the
+  packet must be consumed exactly. Opus permits zero-padding after the tag list (RFC 7845
+  §5.2) and real encoders use it, so up to 4096 bytes of padding are allowed **only when
+  every padding byte is zero** — that keeps opusenc's output working without leaving a place
+  to put content.
+- For Vorbis, the **setup header** (`\x05vorbis`) must be present. Its codebook bytes are
+  not parsed — see "What is read and what is not".
+- At end of file, every logical bitstream must have completed its headers. A stream that
+  never did is rejected, naming the offset of its first page.
+
+A page whose payload is a DBC therefore fails at the first packet: its bytes are neither
+`\x01vorbis` nor `OpusHead`.
+
+### Rejections tell the author what to do
+
+ADR-0120 §3: a rejection the author cannot act on is a defect, not a security measure. Every
+rejection in the report now carries a **`remedy`** field alongside `reason` — a separate
+contract field, so a caller (a PR comment, an upload form) can surface it without re-parsing
+prose. The report schema version is `1.1.0`; the field is required and never empty.
+
+```
+"reason": "... PNG contains chunk 'zBLZ' (ancillary, public-namespace) at offset 33,
+           carrying 20 byte(s) of data. That chunk type is not on the permitted content
+           list ...",
+"remedy": "Re-export the image as a plain PNG without private chunks, embedded metadata or
+           colour profiles -- in most editors that is 'export as PNG' with metadata
+           disabled; from the command line, `pngcrush -rem alla -rem text in.png out.png`
+           removes every ancillary chunk this scanner does not permit. ..."
+```
+
+### The accepted cost
+
+This tightening rejects some legitimate files: colour profiles, text metadata,
+unusual-but-valid chunks, and Ogg files carrying codecs other than Vorbis and Opus. Ludwig
+made that trade deliberately (ADR-0120 §4): an author can re-export, whereas a smuggling
+channel through the platform's own content guarantee cannot be undone once used.
+
+Measured, not estimated. The scanner was run over 130 real third-party files gathered from
+this machine and from an installed World of Warcraft add-on tree — none of them written for
+this project, none of them adjusted to pass:
+
+- **102 files named `.png`.** Two are actually JPEGs (`FF D8 FF E0 ... JFIF`) and are
+  correctly rejected as `UNKNOWN` — criterion 4 working on real data, not a false rejection.
+  Of the 100 genuine PNGs, **88 are accepted (88%)** and 12 are rejected: `iCCP` ×4,
+  `iTXt` ×3, `tEXt` ×2, `cHRM` ×1, `tIME` ×1, `bKGD` ×1. Every one of the 12 is fixable by
+  re-exporting, and the rejection says so.
+- **28 files named `.ogg`.** One is actually an MP4 (`ftypisom`) and is correctly rejected.
+  The other **27 are genuine Ogg Vorbis and all 27 are accepted** — including their vendor
+  strings and tags, which the codec-header parser reads in full.
+
+Reproduce with `python3 tools/validation/scan_assets.py <corpus-dir>`; the exact commands are
+in the task log.
+
 ## Why Python, stdlib only
 
 The task allowed either Python or a `.mjs` (Node) runtime. Python was chosen
@@ -98,8 +250,8 @@ file to pass that format's full structural validator.
 
 | Format | Candidate signature | Full validation performed |
 |---|---|---|
-| PNG | 8-byte signature `89 50 4E 47 0D 0A 1A 0A` (W3C PNG spec) | Every chunk walked from the signature to `IEND` (`length`/`type`/`data`/`CRC` per the spec's chunk layout); first chunk must be `IHDR` of exactly 13 bytes; the file must end exactly at `IEND` — any trailing byte is a rejection. |
-| OGG | 4-byte capture pattern `OggS` (RFC 3533 §6) | Every page walked using the RFC 3533 §6 fixed 27-byte header + segment table + payload-length-from-lacing-values layout, until the file ends exactly on a page boundary. |
+| PNG | 8-byte signature `89 50 4E 47 0D 0A 1A 0A` (W3C PNG spec) | Every chunk walked from the signature to `IEND`; **every chunk type must be on the permitted content list** and satisfy its length constraint; the `IDAT` zlib stream must inflate to exactly the size `IHDR` implies; the file must end exactly at `IEND`. See "Spec amendment — round 3". |
+| OGG | 4-byte capture pattern `OggS` (RFC 3533 §6) | Every page walked using the RFC 3533 §6 layout until the file ends exactly on a page boundary, **and** every logical bitstream must parse as Vorbis (Vorbis I §4.2) or Opus (RFC 7845 §5) headers. See "Spec amendment — round 3". |
 | GLB | 4-byte magic `glTF` + container structure (Khronos glTF 2.0 spec) | Header length verified against the real file size; every chunk bounds-checked; the JSON chunk parsed; every embedded image payload (bufferView- or data-URI-embedded) recursively validated the same way — see "GLB" below. |
 | TEXT (`.md`/`.json`/`.lua`/`.txt`/`.gltf` JSON/…) | No magic byte exists for these formats (design decision, not an ADR) | The **entire** file streamed through an incremental UTF-8 decoder in bounded blocks, checking every byte for disallowed control characters — not a prefix. |
 
@@ -324,39 +476,79 @@ actually conforms to `contracts/validation-report.schema.json`.
 
 ## Known limitations (explicit, not silent)
 
-Disclosed deliberately, per round-2 criterion 14 — a security document that omits
-its own bypasses is worse than none, because it stops people looking:
+Disclosed deliberately — a security document that omits its own bypasses is worse than none,
+because it stops people looking. Round-3 criterion 19 requires this section to say plainly
+**which bytes are inspected and which are not, per format**, rather than describing
+content-blindness as a checksum nicety.
 
-- **Chunk/page checksums are not verified.** The PNG validator does not check each
-  chunk's CRC; the OGG validator does not check each page's CRC. Both verify
-  *framing* only (lengths, types, and that the file ends exactly where the
-  structure says it should) — which is what actually closes the "arbitrary
-  trailing bytes" bypass this round-2 pass was built to fix, since a mismatched
-  CRC on an otherwise well-framed chunk is a corruption/decoder concern, not a
-  smuggled-payload concern (a well-crafted attack would simply compute a correct
-  CRC for its wrapper anyway; the framing-to-EOF check is what actually stops it).
-  A file with correct framing but a corrupted CRC would still be accepted.
-- **OGG logical-stream continuity is not verified.** Serial-number consistency,
-  packet-sequencing correctness, and codec-specific structure (Vorbis/Opus
-  headers) are not checked — only page framing. A crafted file whose trailing
-  bytes happen to form additional syntactically valid Ogg pages of an unrelated
-  logical stream would still pass; a raw Blizzard payload glued on will not (its
-  bytes must literally begin with `OggS` to even be considered a page, which is
-  never true of any of the five cited Blizzard magic values).
-- **PNG pixel/palette semantics are not decoded.** This is a container-framing
-  validator, not an image decoder — `IDAT` content is never decompressed or
-  interpreted.
-- **The text bucket is format-agnostic.** It verifies UTF-8 + no disallowed
-  control bytes, not that `.json` content is well-formed JSON or that `.lua`
-  content is syntactically valid Lua.
-- **`data:` URI images that are not base64-encoded are not sniffed** (rare in
-  practice) — they cannot carry an arbitrary binary payload the way a base64 URI
-  or a `BIN`-chunk bufferView can.
-- **Files over 268435456 bytes (256 MiB) are rejected outright**, not scanned —
-  see "Ceilings" above. A legitimate mod asset over this size would need this
-  ceiling raised deliberately, not worked around.
-- **GLB embedding nesting is bounded at 8 levels** (`MAX_GLB_NESTING_DEPTH`) and
-  chunk/page counts at 100,000 (`MAX_CHUNK_COUNT`) — both named, both refuse
-  rather than hang or exhaust memory on a pathological input.
-- The scanner does not judge asset provenance, originality, or "AI-ness" — that is
-  explicitly out of scope per ADR-0061 and is not attempted anywhere in this tool.
+### What is read and what is not
+
+| Format | Bytes read and checked | Bytes never looked at |
+|---|---|---|
+| **PNG** | The 8-byte signature. Every chunk's 8-byte header (length + type), for every chunk to `IEND`. `IHDR`'s 13 data bytes in full. Every safe-list chunk's data in full (at most 256 bytes each). The whole `IDAT` zlib stream, decompressed and counted. | The **inflated pixel bytes themselves** — they are counted, not examined. Every chunk's 4-byte CRC. |
+| **Ogg** | Every page's 27-byte header and segment table. For each logical bitstream, the identification and comment header packets **in full**, including every vendor string and tag. | The **Vorbis setup header's codebook bytes** (`\x05vorbis`; presence and marker checked, contents not parsed). Every **audio packet** on every page after the headers — the page framing around them is checked, the payload bytes are not read at all. Every page's CRC. |
+| **GLB** | The 12-byte header and every chunk header. The JSON chunk in full (parsed as JSON). Every embedded image payload, recursively, by exactly these same rules. | Buffer bytes that no `images[]` entry references — accessor/mesh/animation data is bounds-checked as part of the BIN chunk but its contents are not interpreted. |
+| **TEXT** (`.md`/`.json`/`.lua`/`.txt`/`.gltf`) | Every byte, streamed: valid UTF-8, no disallowed control bytes. | Nothing is skipped — but nothing is understood either: there is no JSON, Lua or glTF **grammar** check, so any valid-UTF-8 text is accepted whatever it says. |
+
+The two rows in the right-hand column that matter most:
+
+- **PNG pixel data.** The `IDAT` stream must inflate to exactly the byte count `IHDR`
+  implies and must end exactly where the last `IDAT` chunk ends, so it cannot carry surplus
+  bytes *alongside* an image. It can still carry data *as* the image: an attacker can make a
+  picture whose pixel values happen to be another file's bytes. Nothing short of re-encoding
+  distinguishes that from a picture, because it **is** a picture.
+- **Ogg audio packets and Vorbis codebooks.** Their bytes are compressed audio and codec
+  tables; there is no way to tell "unusual audio" from "a payload" without a decoder. The
+  headers around them are fully validated, so a file must at least be a real Vorbis or Opus
+  stream to reach that point.
+
+**The stronger guarantee that is deliberately not built: re-encoding on ingest.** Decoding
+every asset and re-emitting it, discarding anything that is not pixel or sample data, is the
+only thing that closes the two rows above. ADR-0120 considered it (option B) and did not
+adopt it now, because it conflicts with authors shipping their own assets untouched
+(ADR-0004). It is recorded there as the available hardening if the whitelist proves leaky. So
+the whitelist is not airtight, and this document does not claim it is.
+
+### Checksums
+
+Chunk and page CRCs are **not** verified, and this is not the residual gap — it is not a gap
+at all. Whoever writes a chunk computes its CRC, so an attacker's payload carries a perfectly
+correct one; the two accepted attacks that produced ADR-0120 both had valid CRCs throughout.
+CRCs **detect corruption, not smuggling** (ADR-0120, "Context"). Implementing them would add
+a checksum algorithm's polynomial and variant to the code — the same class of
+verified-from-memory risk that produced the round-2 WMO byte-order bug — and buy nothing
+against this threat model. If the platform later wants corruption detection as a
+*separate*, non-security feature, that is a different decision.
+
+### Ceilings
+
+All named constants in `tools/validation/scan_assets.py`, all refusing rather than hanging or
+exhausting memory. See "Ceilings" above for the reasoning behind each number.
+
+- Files over `MAX_FULL_SCAN_BYTES` = 268435456 bytes (256 MiB) are **rejected outright**, not
+  partially scanned and accepted.
+- `MAX_PNG_RAW_BYTES` = 536870912 (512 MiB): a PNG whose `IHDR` declares a raster larger than
+  this is refused before any decompression is attempted.
+- `MAX_CHUNK_COUNT` = 100000 chunks/pages per container.
+- `MAX_GLB_NESTING_DEPTH` = 8 levels of container-inside-container.
+- `MAX_OGG_LOGICAL_STREAMS` = 16, `MAX_OGG_HEADER_PACKET_BYTES` = 262144,
+  `MAX_OGG_COMMENT_COUNT` = 1024, `MAX_OGG_TAG_PADDING_BYTES` = 4096.
+
+A legitimate asset over any of these would need the ceiling raised deliberately, not worked
+around.
+
+### Other disclosed gaps
+
+- **`data:` URI images that are not base64-encoded are not sniffed** (rare in practice) —
+  they cannot carry an arbitrary binary payload the way a base64 URI or a `BIN`-chunk
+  bufferView can.
+- **Ogg logical-stream continuity beyond the headers is not verified.** Page sequence numbers
+  and granule positions are not checked for monotonicity. A file whose pages are validly
+  framed, whose streams all carry real Vorbis/Opus headers, but whose page order is nonsense
+  would be accepted; it would also be an unplayable file, not a carrier.
+- **Formats are accepted as whole categories, not per-feature.** A permitted format's future
+  extensions are not automatically permitted — ADR-0120's consequence: no format is accepted
+  until its permitted interior content is defined. Adding one means deciding what may be
+  *inside* it, not just its signature.
+- The scanner does not judge asset provenance, originality, or "AI-ness" — explicitly out of
+  scope per ADR-0061, and not attempted anywhere in this tool.

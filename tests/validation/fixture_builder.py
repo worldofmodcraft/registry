@@ -27,6 +27,7 @@ literal whose byte order depends on a human getting it right by eye.
 
 from __future__ import annotations
 
+import pathlib
 import struct
 import zlib
 
@@ -57,6 +58,83 @@ def build_png(width: int = 1, height: int = 1) -> bytes:
     return signature + chunk(b"IHDR", ihdr) + chunk(b"IDAT", idat) + chunk(b"IEND", b"")
 
 
+def _png_chunk(tag: bytes, data: bytes) -> bytes:
+    """One PNG chunk with a correct CRC-32 over type+data, per the W3C PNG
+    specification's chunk layout. The CRC is correct on purpose: ADR-0120's whole
+    point is that a correct checksum proves nothing about content, because whoever
+    writes the chunk computes it."""
+    return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+
+
+def build_png_with_extra_chunk(tag: bytes, data: bytes, before_idat: bool = True) -> bytes:
+    """A 1x1 greyscale PNG that is valid in every structural respect -- signature,
+    IHDR, IDAT, IEND, correct CRCs on every chunk, no trailing bytes -- plus one extra
+    chunk of the caller's choosing.
+
+    Called as `build_png_with_extra_chunk(b"zBLZ", build_dbc())` this reproduces the
+    round-3 finding exactly: a file every PNG decoder in the world will open and
+    display, carrying a complete magic-intact DBC inside a private ancillary chunk.
+    Round 2's framing validator accepted it, exit code 0.
+    """
+    signature = b"\x89PNG\r\n\x1a\n"
+    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 0)
+    idat = zlib.compress(b"\x00\x00")  # one filter byte + one black pixel
+    extra = _png_chunk(tag, data)
+    body = _png_chunk(b"IHDR", ihdr)
+    if before_idat:
+        body += extra + _png_chunk(b"IDAT", idat)
+    else:
+        body += _png_chunk(b"IDAT", idat) + extra
+    return signature + body + _png_chunk(b"IEND", b"")
+
+
+def build_png_with_idat_payload(raw_scanlines: bytes) -> bytes:
+    """A 1x1 greyscale PNG whose IDAT chunk compresses exactly `raw_scanlines`.
+
+    A correct 1x1 greyscale image is 2 raw bytes (one filter byte + one pixel), so
+    passing anything longer produces a PNG whose framing, chunk types and CRCs are all
+    perfect and whose pixel stream inflates to more than IHDR declares -- the surplus
+    is bytes no image viewer ever reads. That is the IDAT-shaped version of the same
+    smuggling channel the private-chunk route used.
+    """
+    signature = b"\x89PNG\r\n\x1a\n"
+    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 0)
+    return (signature + _png_chunk(b"IHDR", ihdr)
+            + _png_chunk(b"IDAT", zlib.compress(raw_scanlines)) + _png_chunk(b"IEND", b""))
+
+
+def build_png_decompression_bomb(inflated_bytes: int = 64 * 1024 * 1024) -> bytes:
+    """A tiny PNG whose IHDR declares a 1x1 image but whose IDAT stream inflates to
+    `inflated_bytes` of zeros. Two things must hold: it is rejected (the inflated
+    size disagrees with IHDR), and rejecting it must not require materialising the
+    inflated data."""
+    signature = b"\x89PNG\r\n\x1a\n"
+    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 0)
+    comp = zlib.compressobj()
+    parts = []
+    block = b"\x00" * (1024 * 1024)
+    remaining = inflated_bytes
+    while remaining > 0:  # streamed, so building the fixture never holds the raster
+        parts.append(comp.compress(block[:min(len(block), remaining)]))
+        remaining -= min(len(block), remaining)
+    parts.append(comp.flush())
+    return (signature + _png_chunk(b"IHDR", ihdr)
+            + _png_chunk(b"IDAT", b"".join(parts))
+            + _png_chunk(b"IEND", b""))
+
+
+def build_png_with_bytes_after_zlib_stream(extra: bytes) -> bytes:
+    """A 1x1 greyscale PNG whose IDAT chunk data is a complete, correct zlib stream
+    followed by `extra` raw bytes *inside the same chunk*. The chunk length and CRC
+    both cover the extra bytes, so every framing and checksum check passes; a decoder
+    stops at the end of the zlib stream and never looks at them."""
+    signature = b"\x89PNG\r\n\x1a\n"
+    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 0)
+    idat_data = zlib.compress(b"\x00\x00") + extra
+    return (signature + _png_chunk(b"IHDR", ihdr)
+            + _png_chunk(b"IDAT", idat_data) + _png_chunk(b"IEND", b""))
+
+
 def build_png_signature_only() -> bytes:
     """Just the 8-byte PNG signature and nothing else -- a truncated-but-valid
     prefix that must be rejected, not accepted (round-2 criterion 9)."""
@@ -70,24 +148,81 @@ def build_png_with_trailing_data(extra: bytes) -> bytes:
     return build_png() + extra
 
 
+FIXTURE_DIR = pathlib.Path(__file__).resolve().parent / "fixtures"
+
+# Round-3 criterion 16 needs a *real* Vorbis/Opus file, and criterion 13 forbids
+# deriving a fixture from the implementation under test. Nothing in this environment
+# can encode Ogg audio (no ffmpeg/oggenc/opusenc/sox, no libopus/libvorbis, no pip,
+# no sudo -- see the task log), and a hand-built stream would share this repository's
+# reading of the specs with the parser it is supposed to test, which is precisely the
+# self-consistency trap criterion 13 exists to stop. So the two accepted-audio
+# fixtures are unmodified third-party encoder output, checked in under
+# tests/validation/fixtures/ with their provenance, licences and digests recorded in
+# that directory's README.md. This module reads their bytes; it does not make them.
+REAL_VORBIS_FIXTURE = FIXTURE_DIR / "real-vorbis-sound_0.oga"
+REAL_OPUS_FIXTURE = FIXTURE_DIR / "real-opus-opus-test.opus"
+
+
 def build_ogg() -> bytes:
-    """A single, structurally complete, well-formed Ogg page: real 27-byte fixed
-    header, a segment table, and a payload of exactly the length that table
-    declares. Deliberately not decodable audio (this scanner does not decode
-    audio, only page framing) but a genuinely well-formed Ogg page nonetheless."""
-    capture_pattern = b"OggS"
-    version = b"\x00"
-    header_type = b"\x02"  # beginning-of-stream
-    granule_position = struct.pack("<q", 0)
-    serial_number = struct.pack("<I", 1)
-    page_sequence = struct.pack("<I", 0)
-    checksum = struct.pack("<I", 0)  # not verified by this scanner -- see docs, Known Limitations
-    payload = b"\x00" * 5
-    segment_table = bytes([len(payload)])  # one lacing value describing the whole payload
+    """A genuine Ogg Vorbis file: web-platform-tests' media/sound_0.oga, produced by
+    libvorbis via libavformat, byte-for-byte unmodified. Since ADR-0120 an Ogg file
+    is accepted only if its logical bitstreams are really Vorbis or Opus, so "a valid
+    OGG fixture" can no longer be a hand-built page with arbitrary payload bytes --
+    that construction is now the *attack*, and lives in
+    `build_ogg_page_with_payload()` below."""
+    return REAL_VORBIS_FIXTURE.read_bytes()
+
+
+def build_ogg_opus() -> bytes:
+    """A genuine Ogg Opus file: Chromium's media/test/data/opus-test.opus, produced by
+    libopus via libavformat, byte-for-byte unmodified."""
+    return REAL_OPUS_FIXTURE.read_bytes()
+
+
+def build_ogg_page_with_payload(payload: bytes, serial: int = 1) -> bytes:
+    """One structurally perfect Ogg page (RFC 3533 section 6: 27-byte fixed header,
+    segment table, payload of exactly the declared lacing length) whose payload is
+    whatever bytes the caller passes.
+
+    This is the round-3 attack that ADR-0120 was written for: called with
+    `build_dbc()`, it produces a file that is a valid Ogg page by the container
+    specification and whose lacing-declared payload *is* a complete, magic-intact DBC.
+    Round 2's framing-only validator accepted it, exit code 0.
+
+    Lacing values are capped at 255 each (RFC 3533 section 6: a value of 255 means the
+    packet continues into the next segment), so payloads up to 255*255 bytes fit in one
+    page. The final lacing value is deliberately < 255 so the packet is complete and
+    the page is not merely "a truncated packet" -- the file must be rejected for
+    carrying non-audio content, not for being cut short.
+    """
+    assert len(payload) <= 255 * 255, "fixture bug: payload too large for a single Ogg page"
+    segments = []
+    remaining = len(payload)
+    while remaining > 255:
+        segments.append(255)
+        remaining -= 255
+    segments.append(remaining)
+    assert segments[-1] < 255, "fixture bug: final lacing value must be < 255 to end the packet"
+    assert len(segments) <= 255, "fixture bug: too many segments for one page"
     return (
-        capture_pattern + version + header_type + granule_position + serial_number
-        + page_sequence + checksum + bytes([1]) + segment_table + payload
+        b"OggS"                       # capture pattern
+        + b"\x00"                     # stream structure version
+        + b"\x02"                     # header type: beginning of stream
+        + struct.pack("<q", 0)        # granule position
+        + struct.pack("<I", serial)   # bitstream serial number
+        + struct.pack("<I", 0)        # page sequence number
+        + struct.pack("<I", 0)        # CRC (not verified -- ADR-0120: CRCs detect corruption, not smuggling)
+        + bytes([len(segments)])      # number of segments
+        + bytes(segments)             # the segment (lacing) table
+        + payload
     )
+
+
+def build_ogg_arbitrary_payload_page() -> bytes:
+    """The pre-ADR-0120 notion of "a valid Ogg fixture": a well-formed page whose
+    payload is five zero bytes and no codec at all. Kept as a *rejection* fixture --
+    it is what round 2 accepted."""
+    return build_ogg_page_with_payload(b"\x00" * 5)
 
 
 def build_ogg_capture_pattern_only() -> bytes:

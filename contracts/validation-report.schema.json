@@ -81,11 +81,11 @@
     },
     "rejected": {
       "type": "array",
-      "description": "Every rejected file, sorted by path for deterministic output. Required per file: path, detected format, matched signature offset, and reason (task acceptance criterion 6).",
+      "description": "Every rejected file, sorted by path for deterministic output. Required per file: path, detected format, matched signature offset, reason, and remedy (task acceptance criteria 6 and 17).",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["path", "detected_format", "signature_offset", "reason"],
+        "required": ["path", "detected_format", "signature_offset", "reason", "remedy"],
         "properties": {
           "path": { "type": "string", "description": "POSIX-style path relative to `root`." },
           "detected_format": {
@@ -100,6 +100,11 @@
           "reason": {
             "type": "string",
             "description": "Human-readable explanation. For a GLB whose embedded payload was rejected, this names the embedding mechanism (BIN-chunk bufferView or JSON data URI), the image index, and the absolute file offset of the payload."
+          },
+          "remedy": {
+            "type": "string",
+            "minLength": 1,
+            "description": "What the author should do about this rejection, in their own terms (e.g. \"re-export the image without private chunks or embedded metadata\"). Required and never empty: ADR-0120 clause 3 -- a rejection the author cannot act on is a defect, not a security measure. Kept separate from `reason` so a caller can surface it on its own (a PR comment, a web upload form) without re-parsing prose."
           }
         }
       }

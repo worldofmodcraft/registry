@@ -528,3 +528,375 @@ touched.
 
 **Status: round-2 criteria 8–14 all demonstrated; round-1 criteria 1–7 re-verified unaffected.
 Ready for re-review.**
+
+---
+# Spec amendment — round 3 (manager, 2026-09-03; decided by Ludwig)
+
+Round 2 closed "bytes after the file ends". Review then demonstrated the same violation moved
+inside the container: a **valid PNG** (signature, IHDR, IDAT, IEND, no trailing bytes) carrying a
+private `zBLZ` chunk whose declared-length data is a complete magic-intact DBC, and a **valid Ogg
+page** whose lacing-declared payload *is* a DBC. Both accepted, exit 0.
+
+The guarantee is now fixed by decision, not by another attempt at wording: **ADR-0120** (accepted
+2026-09-03, amending ADR-0004) — *an accepted asset contains only content of types the platform has
+explicitly permitted.* Read it before starting; it is the authority for everything below.
+
+**Do not implement CRC verification as the fix.** A CRC is computed by whoever writes the chunk; an
+attacker computes the correct one over their payload. CRCs detect corruption, not smuggling. This
+was suggested in review and is explicitly rejected in ADR-0120.
+
+## Additional acceptance criteria (rounds 1–2 criteria all still stand)
+
+15. **PNG chunk-type whitelist.** Accept only `IHDR`, `PLTE`, `IDAT`, `IEND`, plus a short named
+    safe list. **Every entry on that list carries a written reason for its inclusion** in
+    `docs/validation/asset-scanner.md`. Unknown, private or unlisted chunks are rejected — including
+    ancillary chunks that are harmless elsewhere. Demonstrated: the reviewer's `zBLZ` PNG is
+    rejected, naming the chunk; a plain IHDR/IDAT/IEND PNG still passes.
+16. **Ogg payloads must parse as Vorbis or Opus headers.** A page whose payload is not a recognised
+    codec stream is rejected. Demonstrated: the reviewer's DBC-payload Ogg is rejected; a real
+    Vorbis or Opus file still passes. *(If constructing a genuine Vorbis/Opus fixture is
+    disproportionate, say so in the log with what you tried — do not fake one.)*
+17. **Rejection messages are actionable.** Each names the offending element and the remedy, e.g.
+    "PNG contains a private chunk `zBLZ`; re-export without private chunks or embedded metadata."
+    A rejection an author cannot act on is a defect, not a security measure (ADR-0120 §3).
+18. **The criterion-13 AST test must check imported symbols, not module names.**
+    `tests/validation/test_scan_assets.py` currently inspects only `node.module`, so
+    `from tools.validation import magic` passes undetected while binding the real module. Check
+    `node.names` too, or resolve the fully-qualified path. Demonstrated: a mutated copy using that
+    import form fails the test.
+19. **Known Limitations states plainly what is not read.** Not "a corrupted CRC would still be
+    accepted", which frames content-blindness as a checksum nicety. State which bytes are inspected
+    and which are not, for each accepted format. Criterion 14 forbids the softer framing.
+
+## Note on what is deliberately still open
+Re-encoding on ingest (decode and re-emit, discarding everything that is not pixel or sample data)
+is the stronger guarantee and is **not** being built: it conflicts with authors shipping their own
+assets untouched. ADR-0120 records it as the available hardening if the whitelist proves leaky.
+Say so in Known Limitations rather than implying the whitelist is airtight.
+
+## Accepted cost
+This will reject some legitimate files — colour profiles, text metadata, unusual-but-valid chunks.
+That trade was made deliberately by Ludwig: an author can re-export, whereas a smuggling channel
+through the platform's own content guarantee cannot be undone once used.
+
+---
+# Round-3 remediation log (2026-09-03, implementer-strong)
+
+## What I did differently from rounds 1 and 2
+
+Both prior rounds failed on the same criterion because each spec wording was satisfiable by a
+file that still carried a Blizzard payload. I did not try to satisfy a third wording. ADR-0120
+states the guarantee positively — *an accepted asset contains only content of types the platform
+has explicitly permitted* — so the implementation now enumerates permitted interior content per
+format and rejects everything else, including things that are harmless elsewhere.
+
+Concretely, the change of shape: round 2's validators answered "is this a syntactically valid
+container, and does it end where it says?". They now answer "is every element inside it one this
+platform has named, at the length the specification fixes for it?". Framing checks are kept
+underneath, untouched — they are what bounds the file and catches trailing data.
+
+I also went one step past the literal text of criterion 15, deliberately. A chunk-*type*
+whitelist alone does not close PNG: `IDAT` is the one permitted chunk whose length the spec does
+not fix, so the same payload simply moves there (as deflate-stored bytes after the real
+scanlines, or as raw bytes after the zlib stream's end inside the chunk). Both constructions are
+built as fixtures below and both are rejected, because the concatenated IDAT stream must now
+inflate to *exactly* the byte count IHDR implies and end exactly where the last IDAT chunk ends.
+Had I stopped at the chunk-type list, round 4 would have been a repeat of rounds 1 and 2.
+
+**CRC verification was not implemented.** ADR-0120 rejects it and the reasoning holds: the two
+accepted attacks both had perfectly correct CRCs, computed by whoever wrote the chunk. It is
+documented as irrelevant, not as a gap.
+
+## Criteria 15-19, each with the command actually run
+
+All commands from `/home/ludwig/wt/registry-task-002`. Fixture trees under `/tmp/wom-scan-demo3`,
+`/tmp/wom-regress`, `/tmp/wom-rw2`, `/tmp/wom-perf`, built by the script recorded in each section.
+
+### 15. PNG chunk-type whitelist — the reviewer's `zBLZ` PNG rejected, a plain PNG accepted
+
+```
+$ python3 tools/validation/scan_assets.py /tmp/wom-scan-demo3/c15_png ; echo "exit=$?"
+exit=1   -- 5 inspected, 0 accepted, 5 rejected:
+  zblz_attack.png    PNG contains chunk 'zBLZ' (ancillary, public-namespace) at offset 33,
+                     carrying 20 byte(s) of data. That chunk type is not on the permitted
+                     content list, so its bytes are never inspected by anything and could carry
+                     any payload at all (ADR-0120 ...)
+  text_metadata.png  ... chunk 'tEXt' ... at offset 33, carrying 13 byte(s) ...
+  icc_profile.png    ... chunk 'iCCP' ... at offset 33, carrying 43 byte(s) ...
+  idat_surplus.png   the PNG's IDAT pixel data inflates to more than the 2 byte(s) its 1x1 IHDR
+                     declares; the surplus is data an image viewer never reads ...
+  idat_tail.png      20 byte(s) follow the end of the PNG's IDAT zlib stream but are still
+                     inside the IDAT chunk data ...
+
+$ python3 tools/validation/scan_assets.py /tmp/wom-scan-demo3/c15_png_ok ; echo "exit=$?"
+exit=0   -- plain.png ACCEPT PNG, with_gama_srgb.png ACCEPT PNG
+```
+
+`zblz_attack.png` is `fb.build_png_with_extra_chunk(b"zBLZ", fb.build_dbc())`: signature, IHDR,
+the private chunk, IDAT, IEND, correct CRC on every chunk, no trailing bytes — the reviewer's
+construction exactly.
+
+**The safe list, and why each entry is on it.** Admission needs both halves: (a) the PNG spec
+fixes the chunk's length at a handful of bytes *and* this scanner enforces that exact length, so
+a permitted type can never be a container; and (b) either the chunk changes how the image
+renders, or refusing it would reject the unconditional default output of ordinary image editors.
+"Harmless" alone is not sufficient — ADR-0120 says so explicitly.
+
+| Chunk | Enforced length | Why it is on the list |
+|---|---|---|
+| `tRNS` | 2 (greyscale), 6 (truecolour), <= palette size (indexed); forbidden for colour types 4/6 | The only place alpha exists at all for an indexed image. 59% of a 91-file real-world corpus carries it. No re-export preserves the art without it. |
+| `gAMA` | exactly 4 | One 4-byte gamma value. Four bytes cannot carry content, and without it an image authored on a non-2.2 pipeline renders at the wrong brightness. |
+| `sRGB` | exactly 1, value 0-3 | One enumerated byte. It is the small, fixed-length alternative to `iCCP`, so authors who need to declare colour intent can without an embedded profile. |
+| `pHYs` | exactly 9, unit specifier 0 or 1 | Admitted under half (b)'s second branch only: it does not change rendering, but essentially every editor writes it unconditionally (9% of the machine corpus, 66% of the WoW add-on PNGs), and rejecting an editor's default export teaches authors to reach for byte-stripping tools instead of complying. Price: 9 spec-fixed bytes. |
+
+Not on the list, each with its reason in `docs/validation/asset-scanner.md`: `iCCP` (arbitrary
+compressed blob — the `zBLZ` shape with a respectable name), `tEXt`/`zTXt`/`iTXt` (free-form,
+unbounded), `eXIf` (nested container), `bKGD`/`hIST`/`sBIT`/`tIME`/`cHRM`/`cICP`/`sPLT` (bounded
+and harmless, but half (b) fails), `acTL`/`fcTL`/`fdAT` (APNG — needs its own decision),
+`iDOT` (undocumented Apple extension: undocumented means its permitted contents cannot be
+stated), and everything else.
+
+The reason strings live in `scan_assets.py`'s `PNG_SAFE_LIST_REASONS` and the docs carry them
+verbatim; `test_safe_list_reasons_are_documented` fails if the two ever drift apart.
+
+### 16. Ogg payloads must parse as Vorbis or Opus headers
+
+```
+$ python3 tools/validation/scan_assets.py /tmp/wom-scan-demo3/c16_ogg ; echo "exit=$?"
+exit=1   -- 4 inspected, 2 accepted, 2 rejected:
+  ACCEPT real_opus.opus   OGG
+  ACCEPT real_vorbis.ogg  OGG
+  REJECT dbc_payload.ogg  the first packet of this Ogg logical bitstream begins
+                          b'WDBC\x00\x00\x00\x00', which is neither a Vorbis identification
+                          header ('\x01vorbis') nor an Opus one ('OpusHead'); its payload is
+                          therefore not audio of a codec this platform permits (ADR-0120)
+  REJECT zeros_payload.ogg  (same rejection, payload b'\x00\x00\x00\x00\x00')
+```
+
+`dbc_payload.ogg` is `fb.build_ogg_page_with_payload(fb.build_dbc())`: a structurally perfect
+RFC 3533 §6 page whose lacing-declared payload is a complete DBC — the reviewer's construction.
+
+**Yes, I got real Vorbis and Opus fixtures, and they are third-party encoder output.** What I
+tried, in order: `ffmpeg`, `oggenc`, `opusenc`, `sox`, `opusdec` — none installed; `mutagen`,
+`soundfile`, `pyogg`, `numpy` — not importable; `libopus`/`libvorbis`/`libogg` via `ldconfig -p`
+— absent, so no ctypes route; `pip` — no `pip` module; `apt` — no non-interactive sudo. So
+nothing on this machine can encode Ogg audio. I did **not** hand-build one: a stream I wrote from
+RFC 7845 would share this repository's reading of the spec with the parser it is supposed to
+test, which is exactly the self-consistency trap criterion 13 exists to stop. Instead I fetched
+two files from established open-source test corpora and committed them unmodified:
+
+| File | Bytes | Origin | Licence |
+|---|---|---|---|
+| `tests/validation/fixtures/real-vorbis-sound_0.oga` | 4239 | web-platform-tests `media/sound_0.oga` | BSD-3-Clause / W3C test-suite licence |
+| `tests/validation/fixtures/real-opus-opus-test.opus` | 14128 | Chromium `media/test/data/opus-test.opus` | BSD-3-Clause |
+
+Provenance, licences and SHA-256 digests are in `tests/validation/fixtures/README.md` and
+`sha256sums.txt`; `test_the_real_fixtures_are_the_third_party_bytes_they_claim_to_be` asserts the
+digests so neither can be quietly regenerated locally. The Vorbis one is genuinely useful rather
+than decorative: its setup header spans 16 lacing values of 255, so accepting it exercises the
+cross-page packet-reassembly path rather than a one-packet-per-page happy case.
+
+Header validation implemented: Vorbis identification header (`\x01vorbis`, 30 bytes, version 0,
+non-zero channels/rate, in-range block sizes, framing bit), comment header (`\x03vorbis`, vendor
+and every tag parsed and required to be printable UTF-8, framing bit, packet consumed exactly),
+setup header (`\x05vorbis`) present; Opus `OpusHead` per RFC 7845 §5.1 (major version 0, non-zero
+channels, length fixed by channel mapping family) and `OpusTags` per §5.2, with post-tag padding
+allowed only when every padding byte is zero and at most 4096 of them — real encoders emit that
+padding, and refusing it would reject ordinary `opusenc` output for no gain.
+
+### 17. Rejection messages name the offending element and the remedy
+
+`remedy` is now a required, non-empty field of the report contract
+(`contracts/validation-report.schema.json`, `schema_version` 1.1.0), kept separate from `reason`
+so a caller can surface it in a PR comment without re-parsing prose.
+
+```
+$ python3 -c "... schema_check.validate(report, schema) ..."
+report validates OK; schema_version = 1.1.0
+a rejection without remedy is refused by the contract: $.rejected[0]: missing required property 'remedy'
+```
+
+`test_every_rejection_carries_a_remedy` builds a 15-file tree covering every rejection class
+(PNG chunk, PNG IDAT, Ogg codec, Ogg framing, all five Blizzard formats, empty, tiny, unknown
+binary, text-with-binary-tail) and asserts every one carries a remedy over 40 characters that is
+not the `_MISSING_REMEDY` placeholder. Example pair, verbatim from the report:
+
+```
+reason: "... PNG contains chunk 'zBLZ' (ancillary, public-namespace) at offset 33, carrying 20
+         byte(s) of data. That chunk type is not on the permitted content list ..."
+remedy: "Re-export the image as a plain PNG without private chunks, embedded metadata or colour
+         profiles -- in most editors that is 'export as PNG' with metadata disabled; from the
+         command line, `pngcrush -rem alla -rem text in.png out.png` removes every ancillary
+         chunk this scanner does not permit. Permitted chunks are IDAT, IEND, IHDR, PLTE, gAMA,
+         pHYs, sRGB, tRNS."
+```
+
+A Blizzard-format rejection says what to supply instead rather than only what is forbidden
+(`test_a_blizzard_format_rejection_says_what_to_supply_instead`).
+
+### 18. The criterion-13 AST test checks imported symbols, not module names
+
+The old check inspected only `ImportFrom.module`. Demonstrated on a mutated copy of the tree at
+`/tmp/c18demo` with `from tools.validation import magic` inserted into `fixture_builder.py`:
+
+```
+$ python3 -m unittest discover -s /tmp/c18demo/tests/validation \
+      -k test_fixture_builder_does_not_import_magic_module
+AssertionError: 'from tools.validation import magic' is not None :
+    unexpected import binding magic.py: from tools.validation import magic
+FAILED (failures=1)
+
+$ (round-2's node.module-only check, run against the identical mutated source)
+round-2 check caught the mutation: False
+```
+
+The check is now a module-level helper, `find_magic_import(source)`, which matches by path
+segment (`magic`, `tools.validation.magic`, `magic.foo` all count; `magical_thinking` does not)
+across `Import` aliases, `ImportFrom.module` and `ImportFrom.names`. Seven mutation forms are
+asserted caught (plain, aliased, from-module, from-package, from-package-aliased, relative,
+nested-in-a-block) and four non-imports asserted *not* flagged (prose in a docstring, unrelated
+imports, a local variable named `magic`, a comment) — the false-positive direction matters too,
+since a naive text grep already misfired once on this file's own prose.
+
+### 19. Known Limitations states plainly what is not read, per format
+
+`docs/validation/asset-scanner.md` now opens its limitations with a per-format table, "What is
+read and what is not", instead of the round-2 bullet that framed content-blindness as a checksum
+nicety. Summary of the right-hand column:
+
+- **PNG** — the inflated pixel bytes are *counted, not examined*. An attacker can still make a
+  picture whose pixel values are another file's bytes; nothing short of re-encoding tells that
+  from a picture, because it is one. Chunk CRCs are not read.
+- **Ogg** — the Vorbis setup header's codebook bytes (marker checked, contents not parsed) and
+  every audio packet after the headers. Page CRCs are not read.
+- **GLB** — buffer bytes no `images[]` entry references are bounds-checked but not interpreted.
+- **TEXT** — every byte is read, but no JSON/Lua/glTF grammar is checked.
+
+The section states explicitly that re-encoding on ingest is the stronger guarantee, is
+deliberately not built (ADR-0120 option B, conflicts with ADR-0004's authors-own-their-assets),
+and therefore that the whitelist is not airtight. Checksums get their own subsection saying they
+are not the residual gap at all: both accepted attacks had valid CRCs, and CRCs detect corruption,
+not smuggling.
+
+## Rounds 1 and 2 not regressed
+
+```
+$ python3 tools/validation/scan_assets.py /tmp/wom-regress ; echo "exit=$?"
+exit=1   -- 20 inspected, 6 accepted, 14 rejected
+ACCEPTED: ok/README.md TEXT, ok/init.lua TEXT, ok/mod.json TEXT, ok/plain.png PNG,
+          ok/real.ogg OGG, ok/real.opus OGG
+REJECTED: r1_c2/{a..f}_screenshot.png -> DBC, MPQ, BLP, M2, WMO (reversed), WMO (forward)
+          r2_attacks/padding.lua      -> disallowed binary byte 0x00 at offset 4100 (finding 1)
+          r2_attacks/hdr_plus_dbc.png -> MALFORMED (finding 2: PNG header + DBC tail)
+          r2_attacks/bare.ogg         -> MALFORMED (criterion 9: bare OggS)
+          r2_attacks/png_tail.png / ogg_tail.ogg / glb_tail.glb -> MALFORMED (criterion 8)
+          r3_attacks/zblz.png / dbc_payload.ogg -> MALFORMED (this round)
+```
+
+The three ceilings and the recursion behaviour still hold, and the content whitelist reaches
+inside GLB too — `test_the_content_whitelist_applies_inside_a_glb_too` puts the `zBLZ` PNG in a
+GLB's BIN chunk and gets "embedded payload in GLB ... chunk 'zBLZ' ...", because embedded payloads
+go through the same `classify_window` dispatcher rather than a second, weaker path.
+
+Determinism (criterion 7), two consecutive runs over the same tree:
+
+```
+$ python3 tools/validation/scan_assets.py /tmp/wom-regress -o /tmp/det1.json
+$ python3 tools/validation/scan_assets.py /tmp/wom-regress -o /tmp/det2.json
+$ diff /tmp/det1.json /tmp/det2.json && sha256sum /tmp/det1.json /tmp/det2.json
+byte-identical: yes
+ba6ac2ef628023e3edfa0d2f0d07a226c41b42b9866f831476abe53e5b78f816  /tmp/det1.json
+ba6ac2ef628023e3edfa0d2f0d07a226c41b42b9866f831476abe53e5b78f816  /tmp/det2.json
+```
+
+## Measured against real third-party assets — because rejecting everything is not a win
+
+130 files gathered from this machine and from an installed WoW add-on tree, none written for this
+project, none adjusted to pass:
+
+```
+$ python3 tools/validation/scan_assets.py /tmp/wom-rw2 -o /tmp/rw2.json
+130 inspected, 115 accepted, 15 rejected
+```
+
+- **102 files named `.png`** — two are actually JPEGs (`FF D8 FF E0 ... JFIF`), correctly rejected
+  as `UNKNOWN` (criterion 4 on real data, not a false rejection). Of the 100 genuine PNGs,
+  **88 accepted (88%)**; the 12 rejections are `iCCP` x4, `iTXt` x3, `tEXt` x2, `cHRM` x1,
+  `tIME` x1, `bKGD` x1 — every one fixable by re-exporting, and the remedy says how.
+- **28 files named `.ogg`** — one is actually an MP4 (`ftypisom`), correctly rejected. The other
+  **27 are genuine Ogg Vorbis and all 27 are accepted**, vendor strings and tags parsed in full.
+
+Chunk-type prevalence used to justify the safe list (91 machine PNGs): `IHDR`/`IDAT`/`IEND` 100%,
+`PLTE` 67%, `tRNS` 59%, `pHYs` 9%, `iTXt` 4%, `iCCP` 4%, `iDOT` 3%, `eXIf` 3%, `tEXt` 3%,
+`tIME` 2%, `sBIT` 2%, `cICP`/`cHRM`/`bKGD`/`sRGB` 1%. Add-on corpus (9 PNGs): `pHYs` 66%,
+`sRGB` 33%, `gAMA` 33%, `iTXt` 33%.
+
+## Cost of the IDAT check (it is not free, and it is bounded)
+
+```
+$ /usr/bin/time -v python3 tools/validation/scan_assets.py /tmp/wom-perf
+Elapsed (wall clock) time: 0:00.06
+Maximum resident set size: 19692 KiB
+```
+
+The tree holds a real 2048x2048 RGBA PNG (16.7 MB of raw scanlines) which is accepted, and a
+decompression bomb (a 102 KB file whose IDAT inflates to 100 MB) which is rejected. Peak RSS is
+19.7 MB against a ~15 MB bare-interpreter baseline because decompression is capped at
+`max_length=TEXT_BLOCK_SIZE` per call and aborts the moment output passes what IHDR implies — the
+first draft of this function used a whole-raster cap and peaked at 37 MB; the per-block bound is
+what brought it down. `test_a_decompression_bomb_is_rejected_without_materialising_it` asserts the
+scanner subprocess's peak stays under 200 MiB.
+
+## Test suite
+
+```
+$ python3 -m unittest discover -s tests/validation
+Ran 66 tests in 3.74s
+OK (skipped=1)
+```
+
+26 new tests this round; all 40 of rounds 1-2's tests pass unchanged in intent. The one skip is
+`test_runs_with_network_namespace_unshared`, the same honest sandbox limitation as rounds 1 and 2
+— not touched. No existing test was weakened or deleted. Two round-1 fixtures changed *premise*
+rather than being weakened: `build_ogg()` now returns the genuine third-party Vorbis file, because
+since ADR-0120 a hand-built page with arbitrary payload bytes is no longer "a valid Ogg fixture" —
+it is the attack, and it moved to `build_ogg_page_with_payload()` / `build_ogg_arbitrary_payload_page()`
+as rejection fixtures.
+
+## For Ludwig
+
+- **Q3 — `pHYs` on the PNG safe list.** It is the one entry that does not change how an image
+  renders; it is there because two-thirds of the add-on PNGs carry it and rejecting an editor's
+  default export pushes authors toward byte-stripping tools. Cost is 9 spec-fixed bytes per file.
+  **A** keep it (★ my lean, and what is built) · **B** drop it and accept ~10-60% more rejections
+  on default exports · **C** drop it and publish a one-line `pngcrush` recipe in the author docs.
+- **Q4 — the 12% PNG rejection rate is real.** Colour profiles and text metadata are the bulk of
+  it. ADR-0120 §4 accepts this cost explicitly, so I have not treated it as a defect, but it is
+  the number Ludwig should see before the upload form goes live.
+- **Q5 — Ogg is restricted to Vorbis and Opus.** FLAC-in-Ogg, Speex and Theora are rejected. That
+  follows ADR-0120 clause 2 literally. If mods should be able to ship Ogg FLAC, that is a new
+  decision (and needs its "what may be inside it" answer, per ADR-0120's consequences).
+
+## Scope note
+
+Files touched, all inside the declared scope: `tools/validation/scan_assets.py`,
+`contracts/validation-report.schema.json`, `tests/validation/**` (including the new
+`fixtures/` directory), `docs/validation/asset-scanner.md`, and this file.
+`tools/validation/magic.py` was not touched this round — the signature table was correct and
+this round's work is about what is *inside* an identified format, not about identification.
+
+One thing I wanted and did not do: `tests/validation/__pycache__/` and
+`tools/validation/__pycache__/` are untracked noise in `git status` (they were already there
+before this round). A root `.gitignore` would fix it, but the repository root is outside this
+task's declared file scope, so I removed the one I had briefly added rather than improvise past
+the scope rule. Recommend a two-line `.gitignore` as its own trivial task.
+
+## Nothing in ADR-0120 or the round-3 spec looked wrong to me
+
+I went looking, given the history. The one place the spec's literal text would not have been
+enough is criterion 15: a chunk-type whitelist alone leaves `IDAT` as an unbounded container, so I
+implemented the inflated-size check as well and said so above. That is an addition, not a
+disagreement. ADR-0120's rejection of CRC verification is correct and I did not implement it.
+
+**Status: criteria 15-19 demonstrated; rounds 1-2 criteria re-verified unaffected. Ready for
+re-review.**
