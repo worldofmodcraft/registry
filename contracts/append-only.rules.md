@@ -49,29 +49,82 @@ settle either:
 
 Every rule in this document, and everything above, is phrased over a pair
 `(old, new)` of **parsed values of the same file at the same path** — which
-silently presumes both exist. They do not always. A given mod's
-`entry.json` can be in exactly one of four `(old, new)` states across a PR,
-and this section states, at the same level of precision as the rest of the
-document, what each one requires. This is not a fourth, optional topic —
-task 007's checker must classify into one of these four cases *before* any
-rule above can even be applied, because rules 1–5 and the takedown carve-out
-all assume the "present -> present" case implicitly.
+silently presumes both exist. They do not always. Across a PR, a given mod's
+`entry.json` is in exactly one of **four** `(old, new)` existence states:
+`absent -> absent`, `absent -> present`, `present -> present`, and
+`present -> absent`. All four are listed below; three of them carry
+requirements, and the fourth (`absent -> absent`) is named only so the
+enumeration is complete and no reader has to wonder whether a case was
+forgotten. **A rename or move is not a fifth state** — it is two of these
+four states occurring at two different paths, and it is treated below after
+them. Task 007's checker must classify each mod directory into one of these
+states *before* any rule above can be applied, because rules 1, 3, the
+takedown carve-out and the ordering sections all presume the
+`present -> present` case implicitly.
 
-- **absent -> present (creation, i.e. first publish, ADR-0058 Section 1).**
-  There is no `old`, so `n = len(old.versions)` is undefined and no prefix
-  comparison (rule 1) applies — there is nothing to compare `new` against.
-  The **only** requirement this document places on this case is that `new`
-  validates against `entry.schema.json`. **Binding the namespace to an
-  owner is the ownership gate's job (ADR-0058 Section 2–3), not this
-  document's**: task 007 must not look here for a check that the PR's
-  `owner` is legitimate, or that the confirmation text was shown — that
-  belongs to whatever component authorises a first-publish PR in the first
-  place. This document only ever compares an entry to its *own* prior
-  state; a first publish has no prior state to compare to.
-- **present -> present.** Everything else in this document — rules 1
-  through 5, the takedown carve-out, and the ordering/reordering rules —
-  governs this case, and only this case.
-- **present -> absent (deletion).** **Always a violation.** ADR-0041 is
+- **`absent -> absent`.** The file exists on neither side of the PR. There is
+  nothing to compare and nothing to validate; no rule in this document
+  applies, and none can be violated. Stated for completeness only.
+- **`absent -> present` (creation, i.e. first publish, ADR-0058 Section 1).**
+  **Model this case as `n = 0`** — not as "schema validation only". There is
+  no `old`, so treat the prior version array as empty and set
+  `n = len(old.versions) = 0`. Everything below follows mechanically from
+  that, and a checker needs no first-publish branch beyond setting `n = 0`:
+
+  - **Rule 1 is vacuous**: `new.versions[0:0]` and `old.versions[0:0]` are
+    both the empty list, so the prefix comparison succeeds trivially.
+    **Rule 3 is vacuous**: `len(new.versions) < 0` is impossible. **The
+    takedown carve-out is vacuous**: it is defined only for indices
+    `i < n`, and there are none. **"Ordering of `versions[]` is part of what
+    is frozen" and "A version removed and then re-added identically" are
+    vacuous**: both are consequences of rule 1's positional comparison over
+    a prefix that is empty here. Read *vacuous*, not *waived* — the
+    guarantee those rules express is not weaker at a first publish; there is
+    simply no prior state for them to bite on yet, and from the very next PR
+    onward they apply in full to everything this PR wrote.
+  - **The `id`/`owner` freeze likewise has nothing to compare against** and
+    is vacuous for the same reason. **Binding the namespace to an owner is
+    the ownership gate's job (ADR-0058 Section 2–3), not this document's**:
+    task 007 must not look here for a check that the PR's `owner` is
+    legitimate, or that the confirmation text was shown — that belongs to
+    whatever component authorises a first-publish PR in the first place.
+    This document only ever compares an entry to its *own* prior state, and
+    a first publish has no prior state to compare to.
+  - **Every element of `new.versions` is a newly added element** — with
+    `n = 0`, `new.versions[n:]` is the whole array. **Rules 2 and 4
+    therefore apply unchanged and in full**, because neither rule's content
+    depends on `old` existing:
+
+    - **Rule 2** — every element must satisfy the version-object shape in
+      `entry.schema.json`, **and any element whose `status` is `"removed"`
+      must carry a `reason` that is present and non-empty after stripping
+      leading and trailing whitespace**. A first publish is not exempt from
+      the status-and-reason pairing ADR-0041 requires.
+    - **Rule 4** — `version` must be **pairwise-unique across
+      `new.versions` as a whole**, compared by exact string equality. (Only
+      the half of rule 4 that compares against `old.versions` is vacuous
+      here; the pairwise half is not.) Two elements both labelled `"1.2.0"`
+      in a first-publish entry are a violation of rule 4, exactly as the
+      same two objects would be if they arrived in a later PR.
+  - Stated flatly, because an earlier revision of this document got it wrong
+    in exactly this place: **a first publish is not exempt from rules 2 and
+    4, and `new` validating against `entry.schema.json` is necessary here
+    but not sufficient.** `entry.schema.json` has no cross-element
+    uniqueness keyword and no `if`/`then`, so it accepts both of the shapes
+    rules 4 and 2 reject — a duplicate `version` string across two elements,
+    and an element born `status: "removed"` with a missing or
+    whitespace-only `reason`. If creation were exempt, identical content
+    could be laundered in through a namespace's *first* PR that would be
+    rejected twice over as a later append: same end state, opposite verdict,
+    with the guarantee depending only on which PR the data arrived in.
+- **`present -> present`.** The `old`-dependent parts of this document —
+  rule 1, rule 3, the takedown carve-out, the `id`/`owner` freeze, and the
+  "Ordering of `versions[]`", "A version removed and then re-added
+  identically" and "Malformed edits" sections — govern this case, and only
+  this case. Rules 2 and 4 govern it as well, but are **not** confined to
+  it: they constrain newly added elements, whose content does not depend on
+  `old`, and so they apply to the creation case above in full.
+- **`present -> absent` (deletion).** **Always a violation.** ADR-0041 is
   titled "nothing can be unpublished" and states authors "cannot remove
   versions"; deleting `entry.json` outright removes every version at once,
   which is at least as severe as removing one, so this case must be at
@@ -79,7 +132,11 @@ all assume the "present -> present" case implicitly.
   `old.versions`"). A checker that finds an `old` value and no `new` value
   for a given path must itself report a violation — it must not evaluate
   no rule and let the PR pass because rules 1–5 have nothing to compare
-  against an absent `new`.
+  against an absent `new`. (The mirror of the creation model gives the same
+  verdict and may be used instead: treating an absent `new` as
+  `new.versions = []` makes `len(new.versions) = 0 < n` for any entry that
+  had at least one version, which rule 3 rejects. Either route must end in a
+  violation; silently passing must not be reachable.)
 - **A rename or move of the mod directory** (e.g.
   `mods/a.b/entry.json` moving to `mods/a.c/entry.json`) **is a deletion of
   the old path plus a creation of the new one, and is therefore a
@@ -98,8 +155,10 @@ all assume the "present -> present" case implicitly.
 `entry.json` has exactly two top-level fields besides `versions`: `id` and
 `owner` (with `owner`'s three subfields `provider`, `id`, `name_at_registration`).
 
-**Both are frozen. There are currently no mutable top-level fields on this
-document.** Concretely: `new.id != old.id`, or `new.owner` not deep-equal to
+**Both are frozen. Besides `versions` — whose permitted changes (appending,
+and the one takedown transition below) are the entire subject of this
+document — `entry.json` currently has no other mutable top-level field.**
+Concretely: `new.id != old.id`, or `new.owner` not deep-equal to
 `old.owner` (any of its three subfields changed), is a violation, full stop —
 no PR may ever change either, not even one from the namespace's own owner.
 
@@ -135,7 +194,9 @@ Let `n = len(old.versions)`. The check is:
    get it wrong.
 2. **`new.versions` may be longer than `old.versions`** (`len(new.versions)
    >= n`); every element from index `n` onward is a newly added version
-   object and must itself satisfy `entry.schema.json`. **In addition, any
+   object and must itself satisfy the version-object shape
+   `entry.schema.json` defines for `versions[]` items (the file as a whole
+   must of course validate too). **In addition, any
    newly added element whose `status` is `"removed"` must carry a `reason`
    that is present and non-empty after stripping leading and trailing
    whitespace** — ADR-0041 pairs `status: "removed"` with a reason
@@ -150,8 +211,13 @@ Let `n = len(old.versions)`. The check is:
    for newly appended elements is entirely task 007's checker's job, not
    the schema's.
 3. **`new.versions` must never be shorter than `old.versions`**
-   (`len(new.versions) < n` is always a violation) — a version can never be
-   removed.
+   (`len(new.versions) < n` is always a violation) — a version object can
+   never be **deleted from the array**. Note the two senses of "remove" that
+   sit twenty lines apart in this document: rule 3 is about *array
+   membership*, whereas a takedown (below) sets an existing element's
+   `status` to the string `"removed"` while leaving that element in the
+   array, at the same index, with the same `version`. A takedown is
+   therefore not a deletion and never engages rule 3.
 4. **Every newly added version's `version` field must be unique across
    `new.versions` as a whole** — distinct from every existing version's
    `version` field (i.e. from every value in `old.versions`; `version` is
@@ -272,8 +338,9 @@ permission alone (which the manager session already shares), but a
 merged by the manager on its own authority, regardless of technical
 ability to do so.** It requires Ludwig's explicit written approval, given
 in session, referenced in the PR, before the manager merges it. (This rule
-is being added to `MANAGER.md` Section 7's "always requires Ludwig" list,
-task 028 — if that task's outcome ever conflicts with this paragraph,
+is in `MANAGER.md` Section 7's "always requires Ludwig" list, put there by
+task 028 and merged to `main` as commit `c5d5d7a`, PR #17 — if
+`MANAGER.md` ever conflicts with this paragraph,
 `MANAGER.md` is the current source of truth and this paragraph is stale
 and needs a fix commit.) The `reason` text, together with the PR's own
 history and Ludwig's referenced approval, stays in git forever as the
