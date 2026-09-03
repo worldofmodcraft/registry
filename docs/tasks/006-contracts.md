@@ -352,3 +352,44 @@ implemented anywhere in this task (task 007's job). Nine questions booked above 
 spec-inconsistency note (Q10, mission D1 vs. this task/ADR-0041/depgraph over `key_id`) — none
 blocking, all worth Ludwig's eyes per the standing instruction to book rather than silently
 assume.
+
+---
+# Review verdict — 2026-09-03: BLOCKING (2 findings). Recorded, not fixed.
+Reviewed independently. Everything except `append-only.rules.md` passed and was verified rather
+than re-read: 23/23 tests deterministic across two runs; **all 19 invalid worked examples proven
+load-bearing** (each was re-validated against a schema copy with exactly its own rule removed, and
+failed only for the reason its `_comment` names); the vendored SPDX enum re-fetched and confirmed
+byte-for-byte equal to upstream's `isOsiApproved && !isDeprecatedLicenseId` filter; the stdlib
+validator's `NotImplementedError` refusal confirmed real for ten unsupported keywords; no checking
+logic present; Q1–Q9 reasonable and correctly booked.
+
+Both blocking findings are in `contracts/append-only.rules.md` — the document task 007 will
+implement a diff checker directly from, which is exactly why it was the review's primary target.
+
+**F1 — the rules forbid the takedown ADR-0041 mandates.**
+`append-only.rules.md:77-82` states an unconditional deep-equal prefix rule, and `:145-153` says an
+in-place field rewrite on an existing `versions[i]` is a violation "exactly the same way a shorter
+array is", with no carve-outs. But ADR-0041 requires that legal grounds lead to **removed**:
+"artefacts pulled, registry entry kept with status and reason" — a legitimate later mutation of
+`status` (and addition of `reason`) on an **already-published** version object. The document
+reserves an explicit escape hatch for `id`/`owner` (`:66-71`) but none for `versions[i].status`.
+The one `status: "removed"` example shows a version *born* removed at write-back time, not a
+transition, so it cannot stand in for the ADR-0041 scenario. A task 007 checker built faithfully
+from this prose would make the platform's only legal-takedown mechanism impossible to implement.
+
+**F2 — uniqueness is only checked against history, not within the PR.**
+Rule 4 (`:89-98`) forbids a new version whose `version` equals an **existing** one, where
+"existing" is defined against `old.versions` throughout. Two version objects both labelled `2.0.0`
+added in the *same* PR violate neither the schema (cross-item uniqueness is correctly left to the
+checker) nor rule 4's literal wording — defeating the rule's own stated rationale, "which build is
+'the' 1.2.0?".
+
+**Required before merge:** amend `append-only.rules.md` to state (a) whether and how an existing
+version's `status` may transition to `removed`, and if permitted exactly which fields may change on
+that element (presumably `status` and `reason` only, everything else still frozen); and (b) that
+newly added version objects must be pairwise-unique on `version` among themselves as well as
+against history.
+
+**Status: in review, blocking findings recorded.** Not fixed in this session — the manager reached
+the 40 % context hard threshold (MANAGER.md §5) and handed over. The next session fixes these two
+points, re-verifies, and re-reviews before merging.
