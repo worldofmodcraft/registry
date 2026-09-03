@@ -393,3 +393,98 @@ against history.
 **Status: in review, blocking findings recorded.** Not fixed in this session — the manager reached
 the 40 % context hard threshold (MANAGER.md §5) and handed over. The next session fixes these two
 points, re-verifies, and re-reviews before merging.
+
+---
+# Review round 1 — fix brief (manager, 2026-09-03)
+
+Scope: `contracts/append-only.rules.md` and, if it restates any changed rule,
+`docs/contracts/README.md`. Nothing else. No checking logic anywhere — this task still writes
+contracts; task 007 implements them.
+
+## Ludwig's decision, 2026-09-03 — what authorises a takedown
+
+F1 exposes a question no ADR answers: a field-level diff checker cannot distinguish an authorised
+legal takedown from an attacker editing someone else's entry. Three options were put to Ludwig
+(shape-only check with the merge gate as the authorisation; forbid in-place edits entirely and do
+takedowns by loudly lifting branch protection; shape check plus a separate signed takedown record).
+
+**His answer: option 1 — the merge gate IS the authorisation.** `main` on `registry` is protected
+and only Ludwig can merge, so the human merge decision is the authorisation, and the `reason` text
+stays in git history forever as the audit record. This is the boring solution (ADR-0103) working as
+designed: no new file format, no new machinery, existing controls carrying the weight.
+
+**Revisit condition, recorded for the future:** *if merge rights ever extend beyond Ludwig* —
+external moderators, phase 3 — this decision must be revisited, and **option 3 (a separate signed
+takedown record in the same PR, which the checker requires before accepting the mutation) is the
+named candidate.** The moment the merge gate stops being one trusted person, it stops being an
+authorisation mechanism, and the carve-out below becomes an unguarded hole.
+
+## F1 — the one permitted in-place mutation
+
+The document must stop being unconditional and instead state, at field level, exactly one carve-out
+to rule 1, in terms a checker implements without inference:
+
+- For `i < n`, `new.versions[i]` must be deep-equal to `old.versions[i]` **except** for a single
+  permitted transition: `old.versions[i].status == "published"` and
+  `new.versions[i].status == "removed"`.
+- On that transition the **only** other permitted difference is `reason`: it must be present and a
+  non-empty string in `new.versions[i]`. A takedown transition without a non-empty `reason` is a
+  violation (ADR-0041: "registry entry kept with status **and reason**").
+- **Every other field of that element stays deep-equal** — `version`, `commit`, `source_url`,
+  `source_archive`, `source_sha256`, `signature`, `key_id`, `published_at`. Changing any of them
+  alongside the transition is a violation, and the checker reports it as such rather than accepting
+  the element because its `status` changed legitimately.
+- **The transition is one-way and terminal.** `removed → published` is a violation. Once an element
+  is `removed`, it is frozen completely, `reason` included: editing the reason text of an
+  already-removed version is a violation. (Boring and conservative: a correction is a decision we
+  have not made, not a hole we leave open by default.)
+- Array length and ordering rules are untouched: this carve-out never permits removing, adding at a
+  non-final position, or reordering elements.
+- State explicitly that **this document defines the shape of a legal takedown, not who may perform
+  one** — record Ludwig's decision above as the authorisation, with the revisit condition, so task
+  007 does not invent an authorisation check and does not leave the mechanism unimplementable.
+
+The document must carry a **worked example of the permitted transition** (the element before, the
+element after, field by field) and a **worked counter-example** (the same transition with one other
+field also changed → violation), matching the concreteness of the existing reordering and
+remove-and-re-add examples.
+
+## F2 — uniqueness within the PR, not only against history
+
+Rule 4 currently compares a new version's `version` only against `old.versions`, so two objects
+both labelled `2.0.0` added in one PR pass. Amend it to state that `version` must be unique across
+**`new.versions` as a whole** — pairwise-unique among newly added elements as well as distinct from
+every existing one — which is the rule its own stated rationale ("which build is 'the' 1.2.0?")
+already implies.
+
+State the comparison used: **exact string equality on the `version` field**, not semver-normalised
+comparison. Note explicitly that two textually different but semver-equivalent strings (e.g. build
+metadata, `1.0.0` vs `1.0.0+build.2`) are therefore *not* caught by this rule, and book that as a
+question rather than inventing normalisation semantics no ADR specifies.
+
+## Consistency sweep (part of the fix, not optional)
+
+Both findings change what the document claims globally. Every sentence that still says or implies
+*all* in-place edits are violations must be brought into line — at minimum the "Malformed edits
+that are not simple truncation or prefix mismatch" section (`:145-153`), which today says an
+in-place field rewrite is a violation "exactly the same way a shorter array is" with no carve-out,
+and the framing in "The comparison model" and rule 1 itself. A reader must not be able to find two
+sentences in this document that disagree about whether `versions[i]` can ever change.
+
+## Acceptance criteria for this round
+
+1. F1 addressed exactly as specified above, including the one-way/terminal rule, the required
+   non-empty `reason`, the frozen-everything-else rule, the authorisation statement with Ludwig's
+   decision and the revisit condition, and both worked examples.
+2. F2 addressed, with the exact-string-equality comparison stated and the semver-equivalence gap
+   booked as a question.
+3. Consistency sweep done: quote, in the log, every sentence changed and why, and state how you
+   checked no contradictory sentence remains.
+4. `docs/contracts/README.md` updated if it restates any changed rule; if it does not, say so in
+   the log with the command that showed it.
+5. The existing suite still passes unchanged — `python3 -m unittest discover -s tests/contracts -v`
+   — two runs, identical results, output in the log. No test weakened or deleted (MANAGER.md §3.5).
+6. No checking logic written anywhere (still forbidden this task).
+7. Task log updated so a fresh agent could resume from it alone.
+
+**Budget:** small (<= 1 agent-session). **Status: in-progress (fix round).**
