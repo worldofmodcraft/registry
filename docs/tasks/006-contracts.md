@@ -1851,15 +1851,19 @@ Committed the round's changes locally (not pushed, per instructions), then clone
 worktree fresh and re-ran the script there to give criterion 2 a real post-fix demonstration:
 ```
 $ git log --oneline -1
-<commit-hash> Task 006: fix round 4 -- verification artefact only (F1 pipefail, F2 untrack .pyc, F3 split checks)
+b88f98d Task 006: fix round 4 -- verification artefact only (F1 pipefail, F2 untrack .pyc, F3 split checks)
 $ rm -rf /tmp/.../registry-fresh-clone-after
 $ git clone --quiet /home/ludwig/wt/registry-task-006 /tmp/.../registry-fresh-clone-after
 $ cd /tmp/.../registry-fresh-clone-after && git checkout --quiet task/006-contracts
 $ bash docs/tasks/006-verify.sh; echo "exit=$?"
+...
 == RESULT ==
 ALL CHECKS PASSED
 exit=0
 ```
+43 `PASS`, 0 `FAIL`, in a directory `git clone` produced from scratch — the `.pyc` files never
+existed there until the suite itself created them (untracked, gitignored), so there is nothing
+for a mismatched mtime to rewrite.
 
 ## Could not verify / left as-is
 - **C1.2d and the section heading at `:440`.** The anchor for C1.2d ("Ordering of versions[]
