@@ -142,6 +142,17 @@ Beyond MANAGER.md §3.7:
   and followed criterion 1 + ADR-0041 + the depgraph, all three of which are more specific and
   mutually consistent. Not a blocking conflict, but worth a note since the instructions asked
   me to flag exactly this kind of disagreement.
+- **Q11 — semver-equivalent `version` strings are not caught by the uniqueness rule.**
+  Fix-round F2 required rule 4 of `contracts/append-only.rules.md` to state its comparison
+  explicitly: exact string equality on `version`, not semver-normalised comparison. This means
+  `"1.0.0"` and `"1.0.0+build.2"` can both appear in `new.versions` without violating the rule,
+  even though semver treats build metadata as not affecting precedence, so a human could read
+  them as "the same version" twice. No ADR read for this task (ADR-0041, ADR-0042) specifies
+  semver-aware collision detection, and inventing a normalisation rule (which components of
+  semver equal for this purpose — full string minus build metadata? minus pre-release too?)
+  is exactly the kind of undocumented registry semantics this task's instructions forbid
+  inventing. Left as exact-string-equality, boring and literal (ADR-0103); worth a future ADR
+  or task 007 spec line if semver-aware collision detection is wanted.
 
 ---
 # Task 006 log
@@ -486,5 +497,179 @@ sentences in this document that disagree about whether `versions[i]` can ever ch
    — two runs, identical results, output in the log. No test weakened or deleted (MANAGER.md §3.5).
 6. No checking logic written anywhere (still forbidden this task).
 7. Task log updated so a fresh agent could resume from it alone.
+
+---
+# Review round 1 — fix, demonstrated (2026-09-03)
+
+All work confined to `contracts/append-only.rules.md`, per the fix brief's declared scope.
+`docs/contracts/README.md` and the schemas/examples/tests were **not** touched — see criterion 4
+below for the check that confirmed README didn't need it. All commands below were run from
+`/home/ludwig/wt/registry-task-006`.
+
+## 1. F1 — the one permitted in-place mutation (takedown)
+
+Added a new subsection, "The one permitted in-place mutation: takedown (ADR-0041)", inserted
+between rule 5 of the `versions[]` list and "Ordering of `versions[]` is part of what is frozen".
+It states, field level:
+- the only permitted transition is `old.status == "published"` -> `new.status == "removed"`;
+- `new.reason` must be present and a non-empty string on that transition;
+- every other field (`version`, `commit`, `source_url`, `source_archive`, `source_sha256`,
+  `signature`, `key_id`, `published_at`) must stay deep-equal;
+- the transition is one-way/terminal (`removed -> published` is a violation; once `status` is
+  `removed`, the whole element — `reason` included — is frozen, because the exception's own first
+  condition requires the *old* status to be `published`, so nothing exempts a second edit to an
+  already-removed element);
+- it never loosens array length/ordering rules (2, 3, "Ordering of `versions[]`");
+- the authorisation statement — "this document defines the shape of a legal takedown, not who may
+  perform one" — recording Ludwig's 2026-09-03 decision (merge gate = authorisation, `main` is
+  branch-protected, only Ludwig merges, `reason` + PR history is the permanent audit record) and
+  the revisit condition (option 3, a separate signed takedown record, becomes the candidate the
+  moment merge rights extend beyond Ludwig);
+- a worked example (element before/after, field by field, only `status`+`reason` differing) and a
+  worked counter-example (same transition, `source_sha256` also changed -> violation, with the
+  reasoning a checker must apply spelled out).
+
+Also updated rule 1 itself (see sweep below) to point at this new section instead of asserting
+unconditional equality, and the "Malformed edits" section (see sweep below) to carve out the same
+exception rather than call every same-length in-place difference a violation.
+
+## 2. F2 — uniqueness within the PR, not only against history
+
+Rewrote rule 4 to require `version` to be unique across `new.versions` **as a whole**: distinct
+from every value in `old.versions` (the history case, as before) **and** pairwise-distinct among
+`new.versions[n:]` (newly added elements checked against each other, the gap the review found).
+Added the explicit worked scenario in prose (two `"2.0.0"` objects added in the same PR) and
+stated the comparison used: **exact string equality on `version`**, not semver-normalised — with
+`"1.0.0"` vs `"1.0.0+build.2"` given as the concrete pair that is textually different and
+therefore not caught. The semver-equivalence gap is booked as **Q11** in this file's Questions
+section (continuing the existing numbering from Q10), not resolved by invented normalisation
+semantics.
+
+## 3. Consistency sweep
+
+Three passages changed; every changed sentence is quoted below (old -> new), plus how I confirmed
+no contradictory sentence survives elsewhere in the document.
+
+**(a) Rule 1 (the core comparison rule).**
+Old: *"`new.versions[0:n]` must be deep-equal, element-for-element and in the same order, to
+`old.versions[0:n]`. Every version object that existed before this PR must appear, unchanged, at
+the same index, in the PR's version. This single rule is the entire mechanism; ..."*
+New: *"`new.versions[0:n]` must be deep-equal, element-for-element and in the same order, to
+`old.versions[0:n]`, with exactly one permitted exception: the takedown transition defined in
+'The one permitted in-place mutation: takedown' below. ... This is a two-branch mechanism
+(unchanged, or takedown) rather than a single unconditional equality; ..."*
+Why: this was the sentence F1's review quote (`:77-82`) pointed at directly as the unconditional
+rule with no carve-out.
+
+**(b) Rule 4 (uniqueness).**
+Old: *"A newly added version's `version` field must not equal any existing version's `version`
+field."* (compared only against `old.versions`, silent on new-vs-new)
+New: *"Every newly added version's `version` field must be unique across `new.versions` as a
+whole — distinct from every existing version's `version` field ... **and** pairwise-distinct from
+every other newly added version's `version` field in the same PR ..."* plus the new
+exact-string-equality paragraph.
+Why: this is F2 itself — the sentence the review's Rule-4 quote (`:89-98`) pointed at as checking
+only against history.
+
+**(c) "Malformed edits that are not simple truncation or prefix mismatch" (`:145-153` in the
+reviewed version).**
+Old: *"... is a violation under rule 1 exactly the same way a shorter array is — the check does
+not need, and should not have, a separate 'was this a resize or an edit' branch. One rule, one
+comparison, covers both."*
+New: *"... is a violation under rule 1 exactly the same way a shorter array is, **unless** the
+difference at that index is exactly the takedown transition described in 'The one permitted
+in-place mutation: takedown' above, field by field. ... only the exact shape spelled out in the
+takedown section is exempt from this paragraph's rule."*
+Why: this was the review's second citation for F1 — the section that explicitly declared *any*
+in-place field rewrite a violation "exactly the same way" as truncation, with no exception, which
+would forbid the takedown ADR-0041 mandates.
+
+**How I checked no contradictory sentence remains:** ran
+`grep -n "deep-equal|frozen|violation|unconditional|never change|exactly the same way|single rule|one rule" contracts/append-only.rules.md`
+(output pasted in this session) and read every matching line in context:
+- The `id`/`owner` "**Both are frozen**" passage (top-level fields, not `versions[i]`) is untouched
+  and correctly still unconditional — no ADR gives a carve-out there, so it must stay absolute;
+  the takedown carve-out is scoped to `versions[i].status`/`reason` only and never implies
+  anything about `id`/`owner`.
+- Rule 3's "a version can never be removed" refers to array length (`len(new.versions) < n`),
+  which the takedown transition never changes (it mutates an element in place, it does not delete
+  one) — no conflict.
+- "Ordering of `versions[]` is part of what is frozen" and "A version removed and then re-added
+  identically" both describe *positional* violations (an element's content at index `i` no longer
+  matches because a *different* object occupies that index after a reorder/remove-and-readd).
+  Read both in full again after the edit: neither claims "no in-place edit is ever permitted" —
+  they claim reordering/remove-and-readd specifically fails rule 1's positional comparison, which
+  remains true and is orthogonal to the takedown carve-out (a reorder or remove-and-readd changes
+  *which object* sits at index `i`, so the takedown carve-out's "every other field deep-equal"
+  clause would fail regardless — a reordered element cannot simultaneously satisfy "every field
+  except status/reason is unchanged" unless it's actually the same object at the same index, which
+  is precisely the case the carve-out is written for). No edit was needed to either section.
+- No other match implied "no in-place edit ever" outside the three passages already amended.
+
+I also re-read the whole file top to bottom after all edits (`sed -n '1,344p'
+contracts/append-only.rules.md`, 344 lines total, 6 backtick fences = 3 balanced code blocks) to
+confirm the new section reads coherently in place and nothing above or below it still asserts the
+old unconditional claim.
+
+## 4. `docs/contracts/README.md`
+
+```
+$ grep -n "append-only\|deep-equal\|version\[i\]\|status\|removed\|takedown\|prefix" docs/contracts/README.md
+14:| `contracts/page.schema.json` | The editable page content for one mod: description, screenshots, tags, links, deprecated. Stored at `mods/<namespace>.<name>/page.json`. **Not** append-only — see the file's own description. | ADR-0059 Section 2-3 | E3, E10 |
+16:| `contracts/append-only.rules.md` | Field-level rules for what a PR may change in `entry.json`, precise enough for task 007 to implement a diff checker directly from it. | ADR-0041 | E4 |
+23:`validation-report` and `append-only.rules.md` (a rules document has no schema of its own to
+```
+Of the three matches, line 14 is the unrelated `page.schema.json` row (matched only on
+"removed"/"status" appearing in its prose about page content, not about append-only rules), and
+line 23 is a parenthetical about examples directories. Line 16 is `append-only.rules.md`'s own
+row, and its only claim is that the file gives field-level rules for what a PR may change — it
+never restates the specific unconditional-equality or history-only-uniqueness claims that
+changed. **Not updated** — nothing in README needed to change.
+
+## 5. Existing suite still passes, unchanged
+
+```
+$ python3 -m unittest discover -s tests/contracts -v > /tmp/round2_run1.txt 2>&1; echo "exit1=$?"
+exit1=0
+$ python3 -m unittest discover -s tests/contracts -v > /tmp/round2_run2.txt 2>&1; echo "exit2=$?"
+exit2=0
+$ diff /tmp/round2_run1.txt /tmp/round2_run2.txt && echo IDENTICAL
+IDENTICAL
+$ tail -8 /tmp/round2_run1.txt
+test_absolute_url_screenshot_rejected_in_manifest_schema (test_contracts.ScreenshotPathTests.test_absolute_url_screenshot_rejected_in_manifest_schema) ... ok
+test_absolute_url_screenshot_rejected_in_page_schema (test_contracts.ScreenshotPathTests.test_absolute_url_screenshot_rejected_in_page_schema) ... ok
+test_relative_screenshot_accepted (test_contracts.ScreenshotPathTests.test_relative_screenshot_accepted) ... ok
+
+----------------------------------------------------------------------
+Ran 23 tests in 0.006s
+
+OK
+```
+Same 23 tests as the round-1 log's criterion 8 (no test added, removed, or edited — this round
+touched only `append-only.rules.md`). Confirmed by scope:
+```
+$ git status --short
+ M contracts/append-only.rules.md
+?? tests/contracts/__pycache__/
+```
+Only `contracts/append-only.rules.md` is modified; `tests/contracts/__pycache__/` is the same
+generated-and-not-committed artefact noted in the round-1 log's Scope note.
+
+## 6. No checking logic written
+
+`contracts/append-only.rules.md` remains a Markdown prose document with JSON worked examples
+inside fenced code blocks for illustration only (not read by any script) — no `.py`/`.sh`/CI file
+was created or edited this round; `git status --short` above shows the only change is to this one
+`.md` file.
+
+## 7. Resume note
+
+Nothing further pending on this task as of this log entry. Fix brief's seven acceptance criteria
+are demonstrated above (1-7). Q1-Q11 stand as booked, none blocking. If a fresh agent resumes
+from just this file: the branch is `task/006-contracts` in the `registry` worktree at
+`/home/ludwig/wt/registry-task-006`; do not push (the manager handles PRs); next step is
+manager/Ludwig re-review of `contracts/append-only.rules.md` against F1/F2 before merge.
+
+**Status: fix round complete, ready for re-review.**
 
 **Budget:** small (<= 1 agent-session). **Status: in-progress (fix round).**
