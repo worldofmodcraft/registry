@@ -45,6 +45,54 @@ settle either:
   meaningful — see "Ordering of `versions[]`" below. Do not generalise the
   object-key-order rule to arrays.
 
+### File-level existence: creation, deletion, rename
+
+Every rule in this document, and everything above, is phrased over a pair
+`(old, new)` of **parsed values of the same file at the same path** — which
+silently presumes both exist. They do not always. A given mod's
+`entry.json` can be in exactly one of four `(old, new)` states across a PR,
+and this section states, at the same level of precision as the rest of the
+document, what each one requires. This is not a fourth, optional topic —
+task 007's checker must classify into one of these four cases *before* any
+rule above can even be applied, because rules 1–5 and the takedown carve-out
+all assume the "present -> present" case implicitly.
+
+- **absent -> present (creation, i.e. first publish, ADR-0058 Section 1).**
+  There is no `old`, so `n = len(old.versions)` is undefined and no prefix
+  comparison (rule 1) applies — there is nothing to compare `new` against.
+  The **only** requirement this document places on this case is that `new`
+  validates against `entry.schema.json`. **Binding the namespace to an
+  owner is the ownership gate's job (ADR-0058 Section 2–3), not this
+  document's**: task 007 must not look here for a check that the PR's
+  `owner` is legitimate, or that the confirmation text was shown — that
+  belongs to whatever component authorises a first-publish PR in the first
+  place. This document only ever compares an entry to its *own* prior
+  state; a first publish has no prior state to compare to.
+- **present -> present.** Everything else in this document — rules 1
+  through 5, the takedown carve-out, and the ordering/reordering rules —
+  governs this case, and only this case.
+- **present -> absent (deletion).** **Always a violation.** ADR-0041 is
+  titled "nothing can be unpublished" and states authors "cannot remove
+  versions"; deleting `entry.json` outright removes every version at once,
+  which is at least as severe as removing one, so this case must be at
+  least as strict as rule 3 ("`new.versions` must never be shorter than
+  `old.versions`"). A checker that finds an `old` value and no `new` value
+  for a given path must itself report a violation — it must not evaluate
+  no rule and let the PR pass because rules 1–5 have nothing to compare
+  against an absent `new`.
+- **A rename or move of the mod directory** (e.g.
+  `mods/a.b/entry.json` moving to `mods/a.c/entry.json`) **is a deletion of
+  the old path plus a creation of the new one, and is therefore a
+  violation** under the deletion case above — regardless of whether the new
+  path's content is otherwise byte-for-byte identical to the old one's.
+  This needs saying explicitly because `id` and `owner` (below) are only
+  ever compared *within one file's own `(old, new)` pair at a fixed path*;
+  without this case stated, a rename would let a PR sidestep the frozen-
+  `id`/`owner` rule entirely by "moving" an entry to a new path instead of
+  editing the old path's `id` or `owner` field in place — the two
+  independent pairs it produces (one pure deletion, one pure creation)
+  never trigger rule 1's same-path comparison at all.
+
 ## Fields outside `versions[]`: `id` and `owner`
 
 `entry.json` has exactly two top-level fields besides `versions`: `id` and
@@ -87,15 +135,34 @@ Let `n = len(old.versions)`. The check is:
    get it wrong.
 2. **`new.versions` may be longer than `old.versions`** (`len(new.versions)
    >= n`); every element from index `n` onward is a newly added version
-   object and must itself satisfy `entry.schema.json`.
+   object and must itself satisfy `entry.schema.json`. **In addition, any
+   newly added element whose `status` is `"removed"` must carry a `reason`
+   that is present and non-empty after stripping leading and trailing
+   whitespace** — ADR-0041 pairs `status: "removed"` with a reason
+   ("registry entry kept with status **and reason**") regardless of whether
+   the element arrives already-removed (an append) or reaches `"removed"`
+   by the takedown transition on an existing element (see "The one
+   permitted in-place mutation" below); this document does not treat "born
+   removed" as exempt from the pairing just because it is not a transition.
+   `entry.schema.json` cannot express this conditional requirement — its
+   `reason` property is unconditionally optional, because the validator
+   subset this repository uses has no `if`/`then` support — so enforcing it
+   for newly appended elements is entirely task 007's checker's job, not
+   the schema's.
 3. **`new.versions` must never be shorter than `old.versions`**
    (`len(new.versions) < n` is always a violation) — a version can never be
    removed.
 4. **Every newly added version's `version` field must be unique across
    `new.versions` as a whole** — distinct from every existing version's
-   `version` field (i.e. from every value in `new.versions[0:n]`, which is
-   `old.versions`) **and** pairwise-distinct from every other newly added
-   version's `version` field in the same PR (`new.versions[n:]`). Two
+   `version` field (i.e. from every value in `old.versions`; `version` is
+   frozen even under the takedown transition below, so every
+   `new.versions[0:n]` element's `version` field is always identical to the
+   corresponding `old.versions[i].version`, even on the one index where
+   rule 1's exception permits `status`/`reason` to differ — `new.versions[0:n]`
+   is therefore not deep-equal to `old.versions` in general, but it is
+   always equal to it field-by-field on `version` specifically) **and**
+   pairwise-distinct from every other newly added version's `version` field
+   in the same PR (`new.versions[n:]`). Two
    version objects added in the *same* PR that both carry `version:
    "2.0.0"` violate this rule exactly as if one of them had matched an
    existing entry — the rule is stated over `new.versions` as a whole, not
@@ -142,10 +209,17 @@ from `old.versions[i]` if, and only if, **all** of the following hold:
   this document permits on an existing element. (`published` staying
   `published`, i.e. no change at all, is not a transition and is covered by
   plain deep-equality under rule 1, not by this section.)
-- `new.versions[i].reason` is present and is a non-empty string. ADR-0041:
-  a removed version's "registry entry [is] kept with status **and
-  reason**" — a takedown transition without a non-empty `reason` is a
-  violation, not a takedown that merely omitted an optional field.
+- `new.versions[i].reason` is present, and **non-empty after stripping
+  leading and trailing whitespace** — `"   "` (spaces only), a lone tab, or
+  a string of only newlines does not satisfy this; the checker must trim
+  before checking length, not rely on `entry.schema.json`'s own
+  `minLength: 1`, which `"   "` already satisfies and therefore cannot
+  catch on its own. ADR-0041: a removed version's "registry entry [is]
+  kept with status **and reason**" **so dependency resolution can explain
+  the failure** — a reason a human or a resolver cannot read as text
+  explains nothing, so a takedown transition without a non-empty (post-
+  trim) `reason` is a violation, not a takedown that merely omitted an
+  optional field.
 - **Every other field of `new.versions[i]` is deep-equal to the same field
   of `old.versions[i]`**: `version`, `commit`, `source_url`,
   `source_archive`, `source_sha256`, `signature`, `key_id` and
@@ -179,27 +253,53 @@ it.
 one.** A field-level diff checker built from this document cannot, by
 itself, distinguish an authorised legal takedown from an attacker abusing
 this carve-out to erase an inconvenient version's original content by
-relabelling it "removed" with a fabricated `reason`. Ludwig's decision,
-2026-09-03 (recorded in `docs/tasks/006-contracts.md`): **the authorisation
-is the merge gate itself.** `main` on the `registry` repository is
-branch-protected and only Ludwig can merge a PR into it; the human merge
-decision *is* the authorisation for a takedown transition, and the `reason`
-text, together with the PR's own history, stays in git forever as the audit
-record. No separate signed takedown record or authorisation check is
-introduced by this document, and task 007's checker must not invent one —
-its job is exactly the shape rules stated above (one status transition,
-`reason` required and non-empty, every other field frozen, one-way), and
-nothing about *who* is allowed to merge such a PR.
+relabelling it "removed" with a fabricated `reason`.
 
-**Revisit condition, recorded for the future:** if merge rights on
-`registry` ever extend beyond Ludwig — external moderators, a phase-3
-governance change — this authorisation model must be revisited, and
-**option 3** from the choices put to Ludwig (a separate signed takedown
-record, present in the same PR, that the checker requires before accepting
-the status transition) is the named candidate replacement. The moment the
-merge gate stops being one trusted person, it stops being sufficient as an
-authorisation mechanism on its own, and the carve-out in this section
-becomes an unguarded hole rather than a gated one.
+**The merge gate, stated truthfully.** `main` on the `registry` repository
+is branch-protected, and `womcraft` is the **only** collaborator on
+`worldofmodcraft/registry` (verified directly against the GitHub API,
+2026-09-03: one entry, `role_name: "admin"`). Both Ludwig and the manager
+(AI) session that opens and merges PRs on his behalf authenticate and
+merge as that same `womcraft` account — GitHub records no distinction
+between "Ludwig merged this" and "the manager session merged this". So, as
+a matter of **technical** access, it is false to say "only Ludwig can
+merge a PR" — this document must not claim that, and does not below.
+
+**Ludwig's decision, 2026-09-03, restated against that corrected premise:**
+the authorisation for a takedown transition is not GitHub's merge
+permission alone (which the manager session already shares), but a
+**standing doctrine rule** layered on top of it: **a takedown PR is never
+merged by the manager on its own authority, regardless of technical
+ability to do so.** It requires Ludwig's explicit written approval, given
+in session, referenced in the PR, before the manager merges it. (This rule
+is being added to `MANAGER.md` Section 7's "always requires Ludwig" list,
+task 028 — if that task's outcome ever conflicts with this paragraph,
+`MANAGER.md` is the current source of truth and this paragraph is stale
+and needs a fix commit.) The `reason` text, together with the PR's own
+history and Ludwig's referenced approval, stays in git forever as the
+audit record. Ludwig's own framing, recorded verbatim because the
+reasoning is the point: *"it restores the human gate as doctrine where it
+can't (yet) be physics."* No separate signed takedown record or
+authorisation check is introduced by this document, and task 007's checker
+must not invent one — its job is exactly the shape rules stated above (one
+status transition, `reason` required and non-empty after trimming, every
+other field frozen, one-way), and nothing about *who* is allowed to merge
+such a PR or approve it.
+
+**Revisit condition — present tense, not a future contingency.** Merge
+rights already extend beyond a single human: the manager session merges
+under the very same `womcraft` account a human uses, so "one trusted
+person" was never an accurate description of the *technical* gate, only of
+who currently holds *approval* authority under the doctrine rule above.
+**Option 3** from the choices put to Ludwig (a separate signed takedown
+record, present in the same PR, that the checker itself requires before
+accepting the status transition) is the **named upgrade for phase 3**,
+due the moment merge rights extend to accounts beyond `womcraft` itself —
+external moderators, a genuine multi-account governance change — not a
+contingency that may never arrive. At that point the doctrine rule above
+stops being sufficient by itself (it depends on there being exactly one
+account for Ludwig's approval to gate), and the carve-out in this section
+becomes an unguarded hole rather than a doctrine-gated one.
 
 **Worked example — permitted transition.**
 
