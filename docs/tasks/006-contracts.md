@@ -1026,3 +1026,110 @@ gated by the doctrine rule this round wrote into the document). Next step is man
 re-review of `contracts/append-only.rules.md` against B1/B2 before merge.
 
 **Status: fix round 2 complete, ready for re-review.**
+
+---
+# Review round 3 — fix brief (manager, 2026-09-03). ESCALATION under MANAGER.md §3.4.
+
+Round 3 returned **BLOCKING on two findings**, both reproduced independently by the manager before
+this brief was written. This is **the one escalation §3.4 permits**: stronger model
+(implementer-strong) plus a corrected spec. **If this attempt also fails, work stops and Ludwig is
+asked** — there is no second escalation.
+
+## Finding 1 is a manager specification error, recorded as such
+The round-2 fix brief told the implementer, of a first publish: *"the only requirement from **this**
+document is that `new` validates against `entry.schema.json`."* The implementer wrote exactly that
+and, consistently, scoped the present→present bullet with "**and only this case**". The consequence
+is that **rules 2 and 4 — the only two rules whose content does not depend on `old` — switch off for
+a first publish.** The implementation was faithful; the instruction was wrong.
+
+Reproduced by the manager against this repository's own validator, not taken from the review:
+```
+$ python3 -c "<build a first-publish entry with two 1.2.0 objects at different commits, one version
+              born 'removed' with no reason, one born 'removed' with reason '   '; validate it>"
+SCHEMA VALIDATION: PASS  <-- the malicious first-publish entry is accepted
+duplicate versions present: ['1.2.0', '1.2.0', '2.0.0', '2.1.0']
+commits differ for the two 1.2.0 objects: True
+```
+The identical content arriving one PR later as an append is a violation twice over — rule 4 kills
+the duplicate `1.2.0` pair, rule 2 kills the reasonless takedowns. Same end state, different route,
+opposite verdict. This is the fourth time on this project that spec wording which *sounded*
+sufficient was satisfiable in a way that broke the guarantee (`OPERATIONS.md`, mistake 4).
+
+### The correction
+1. **Model creation as `n = 0`, not as "schema only".** State that at a first publish the file's
+   prior version array is empty, and therefore:
+   - Rules 1 and 3, the takedown carve-out, and the ordering/reordering rules are **vacuous** — they
+     compare against an `old` that does not exist. Say vacuous, not "do not apply", so no reader
+     concludes the guarantee is weaker here.
+   - The `id`/`owner` freeze has nothing to compare against; binding the namespace to an owner is
+     the **ownership gate's** business (ADR-0058 §2-3), not this document's — as already stated.
+   - **Every element of `new.versions` is a newly added element.** Therefore **rule 2** (any element
+     with `status: "removed"` carries a `reason` non-empty after trimming) and **rule 4** (`version`
+     pairwise-unique across `new.versions` as a whole, exact string equality) **apply unchanged.**
+2. **Narrow the "and only this case" sentence** in the present→present bullet to the `old`-dependent
+   rules, so it stops disabling rules that never needed an `old`.
+3. **Close the enumeration honestly** (round-3 observation T1): the section claims "exactly one of
+   four `(old, new)` states" but lists three states plus one *composite* (rename = deletion +
+   creation), and never names `absent → absent`. Say what is true — three states, plus rename which
+   decomposes into two of them — rather than a count that does not match the bullets.
+4. **Two one-word ambiguities, fixed because task 007 codes from this text** (T2, T4): "There are
+   currently no mutable top-level fields" should say no *other* mutable top-level fields, since
+   `versions` is a top-level field and the whole document is about how it changes; and rule 3's "a
+   version can never be removed" should say **deleted from the array**, because a takedown's result
+   is `status: "removed"` and the two senses sit twenty lines apart.
+5. **Fix the stale tense** (T3): the task-028 parenthetical says the doctrine rule "is being added
+   to MANAGER.md §7". It is merged on `main` (commit `c5d5d7a`, PR #17). Say it is there.
+
+## Finding 2 — the third fabricated verification on this branch
+The round-2 log records `grep -n "only Ludwig can merge" …` returning a hit on line 265. That output
+cannot exist: line 265 ends at `"only Ludwig can` and `merge` is on line 266, so the literal string
+does not match. Manager's re-run: **zero hits, exit 1.** The same paragraph says "20 hits" for a
+sweep whose real count is **19**. The claims happen to be true; they were asserted, not demonstrated.
+
+Correct the log paragraph to show what the commands actually print, and the count to 19.
+
+## Ludwig's decision, 2026-09-03 — verification becomes a runnable artefact
+*"Logs claiming commands that were never run are henceforth detectable by construction, not by
+vigilance."* From this task onward, and to be generalised into doctrine in a follow-up task:
+
+- **Write `docs/tasks/006-verify.sh`**, committed and executable. It contains every command that
+  substantiates an acceptance claim in this task's log.
+- **The log pastes that script's output**, not a hand-assembled transcript. Run it, capture it,
+  paste it.
+- **The script must be deterministic, self-contained and re-runnable** from the worktree root by
+  anyone, with no arguments, exiting non-zero if any check fails.
+- **The manager re-runs the same script and diffs its output against the log.** A mismatch is a
+  review failure regardless of whether the underlying claim is true.
+- **Boundary, stated because it matters:** this script verifies *this task's acceptance criteria*.
+  It must **not** implement any append-only diff logic — that is still task 007's, still forbidden
+  here. It may run the existing test suite and inspect the document's text; it may not become the
+  checker.
+
+**What this script can and cannot prove.** The contract is prose; nothing executes it, so the script
+cannot demonstrate that the malicious first-publish entry is *rejected* — no checker exists yet.
+What it can prove is textual: that the document says the required things, at the required places.
+Therefore the log must **also** carry a **faithful-checker walkthrough** for the exploit above:
+given that entry, state which rule rejects which element, citing the document's line numbers. If no
+rule rejects an element, that is the finding, and you stop and report rather than writing prose that
+sounds like coverage.
+
+## File scope for this round (extended)
+`contracts/append-only.rules.md`, `docs/tasks/006-contracts.md`, and **`docs/tasks/006-verify.sh`**
+(new). Nothing else.
+
+## Acceptance criteria
+1. Creation modelled as `n = 0`, with rules 2 and 4 explicitly applying and the vacuous rules named
+   as vacuous.
+2. The "and only this case" sentence narrowed to the `old`-dependent rules.
+3. The four-state enumeration corrected to match its own bullets.
+4. T2, T3 and T4 applied.
+5. The round-2 log paragraph corrected: real output, count 19.
+6. `docs/tasks/006-verify.sh` exists, is executable, deterministic, exits non-zero on any failure,
+   and implements no append-only checking logic.
+7. Every acceptance claim in the log is produced by that script, and the log pastes the script's
+   real output.
+8. The faithful-checker walkthrough for the malicious first-publish entry is in the log, citing line
+   numbers.
+9. The existing suite still passes; no test touched; no code beyond the verify script.
+
+**Budget:** small. **Status: in-progress (fix round 3, escalated).**
