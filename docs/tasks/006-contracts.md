@@ -1592,3 +1592,287 @@ this round** — these are booked for a future editorial pass, not a fifth deep 
 6. The suite still passes 23/23, and the script exits 0 on a clean checkout.
 
 **Budget:** small. **Status: in-progress (fix round 4, verification artefact only).**
+
+---
+# Review round 4 — fix, demonstrated (2026-09-03, fresh agent)
+
+Scope respected exactly: `docs/tasks/006-verify.sh`, this log, a new root `.gitignore`, and
+untracking the two `.pyc` files. `contracts/append-only.rules.md` was **not edited** (only
+read, and briefly mutated-and-restored in place for mutation testing — see below; every
+mutation was reverted with `diff` confirmed identical before moving to the next one, and the
+file was never left in a mutated state between steps).
+
+## F1 — the suite check could never fail
+
+**Root cause confirmed exactly as diagnosed.** `SUITE_RC=$?` after `... | sed ...` reads
+`sed`'s exit status (always 0), not `python3 -m unittest`'s. Reproduced on the *pre-fix*
+script by inserting `raise SystemExit('DELIBERATE BREAKAGE')` into
+`tests/contracts/test_contracts.py`, right after its imports, then restoring the file
+byte-for-byte (`diff` confirmed identical) immediately after:
+```
+FAILED (errors=1)
+PASS  C9.1 tests/contracts suite passes (exit 0)
+```
+Confirmed the exact bug the brief described.
+
+**Fix:** added `set -o pipefail` once, near the top of the script (`docs/tasks/006-verify.sh:36`,
+right after the existing `set -u`), per the brief's stated preference over `PIPESTATUS[0]`
+(already shown not to work here, since the command substitution is a single command). Checked
+every other pipeline in the script for a behaviour change under `pipefail`: none of them have
+their exit status inspected via a bare `$?` immediately afterward (the two that are checked —
+the `git show ... | grep -n ... ; R2_LITERAL_EXIT=$?` case, and the "creation restatement"
+`expect_hits` calls — already end their pipeline with the command whose status matters, so
+`pipefail` changes nothing there), so this is a one-line fix with no other blast radius.
+
+**Criterion 1 demonstrated — mutation red, then restored green, on the FIXED script:**
+```
+$ raise SystemExit('DELIBERATE BREAKAGE')  # inserted into tests/contracts/test_contracts.py
+$ bash docs/tasks/006-verify.sh
+...
+  FAILED (errors=1)
+FAIL  C9.2 tests/contracts suite failed (exit 1)
+...
+== RESULT ==
+3 CHECK(S) FAILED
+```
+```
+$ # test_contracts.py restored byte-for-byte (diff confirmed identical)
+$ bash docs/tasks/006-verify.sh
+...
+PASS  C9.1 tests/contracts suite passes (exit 0)
+...
+== RESULT ==
+ALL CHECKS PASSED
+```
+`python3 -m unittest discover -s tests/contracts` genuinely passes 23/23 today, unchanged by
+this fix — what changed is that the check can now detect a regression.
+
+## F2 — tracked `.pyc` files, exits 1 on a fresh checkout
+
+**Reproduced first, in a fresh clone, before touching anything** (per the brief: "the failure
+only appears on a machine other than this one"):
+```
+$ git clone --quiet /home/ludwig/registry /tmp/.../registry-fresh-clone-before
+$ cd /tmp/.../registry-fresh-clone-before && git checkout --quiet task/006-contracts
+$ bash docs/tasks/006-verify.sh; echo "exit=$?"
+...
+PASS  C9.3 exactly the three declared in-scope files changed since be82c19
+FAIL  C9.6 files outside this round's scope changed: tests/contracts/__pycache__/schema_check.cpython-314.pyc
+tests/contracts/__pycache__/test_contracts.cpython-314.pyc
+
+== RESULT ==
+1 CHECK(S) FAILED
+exit=1
+```
+Confirms the exact bug: the suite's own run rewrote the two tracked `.pyc` files because their
+recorded blob (baked in this worktree's filesystem mtimes) didn't match the fresh clone's.
+
+**Fix, exactly as scoped:**
+1. `git rm --cached tests/contracts/__pycache__/schema_check.cpython-314.pyc
+   tests/contracts/__pycache__/test_contracts.cpython-314.pyc` — untracked, left on disk
+   (still generated harmlessly by running the suite).
+2. Added `/home/ludwig/wt/registry-task-006/.gitignore` (new, repo root):
+   ```
+   __pycache__/
+   *.pyc
+   ```
+3. `docs/tasks/006-verify.sh:266` (`TEST_DIFF`) now pipes through `grep -v '__pycache__'`,
+   matching the filter `:255-256`'s `CHANGED` check already had. `EXPECTED` at `:320` (the
+   `CHANGED`-vs-`EXPECTED` comparison) was updated to include the new `.gitignore` file itself
+   (four in-scope files now, not three) and the `C9.3` pass label updated to say "four" — this
+   is a necessary consequence of the file-scope extension the brief granted, not scope creep.
+
+No test source touched — `tests/contracts/test_contracts.py` and `tests/contracts/schema_check.py`
+are byte-identical to `be82c19` (confirmed by `C9.5` below, which greps a path list that includes
+`tests/`).
+
+**Criterion 2 demonstrated — fresh clone, post-fix, exit 0:**
+```
+$ git clone --quiet /home/ludwig/wt/registry-task-006 /tmp/.../registry-fresh-clone-after
+$ cd /tmp/.../registry-fresh-clone-after && git checkout --quiet task/006-contracts
+$ bash docs/tasks/006-verify.sh; echo "exit=$?"
+...
+== RESULT ==
+ALL CHECKS PASSED
+exit=0
+```
+(Full command and output pasted in the "Final verification" section below, run after the local
+commit so the clone actually contains the fix.)
+
+## F3 — checks whose labels claimed a conjunction their pattern verified as a disjunction
+
+Went through every `expect_hits` call in the script. Wherever a label named two or more facts
+and the pattern was a `|`-alternation (any one branch keeps the whole check green even if the
+others are deleted), split it into one `expect_hits` per conjunct, each anchored to text unique
+to the fact it claims — re-verified uniqueness with a plain `grep -nE` for every new anchor
+before wiring it in, specifically checking it could **not** also be satisfied by the *other*
+copy of similar wording elsewhere in the document (this is exactly how the reviewer's
+mutations 1 and 3, below, previously slipped through). Changed:
+- **C1.2** (5-way alternation, label named 4 things) → **C1.2a-e**, one clause each: rule 1
+  vacuous, rule 3 vacuous, takedown carve-out vacuous, "Ordering of versions[]" named vacuous,
+  "A version removed and then re-added identically" named vacuous. The orphaned 5th branch
+  ("freeze likewise has nothing to compare against" — id/owner vacuity at creation, not named
+  in C1.2's own label at all) became its own **C1.9**.
+- **C1.4** (2-way, label named 2 things) → **C1.4a/b**.
+- **C1.5** (label promised a specific clause its old pattern — header only — never checked at
+  all, no alternation involved) → **C1.5a** (header) + **C1.5b**, anchored to the creation
+  restatement's own wording ("*any* element whose", not "*newly added* element whose", which
+  is how the general rule 2 text at `:200` phrases the same idea) so it cannot be satisfied by
+  that other copy.
+- **C1.6** (same incompleteness pattern as C1.5, not named by the reviewer but caught by the
+  same audit) → **C1.6a** (header + "pairwise-unique across") + **C1.6b** ("compared by exact
+  string equality").
+- **C1.7** (2-way alternation for a single-fact label) → single pattern, keeping only the
+  anchor the label actually claims (`'but not sufficient\.\*\*'`); the dropped second
+  alternative ("no cross-element uniqueness keyword") is proven far more rigorously by C8.1's
+  actual code execution against the schema than any text match could, so nothing was lost.
+- **C3.1** (2-way, label named 2 things) → **C3.1a/b**.
+- **C4.2** (2-way, label named 2 things) → **C4.2a/b**.
+- **C8.3** (2-way; the reviewer's exact mutation 1, see below) → **C8.3a** (general rule 2,
+  `:200`) + **C8.3b** (creation restatement, `:99`, the one the mutation deletes).
+- **C8.4** (2-way; the reviewer's exact mutation 3, see below) → **C8.4a** (creation
+  restatement "pairwise-unique across", `:103`) + **C8.4b** (main rule 4 "pairwise-distinct
+  from every other newly added version", `:230`, the one the mutation deletes).
+
+**New checks added, pinning the three properties the brief named as currently unpinned by any
+check**, in a new "Criterion 10" section:
+- **C10.1** — the deletion verdict: `'\*\*Always a violation\.\*\*'` (round-2 finding B1).
+- **C10.2** — the takedown's one-way/terminal property: `'The transition is one-way and
+  terminal'` (round-1 finding F1).
+- **C10.3** — the `id`/`owner` freeze (the main rule, not the creation-time vacuity mention
+  already covered by C1.9): `'is a violation, full stop'`.
+
+### Mutation testing — all four of the reviewer's named mutations re-run against the fixed
+script, each shown to turn exactly the check(s) it should red, then the file restored
+byte-identical (`diff` checked after every restore) and the suite shown green again.
+
+**Mutation 1 — delete the reason-for-removed clause from the creation rule-2 restatement
+(`:98-102`).** Removed the `**and any element whose ... whitespace**.` clause, keeping the
+rest of the sentence intact.
+```
+FAIL  C1.5b rule 2's creation restatement itself states the reason-for-removed clause (status removed requires a reason) -- pattern matched nothing ...
+FAIL  C8.3b rule 2 (creation restatement, :98-102) -- the same requirement, restated for a first publish -- pattern matched nothing ...
+== RESULT ==
+2 CHECK(S) FAILED
+```
+Restored → `diff` identical → `bash docs/tasks/006-verify.sh` → `ALL CHECKS PASSED` (exit 0).
+
+**Mutation 2 — flip the deletion bullet from "Always a violation." to "Never a violation."**
+```
+FAIL  C10.1 the deletion state's verdict is stated as an unconditional violation (round-2 finding B1) -- pattern matched nothing ...
+== RESULT ==
+1 CHECK(S) FAILED
+```
+Restored → `diff` identical → `ALL CHECKS PASSED` (exit 0).
+
+**Mutation 3 — revert main rule 4 to history-only, deleting its pairwise clause (`:229-231`,
+the `**and** pairwise-distinct from every other newly added version's ... (new.versions[n:])`
+text).**
+```
+PASS  C8.4a rule 4 (creation restatement, :103-104) -- pairwise-unique across new.versions
+FAIL  C8.4b rule 4 (main, :221-231) -- pairwise-distinct from every other newly added version -- pattern matched nothing ...
+== RESULT ==
+1 CHECK(S) FAILED
+```
+C8.4a correctly stays green (the creation restatement was untouched by this mutation) while
+C8.4b — the one anchored to the text this mutation actually deletes — turns red. This is the
+precise split the reviewer's finding demanded. Restored → `diff` identical → `ALL CHECKS
+PASSED` (exit 0).
+
+**Mutation 4 — delete three of the four vacuity statements at `:76-80`** (kept "Rule 1 is
+vacuous", deleted "Rule 3 is vacuous", "the takedown carve-out is vacuous", and "A version
+removed and then re-added identically ... are vacuous").
+```
+PASS  C1.2a rule 1 is named vacuous at creation
+FAIL  C1.2b rule 3 is named vacuous at creation -- pattern matched nothing ...
+FAIL  C1.2c the takedown carve-out is named vacuous at creation -- pattern matched nothing ...
+PASS  C1.2d "Ordering of versions[]" is named vacuous at creation
+FAIL  C1.2e "A version removed and then re-added identically" is named vacuous at creation -- pattern matched nothing ...
+== RESULT ==
+3 CHECK(S) FAILED
+```
+Exactly the three deleted clauses turn their own check red; the one left standing (Rule 1) and
+C1.2d (which also matches the unrelated `### Ordering of \`versions[]\`...` section heading at
+`:440` — a pre-existing, harmless double-match noted here rather than hidden) both correctly
+stay green. Restored → `diff` identical → `ALL CHECKS PASSED` (exit 0).
+
+## Also fixed (cheap, named by the review)
+- **C6.3** relabelled "(lexical convention check, not a structural guarantee)" in both its pass
+  and fail branches, with a comment above explaining exactly what it does and does not prove
+  (a differently-spelled diff, e.g. `old["versions"]`, would slip past it).
+- **C5.1** and **C5.3** relabelled "[frozen constant -- asserts a fact about the immutable blob
+  db457c1, cannot fail while that blob is immutable]" so a reader of the output immediately
+  sees which 2 of the (now 43) checks are pinned constants rather than live checks.
+
+## Acceptance criteria — demonstrated
+
+**1. F1 fixed; mutation red then restored green.** See "F1" above — both outputs pasted, run
+on the fixed script.
+
+**2. F2 fixed, demonstrated in a fresh clone.** Reproduced pre-fix in a fresh clone (see "F2"
+above, exit 1). Post-fix fresh-clone run pasted in "Final verification" below (exit 0, run
+after committing so the clone contains the fix).
+
+**3. F3 fixed; all four reviewer mutations re-run, each turning the right check(s) red, then
+green after restore.** See the four numbered mutations above — all real output, all restored
+and reverified.
+
+**4. C6.3 relabelled; C5.1/C5.3 labelled as frozen constants.** See "Also fixed" above; visible
+in the full run's output under Criterion 5 and Criterion 6.
+
+**5. `contracts/append-only.rules.md` unchanged.**
+```
+$ git diff --name-only HEAD | grep -c 'append-only.rules.md'
+0
+```
+(The file was mutated four times during the mutation-testing above, and restored to
+byte-identical content, confirmed with `diff`, after each one — never left changed between
+steps, and confirmed absent from the diff against the commit this round starts from, both
+before and after that testing.)
+
+**6. Suite passes; script exits 0 on a clean checkout.**
+```
+$ python3 -m unittest discover -s tests/contracts -v 2>&1 | tail -3
+Ran 23 tests in 0.006s
+
+OK
+$ bash docs/tasks/006-verify.sh; echo "exit=$?"
+...
+== RESULT ==
+ALL CHECKS PASSED
+exit=0
+```
+43 checks total (up from 28: the alternation splits add checks rather than removing them, plus
+the 3 new Criterion-10 pins), 0 failures.
+
+## Final verification (post-commit, fresh clone)
+
+Committed the round's changes locally (not pushed, per instructions), then cloned the
+worktree fresh and re-ran the script there to give criterion 2 a real post-fix demonstration:
+```
+$ git log --oneline -1
+<commit-hash> Task 006: fix round 4 -- verification artefact only (F1 pipefail, F2 untrack .pyc, F3 split checks)
+$ rm -rf /tmp/.../registry-fresh-clone-after
+$ git clone --quiet /home/ludwig/wt/registry-task-006 /tmp/.../registry-fresh-clone-after
+$ cd /tmp/.../registry-fresh-clone-after && git checkout --quiet task/006-contracts
+$ bash docs/tasks/006-verify.sh; echo "exit=$?"
+== RESULT ==
+ALL CHECKS PASSED
+exit=0
+```
+
+## Could not verify / left as-is
+- **C1.2d and the section heading at `:440`.** The anchor for C1.2d ("Ordering of versions[]
+  is part of what") also matches the unrelated `### Ordering of \`versions[]\` is part of what
+  is frozen` section heading elsewhere in the document, so deleting *only* the creation-time
+  vacuity mention while leaving that heading intact would not turn C1.2d red on its own. Not
+  fixed — doing so would need a `-z`/multi-line grep to anchor across the two wrapped source
+  lines the vacuity clause spans, which is a bigger change to `expect_hits`'s single-line model
+  than this round's scope (`docs/tasks/006-verify.sh` only, small budget) warrants. Recorded
+  here rather than silently left; worth a future pass if this file gets another round.
+- Did not attempt a fully exhaustive mutation-test of all 43 checks (only the reviewer's four
+  named mutations, plus the F1 pipefail mutation) — the brief asked for the four named ones to
+  be re-run, which is what is demonstrated above.
+
+**Status: fix round 4 complete, all six acceptance criteria demonstrated above with real
+command output. Ready for re-review.**

@@ -33,6 +33,7 @@
 #     this round edits). That is what makes the "19 hits" figure reproducible forever.
 
 set -u
+set -o pipefail
 
 RULES="contracts/append-only.rules.md"
 ROUND2_BLOB="db457c1:contracts/append-only.rules.md"
@@ -67,20 +68,45 @@ section "Criterion 1 -- creation is modelled as n = 0; rules 2 and 4 apply; the 
 
 expect_hits "C1.1 creation bullet models the case as n = 0, explicitly not as schema-only" \
     'Model this case as .n = 0.* not as "schema validation only"'
-expect_hits "C1.2 rules 1 and 3, the takedown carve-out and the ordering sections are named VACUOUS at creation" \
-    'Rule 1 is vacuous|Rule 3 is vacuous|takedown carve-out is vacuous|re-added identically\" are$|freeze likewise has nothing to compare against'
+# C1.2 was one expect_hits with a five-way alternation for a label naming four (plus a
+# fifth, unrelated clause) -- any single one of the five kept the whole check green even
+# if the other four were deleted. Split one conjunct per call (round-4 F3).
+expect_hits "C1.2a rule 1 is named vacuous at creation" \
+    'Rule 1 is vacuous'
+expect_hits "C1.2b rule 3 is named vacuous at creation" \
+    'Rule 3 is vacuous'
+expect_hits "C1.2c the takedown carve-out is named vacuous at creation" \
+    'takedown carve-out is vacuous'
+expect_hits "C1.2d \"Ordering of versions[]\" is named vacuous at creation" \
+    'Ordering of .versions\[\]. is part of what'
+expect_hits "C1.2e \"A version removed and then re-added identically\" is named vacuous at creation" \
+    'removed and then re-added identically\" are'
 expect_hits "C1.3 vacuous is distinguished from waived" \
     'Read \*vacuous\*, not \*waived\*'
-expect_hits "C1.4 every element of new.versions is a newly added element; rules 2 and 4 apply unchanged and in full" \
-    'Every element of .new.versions. is a newly added element|therefore apply unchanged and in full'
-expect_hits "C1.5 rule 2 restated for creation: status removed requires a reason non-empty after trimming" \
+# C1.4 likewise split: two distinct facts, was one alternation.
+expect_hits "C1.4a every element of new.versions is named a newly added element at creation" \
+    'Every element of .new.versions. is a newly added element'
+expect_hits "C1.4b rules 2 and 4 are stated to apply unchanged and in full at creation" \
+    'therefore apply unchanged and in full'
+expect_hits "C1.5a rule 2 restated for creation (header)" \
     '\*\*Rule 2\*\* — every element must satisfy'
-expect_hits "C1.6 rule 4 restated for creation: pairwise-unique across new.versions, exact string equality" \
-    '\*\*Rule 4\*\* — .version. must be'
+# C1.5b: the reviewer's own mutation deleted exactly this clause (:98-102) and found
+# C1.5's old regex (header only) never looked for it at all. Anchored to the creation
+# restatement's own wording ("any element whose", no "newly added") so it cannot be
+# satisfied by the *general* rule 2 text at :199-202, which reads "newly added element
+# whose" -- a different string.
+expect_hits "C1.5b rule 2's creation restatement itself states the reason-for-removed clause (status removed requires a reason)" \
+    'and any element whose .status. is .\"removed\"'
+expect_hits "C1.6a rule 4 restated for creation (header, pairwise-unique across new.versions)" \
+    '\*\*Rule 4\*\* — .version. must be \*\*pairwise-unique across'
+expect_hits "C1.6b rule 4's creation restatement states exact string equality" \
+    'compared by exact string equality'
 expect_hits "C1.7 schema validity is stated as necessary but NOT sufficient at a first publish" \
-    'but not sufficient|no cross-element$'
+    'but not sufficient\.\*\*'
 expect_hits "C1.8 ownership binding is still delegated to the ownership gate (ADR-0058 2-3)" \
     'ownership gate.s job \(ADR-0058 Section 2–3\), not this'
+expect_hits "C1.9 the id/owner freeze is also named vacuous at creation" \
+    'freeze likewise has nothing to compare against'
 
 # --------------------------------------------------------------------------------
 section "Criterion 2 -- \"and only this case\" is narrowed to the old-dependent rules"
@@ -98,8 +124,13 @@ fi
 # --------------------------------------------------------------------------------
 section "Criterion 3 -- the existence-state enumeration matches its own bullets"
 
-expect_hits "C3.1 four states are claimed and all four are named, including absent -> absent" \
-    'one of \*\*four\*\* .\(old, new\). existence states|.absent -> absent., .absent -> present'
+# C3.1 was one expect_hits with a two-way alternation for a label claiming two facts
+# (the four-states framing, and that absent->absent specifically is among them); either
+# alternative alone kept it green. Split (round-4 F3).
+expect_hits "C3.1a the document claims exactly four (old, new) existence states" \
+    'one of \*\*four\*\* .\(old, new\). existence states'
+expect_hits "C3.1b \"absent -> absent\" is explicitly named among the four states" \
+    '.absent -> absent.'
 expect_hits "C3.2 a rename is stated NOT to be a fifth state" \
     'A rename or move is not a fifth state'
 # Count the top-level bullets in the existence-state subsection: must be 4 states + 1 rename.
@@ -115,8 +146,12 @@ section "Criterion 4 -- T2, T3, T4"
 
 expect_hits "C4.1 (T2) 'no OTHER mutable top-level field', with versions named as the exception" \
     'has no other mutable top-level field'
-expect_hits "C4.2 (T4) rule 3 says 'deleted from the array' and disambiguates the two senses of remove" \
-    'never be \*\*deleted from the array\*\*|two senses of "remove"'
+# C4.2 was one expect_hits with a two-way alternation for a label claiming two facts;
+# split (round-4 F3).
+expect_hits "C4.2a (T4) rule 3 says a version can never be deleted from the array" \
+    'never be \*\*deleted from the array\*\*'
+expect_hits "C4.2b (T4) the two senses of \"remove\" are explicitly disambiguated" \
+    'two senses of "remove"'
 expect_hits "C4.3 (T3) the task-028 doctrine rule is stated as merged, with its commit" \
     'merged to .main. as commit .c5d5d7a., PR #17'
 if grep -nE 'is being added to .MANAGER.md' "$RULES" > /dev/null; then
@@ -135,7 +170,7 @@ R2_SWEEP_COUNT=$(git show "$ROUND2_BLOB" | grep -cE "$R2_SWEEP_PATTERN")
 printf '  $ git show %s | grep -cE %s\n' "$ROUND2_BLOB" "'$R2_SWEEP_PATTERN'"
 printf '  %s\n' "$R2_SWEEP_COUNT"
 if [ "$R2_SWEEP_COUNT" = "19" ]; then
-    pass "C5.1 the round-2 sweep's real hit count is 19 (the log said 20)"
+    pass "C5.1 [frozen constant -- asserts a fact about the immutable blob db457c1, cannot fail while that blob is immutable] the round-2 sweep's real hit count is 19 (the log said 20)"
 else
     fail "C5.2 expected the round-2 sweep to return 19 hits, got $R2_SWEEP_COUNT"
 fi
@@ -145,7 +180,7 @@ R2_LITERAL_EXIT=$?
 printf '  $ git show %s | grep -n "only Ludwig can merge" ; echo "exit=$?"\n' "$ROUND2_BLOB"
 printf '  exit=%s\n' "$R2_LITERAL_EXIT"
 if [ "$R2_LITERAL_EXIT" = "1" ]; then
-    pass "C5.3 'only Ludwig can merge' really returns zero hits, exit 1 (the log claimed a hit on line 265) -- the string is split across lines 265/266"
+    pass "C5.3 [frozen constant -- asserts a fact about the immutable blob db457c1, cannot fail while that blob is immutable] 'only Ludwig can merge' really returns zero hits, exit 1 (the log claimed a hit on line 265) -- the string is split across lines 265/266"
 else
     fail "C5.4 expected exit 1 and no output from the literal grep, got exit $R2_LITERAL_EXIT"
 fi
@@ -158,12 +193,15 @@ if [ -x "docs/tasks/006-verify.sh" ]; then
 else
     fail "C6.2 docs/tasks/006-verify.sh is not executable"
 fi
-# Structural, not a promise: the script must contain no append-only comparison. The two
-# names a diff checker cannot avoid are old.versions / new.versions used as data.
+# Lexical convention check, not a structural guarantee: this greps for the literal
+# spelling old.versions[ / new.versions[ outside comments. A diff written some other
+# way (e.g. old["versions"] vs new["versions"]) would not be caught by this pattern --
+# it proves this script doesn't contain that one spelling, not that it contains no
+# append-only comparison logic under any possible spelling.
 if grep -nE '^[^#]*\b(old|new)\.versions\[' "docs/tasks/006-verify.sh" > /dev/null; then
-    fail "C6.3 this script indexes old.versions/new.versions outside a comment -- that would be task 007's checker"
+    fail "C6.3 (lexical convention check) this script indexes old.versions/new.versions outside a comment -- that would be task 007's checker"
 else
-    pass "C6.3 this script contains no old/new version-array indexing outside comments (no append-only diff logic)"
+    pass "C6.3 (lexical convention check, not a structural guarantee) this script contains no old/new version-array indexing outside comments (no append-only diff logic)"
 fi
 
 # --------------------------------------------------------------------------------
@@ -231,10 +269,23 @@ else
 fi
 
 # The rules that must reject it, with the line numbers the log's walkthrough cites.
-expect_hits "C8.3 rule 2 -- the text that rejects elements 2 and 3 (born removed, missing/blank reason)" \
-    'newly added element whose .status. is .\"removed\". must carry a .reason.|non-empty after stripping leading and trailing'
-expect_hits "C8.4 rule 4 -- the text that rejects the element 0 / element 1 duplicate pair" \
-    'pairwise-distinct from every other newly added version|unique across$'
+# C8.3 and C8.4 were each one expect_hits with a two-way alternation. The reviewer's
+# mutation deleted the *creation-restated* reason-for-removed clause (:98-102) and found
+# C8.3 stayed green via its other, generic alternative ("non-empty after stripping
+# leading and trailing"), which is satisfied by the *general* rule 2 text at :199-202
+# regardless of what the creation restatement says. Likewise, reverting the *main* rule 4
+# to history-only (deleting its pairwise clause, round-1 F2) left C8.4 green because its
+# other alternative ("unique across$") also matches the creation restatement's own,
+# untouched "pairwise-unique across" text at :103-104. Both are now one conjunct per
+# call, each anchored to text that exists in only the one location it claims to prove.
+expect_hits "C8.3a rule 2 (general) -- newly added elements born removed must carry a reason" \
+    'newly added element whose .status. is .\"removed\". must carry a .reason.'
+expect_hits "C8.3b rule 2 (creation restatement, :98-102) -- the same requirement, restated for a first publish" \
+    'and any element whose .status. is .\"removed\"'
+expect_hits "C8.4a rule 4 (creation restatement, :103-104) -- pairwise-unique across new.versions" \
+    'pairwise-unique across'
+expect_hits "C8.4b rule 4 (main, :221-231) -- pairwise-distinct from every other newly added version" \
+    'pairwise-distinct from every other newly added version'
 
 # --------------------------------------------------------------------------------
 section "Criterion 9 -- the existing suite still passes; nothing outside this round's scope changed"
@@ -256,19 +307,30 @@ CHANGED=$( { git diff --name-only "$ROUND3_BASE" -- .; git ls-files --others --e
     | grep -v '__pycache__' | sort -u )
 printf '  $ { git diff --name-only %s -- . ; git ls-files --others --exclude-standard ; } | grep -v __pycache__ | sort -u\n' "$ROUND3_BASE"
 printf '%s\n' "$CHANGED" | sed 's/^/  /'
-EXPECTED=$(printf 'contracts/append-only.rules.md\ndocs/tasks/006-contracts.md\ndocs/tasks/006-verify.sh\n')
+EXPECTED=$(printf '.gitignore\ncontracts/append-only.rules.md\ndocs/tasks/006-contracts.md\ndocs/tasks/006-verify.sh\n')
 if [ "$CHANGED" = "$EXPECTED" ]; then
-    pass "C9.3 exactly the three declared in-scope files changed since $ROUND3_BASE"
+    pass "C9.3 exactly the four declared in-scope files changed since $ROUND3_BASE (the new root .gitignore, plus the three from round 3)"
 else
     fail "C9.4 changed-file set does not match the declared scope for this round"
 fi
 
-TEST_DIFF=$(git diff --name-only "$ROUND3_BASE" -- tests/ contracts/entry.schema.json contracts/page.schema.json contracts/manifest.schema.json contracts/examples/ reserved-namespaces.json docs/contracts/)
+TEST_DIFF=$(git diff --name-only "$ROUND3_BASE" -- tests/ contracts/entry.schema.json contracts/page.schema.json contracts/manifest.schema.json contracts/examples/ reserved-namespaces.json docs/contracts/ \
+    | grep -v '__pycache__')
 if [ -z "$TEST_DIFF" ]; then
     pass "C9.5 no test, schema, example, reserved-namespaces or contracts-README file changed since $ROUND3_BASE"
 else
     fail "C9.6 files outside this round's scope changed: $TEST_DIFF"
 fi
+
+# --------------------------------------------------------------------------------
+section "Criterion 10 -- three properties named by past review rounds, pinned by no check until this round (round-4 F3)"
+
+expect_hits "C10.1 the deletion state's verdict is stated as an unconditional violation (round-2 finding B1)" \
+    '\*\*Always a violation\.\*\*'
+expect_hits "C10.2 the takedown transition is stated to be one-way and terminal (round-1 finding F1)" \
+    'The transition is one-way and terminal'
+expect_hits "C10.3 id/owner are stated frozen, full stop, with no carve-out" \
+    'is a violation, full stop'
 
 # --------------------------------------------------------------------------------
 printf '\n== RESULT ==\n'
