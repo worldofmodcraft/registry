@@ -673,3 +673,117 @@ manager/Ludwig re-review of `contracts/append-only.rules.md` against F1/F2 befor
 **Status: fix round complete, ready for re-review.**
 
 **Budget:** small (<= 1 agent-session). **Status: in-progress (fix round).**
+
+---
+# Review round 2 — fix brief (manager, 2026-09-03)
+
+The round-1 fix closed F1 and F2; the re-review verified both by construction and confirmed scope,
+tests, and the absence of checking logic. It returned **BLOCKING on two new findings**, one of
+which is a genuine hole in the guarantee this document exists to provide.
+
+**Two-strike notice (MANAGER.md §3.4).** Acceptance criterion 3 of the round-1 brief — the
+consistency sweep — failed: the sweep command recorded in the log returns nothing when run, so its
+conclusions have no artefact behind them, and a contradiction survived four lines from the text the
+round introduced. That is one strike on that criterion. **If the sweep criterion fails again in
+this round, work stops and Ludwig is asked** — no third attempt with the same approach.
+
+## Ludwig's decision, 2026-09-03 — the merge gate, stated truthfully
+
+The re-review checked the authorisation claim against reality: `worldofmodcraft/registry` has one
+collaborator, `womcraft` (admin), which is also the identity the manager session authenticates and
+merges as (`merged_by: womcraft` on PR #1). So "only Ludwig can merge" was false when written. His
+decision stands, with the premise corrected and a doctrine rule added:
+
+1. **State the truth in the contract.** The merge gate is the **`womcraft` account**, which both
+   Ludwig and the manager session act as. Do not write "only Ludwig can merge".
+2. **The revisit condition becomes present-tense**, not hypothetical: merge rights already extend
+   beyond a single human, so option 3 (a signed takedown record the checker requires) is the named
+   upgrade for phase 3, when accounts exist beyond `womcraft` — not a contingency that may never
+   arrive.
+3. **A standing doctrine rule now backs it** (being added to MANAGER.md §7's "always requires
+   Ludwig" list, task 028): **a takedown PR is never merged by the manager on its own authority,
+   regardless of technical ability.** It requires Ludwig's explicit written approval in session,
+   referenced in the PR, before merge. Reference that rule in this document, so the contract and
+   the doctrine cannot drift apart. Ludwig's framing, recorded verbatim because the reasoning is
+   the point: *"it restores the human gate as doctrine where it can't (yet) be physics."*
+
+## B1 — file-level creation and deletion of `entry.json` are undefined, and deletion fails open
+
+Every rule in this document is phrased over a pair `(old, new)` of parsed values of the same file.
+Nothing says what happens when one of them does not exist. A checker built faithfully from this
+prose has no `new` to parse when a PR **deletes** `mods/<ns>.<name>/entry.json`, so it evaluates no
+rule and the PR passes — erasing every version of an entry, against this document's own rule 3 and
+against ADR-0041's "nothing can be unpublished". The mirror case fails closed but is still a
+guaranteed bug: at **first publish** `old` does not exist, `n` is undefined, and a checker either
+crashes or reports a spurious violation on the very first PR of every mod (ADR-0058 §1).
+
+**Add a paragraph to "The comparison model" naming all four file-level transitions**, at the same
+level of precision as the rest of the document:
+- **absent → present** — entry creation, i.e. first publish. No prefix comparison applies (there is
+  no `old`); the only requirement from *this* document is that `new` validates against
+  `entry.schema.json`. Say explicitly that binding the namespace to an owner is the **ownership
+  gate's** job (ADR-0058 §2-3), not this document's, so task 007 does not look for it here.
+- **present → present** — everything else in this document.
+- **present → absent** — **always a violation.** An entry is never deleted. ADR-0041 is titled
+  "nothing can be unpublished" and states authors "cannot remove versions"; deleting the file
+  removes all of them at once, so the file-level case must be at least as strict as rule 3.
+- **a rename or move of the mod directory** — a deletion plus a creation, and therefore a violation
+  by the previous case. Note why this needs saying: `id` is only ever compared *within* one file's
+  own `(old, new)` pair, so a rename would otherwise sidestep the frozen-`id` rule entirely.
+
+Then check "What this document does not cover": it currently enumerates three non-coverages, which
+makes a reader conclude file-level transitions *are* covered here. After this change they are — but
+verify the section does not still imply an exhaustive list that excludes them.
+
+## B2 — a false identity claim, and a verification that cannot have run
+
+Rule 4 now says a new version must be distinct from "every value in `new.versions[0:n]`, **which is
+`old.versions`**". Rule 1, four lines above, now says those two slices may legitimately differ under
+the takedown transition. The behavioural impact is nil — `version` is frozen in both branches — but
+the document asserts a false identity about exactly the thing this round changed, which is what the
+consistency criterion existed to prevent. Replace it with something true, e.g. "(i.e. from every
+value in `old.versions`; `version` is frozen even under the takedown transition, so
+`new.versions[0:n]` carries the same `version` strings)".
+
+**The record problem is the more serious half.** The log states the sweep was run as
+`grep -n "a|b|c" contracts/append-only.rules.md`. Basic `grep` treats `|` literally, so that command
+exits 1 with **no output** — the recorded verification never happened, and "output pasted in this
+session" has nothing behind it. This is the fourth instance of the project's most expensive recurring
+mistake (`OPERATIONS.md`, "a test that can only confirm what its author believes"). Therefore, in
+this round:
+- **Every command quoted in the log must have been actually run, with its actual output pasted.**
+  Not a reconstruction, not a paraphrase, not a command you believe is equivalent.
+- **The sweep must be a command that demonstrably returns hits** (`grep -E`, or `rg`), and the log
+  must show the hit count and the reasoning over the matches — a search returning zero results is
+  evidence of a broken search, never evidence of a clean document.
+- Before quoting any verification, ask the `OPERATIONS.md` question: *what would this check look
+  like if the thing being checked were broken?* If the answer is "the same", the check is worthless.
+
+## Also fix while the file is open (both follow from ADR-0041, neither is discretionary)
+- **Whitespace-only `reason` currently satisfies the takedown rule.** `"   "` passes both
+  "non-empty string" and the schema's `minLength: 1`, giving a takedown a reason that explains
+  nothing — against ADR-0041's stated purpose, "so dependency resolution can explain the failure".
+  Require non-empty **after stripping leading and trailing whitespace**.
+- **A newly appended version born `status: "removed"` currently needs no `reason`.** Rule 2 only
+  requires new elements to satisfy the schema, where `reason` is optional, so ADR-0041's
+  status-and-reason pairing binds transitions but not births. State in rule 2 that any version
+  object with `status: "removed"` must carry a non-empty `reason`, whether it arrives by transition
+  or by append, and note that the schema cannot express this conditional (the validator has no
+  `if`/`then`), so it is the checker's job.
+
+## Acceptance criteria for this round
+1. B1 addressed: all four file-level transitions stated, with deletion a violation and creation
+   carrying no prefix comparison, and the "does not cover" section checked for the implication it
+   currently creates.
+2. B2 addressed: the false identity claim replaced, **and** the sweep re-run with a command that
+   works, its real output and hit count in the log, with the reasoning over the matches shown.
+3. The authorisation section rewritten per Ludwig's decision above: the `womcraft` account named as
+   the merge gate, the revisit condition present-tense, and the task-028 doctrine rule referenced.
+4. The two ADR-0041 strengthenings above applied.
+5. The existing suite still passes — `python3 -m unittest discover -s tests/contracts` — two runs,
+   real output in the log. No test touched.
+6. No checking logic written anywhere. Still forbidden.
+7. Every command in the log actually run, with its actual output. This is criterion 3's second
+   attempt; see the two-strike notice above.
+
+**Budget:** small (<= 1 agent-session). **Status: in-progress (fix round 2).**
