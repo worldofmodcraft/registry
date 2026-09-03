@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://worldofmodcraft.com/schemas/entry.schema.json",
+  "title": "Registry entry",
+  "description": "Contract for edges E2 (author -> N2, registry entry shape written by a publish PR, ADR-0058 Section 2), E8 (N5 -> N4 -- write-back: build-pipeline N5 writes source_archive, source_sha256, signature, key_id, published_at, status into an already-accepted version object) and E10 (N2 -> N7, the site build's read side) in docs/architecture/depgraph.md. One instance of this schema is the full registry entry for one mod namespace:name, stored at mods/<namespace>.<name>/entry.json in this repository (see README.md). Ownership and version-object shape follow ADR-0058 Section 2 exactly; reserved namespaces (mc, test) use the identical owner shape bound to the organisation's numeric id instead of an individual's (ADR-0119 Section 2) -- this schema does not distinguish the two cases, by design. Mutability rules for this document are NOT expressed here (JSON Schema validates one snapshot, not a diff between two): see contracts/append-only.rules.md, edge E4, for what a PR may change.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "owner",
+    "versions"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]*:[a-z0-9][a-z0-9_-]*$",
+      "description": "namespace:name, the mod's registry identifier (ADR-0013: namespaced ids; ADR-0030: \"id (namespace:name)\"). Frozen forever once the entry is created -- contracts/append-only.rules.md."
+    },
+    "owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "id",
+        "name_at_registration"
+      ],
+      "description": "ADR-0058 Section 2, verbatim: \"owner = { provider, id, name_at_registration }\". Binds the namespace to a numeric account id, never to a username string, so that recycling a username can never capture a namespace (the attack this ADR exists to prevent). For a reserved namespace (ADR-0119) this is the organisation's numeric id -- the binding mechanism is identical, only the derivation of who owns it differs (ADR-0119 Section 2).",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The git-hosting provider the account id is scoped to, e.g. \"github\", \"gitlab\", \"sourcehut\" -- a free-form identifier, not an enum of known providers, because the registry format itself must not be provider-specific (ADR-0058 Section 4: \"the registry format is provider-agnostic\"). Nothing in this schema requires this value to be \"github\"."
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The NUMERIC account id on that provider -- never a username string (ADR-0058 Section 2). This is the field the registry CI compares to authorise a PR; accepting a string here (a username) is exactly the namespace-capture vulnerability ADR-0058 Section 2 exists to prevent, so the JSON type is deliberately \"integer\", not \"string\"."
+        },
+        "name_at_registration": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The provider username/display name at the moment the namespace was created, kept for humans reading history (ADR-0058 Section 3's confirmation text names the account by this). It is NOT used for the ownership comparison -- only owner.id is (ADR-0058 Section 2), because usernames can be renamed or recycled and owner.id cannot."
+        }
+      }
+    },
+    "versions": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Append-only (ADR-0041: \"Versions are immutable; existing hashes can never be updated, only new versions added\"). Every element is a single published version; at least one exists once the entry is created, because the first publish PR (ADR-0058 Section 1) carries id, version, commit hash and source URL together -- an entry with zero versions is not a state this schema admits. Ordering and what a later PR may change to this array: contracts/append-only.rules.md.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "commit",
+          "source_url",
+          "source_archive",
+          "source_sha256",
+          "signature",
+          "key_id",
+          "published_at",
+          "status"
+        ],
+        "description": "ADR-0058 Section 2's version-object fields, exactly as named in this task's acceptance criterion 1. version/commit/source_url are supplied by the author's publish PR (edge E2); source_archive/source_sha256/signature/key_id/published_at/status are written back by the build pipeline once the PR is accepted and built (edge E8, ADR-0041). `reason` is optional and used only when status is \"removed\" -- see its own description; a required-9-field version object without `reason` remains valid at every other status.",
+        "properties": {
+          "version": {
+            "type": "string",
+            "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+            "description": "Semantic version (semver.org 2.0.0 grammar). ADR-0030: \"version (semver)\"; ADR-0042 depends on strict semver semantics (patch/minor/major) for update policy."
+          },
+          "commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$",
+            "description": "Full 40-hex-character git commit SHA-1 the pipeline fetched and built (ADR-0058 Section 1: \"the pipeline fetches that exact commit\"). Lowercase hex, matching git's own canonical rendering."
+          },
+          "source_url": {
+            "type": "string",
+            "pattern": "^([a-zA-Z][a-zA-Z0-9+.-]*://\\S+|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:\\S+)$",
+            "description": "The author's public git repository URL, any host (ADR-0058 Section 4: \"the source requirement is 'a public git repo', not 'GitHub'\"). Accepts a normal scheme:// URL on any scheme/host, or the scp-like SSH shorthand (user@host:path) -- never restricted to a github.com hostname."
+          },
+          "source_archive": {
+            "type": "string",
+            "pattern": "^https://\\S+$",
+            "description": "URL of the pipeline's own archived copy of the exact built commit -- platform storage, not the author's repo (ADR-0041: \"the registry points at our copy\"; depgraph N6 artifact-store). Written back by the pipeline (edge E8); absent until the pipeline runs."
+          },
+          "source_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "SHA-256 of the archived source tarball, lowercase hex, 64 characters (ADR-0041: \"SHA-256 of every artefact is written into the registry entry by the pipeline; the launcher verifies after download\")."
+          },
+          "signature": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Platform signature over the archived artefact (ADR-0041: \"every artefact is signed with the platform key\"). Only presence/non-emptiness is enforced by this schema -- the exact encoding (depgraph edge E9: minisign/Ed25519 detached signature) is owned by contracts/signature-format.md, outside this task's declared scope."
+          },
+          "key_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Identifies which signing key produced `signature`, for rotation (ADR-0041: \"the format carries key_id for rotation\"). Exact encoding is defined by contracts/signature-format.md (depgraph edge E9), outside this task's declared scope; here it is only a non-empty string."
+          },
+          "published_at": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+            "description": "RFC 3339 timestamp of when the pipeline wrote this version back into the registry."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "published",
+              "removed"
+            ],
+            "description": "Closed enum, ADR-0041: a version starts \"published\"; the only other state a version can reach is \"removed\" (\"Only legal grounds ... lead to removed: artefacts pulled, registry entry kept with status and reason\"). Whole-mod \"deprecated\" is a separate, page-level flag (ADR-0059 Section 2, see page.schema.json) -- not a value of this field, because deprecation marks the mod, not one version, and remains editable without touching immutable version objects."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Optional. ADR-0041: a removed version's \"registry entry [is] kept with status and reason\". Present only when status is \"removed\"; this schema does not enforce that conditional requirement (no if/then support in the validator subset used by this repository's tests -- see tests/contracts/schema_check.py), so its presence/absence at other statuses is not itself a schema violation. Booked as a question: acceptance criterion 1's exact field list does not name `reason`, but ADR-0041 names it explicitly for the removed case, so it is included here as optional rather than dropped."
+          }
+        }
+      }
+    }
+  }
+}

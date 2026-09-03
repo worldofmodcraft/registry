@@ -1,0 +1,21 @@
+{
+  "_comment": "Demonstrates the `deprecated` flag (ADR-0041: authors may mark a mod deprecated) alongside several external links and no screenshots yet.",
+  "example": {
+    "description": "Superseded by kelsi:housing-plus; kept for existing installs.",
+    "screenshots": [],
+    "tags": [
+      "housing"
+    ],
+    "links": [
+      {
+        "label": "Successor mod",
+        "url": "https://worldofmodcraft.com/mods/kelsi/housing-plus"
+      },
+      {
+        "label": "Source",
+        "url": "https://github.com/kelsi/housing"
+      }
+    ],
+    "deprecated": true
+  }
+}

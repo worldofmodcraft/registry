@@ -1,0 +1,17 @@
+{
+  "_comment": "VIOLATES the `license` enum (ADR-0049): 'NOASSERTION' is the SPDX convention for 'no licensing information asserted', which by definition is not an OSI-approved licence. Named criterion-4 trap.",
+  "example": {
+    "id": "kelsi:housing",
+    "name": "Housing",
+    "version": "1.0.0",
+    "api_version": "1.0",
+    "license": "NOASSERTION",
+    "source": "https://github.com/kelsi/housing",
+    "type": "mod",
+    "description": "A cosy player-housing mod.",
+    "tags": [
+      "housing"
+    ],
+    "screenshots": []
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://worldofmodcraft.com/schemas/page.schema.json",
+  "title": "Mod page content",
+  "description": "Contract for edges E3 (author -> N2, page.json PRs, ADR-0059 Section 2-3) and E10 (N2 -> N7, the site build's read side, together with entry.schema.json) in docs/architecture/depgraph.md. One instance is the full page-content document for one mod, stored at mods/<namespace>.<name>/page.json (README.md). Unlike entry.json, this document is NOT append-only: ADR-0059 Section 2 calls it \"immediately editable\" content, and Section 3: \"Approved page changes publish immediately; git history is the audit trail.\" Every field here may be freely replaced by a later page.json PR -- contracts/append-only.rules.md's immutability rules apply only to entry.json and explicitly do not reach this file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "description",
+    "screenshots",
+    "tags",
+    "links",
+    "deprecated"
+  ],
+  "properties": {
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "ADR-0059 Section 2: page content field \"description\"."
+    },
+    "screenshots": {
+      "type": "array",
+      "description": "ADR-0059 Section 2: page content field \"screenshots[]\". Each entry is a path, never an absolute URL: pages are built from the archived source, never the live web (ADR-0059 Section 1), so a screenshot can only ever be a file that was actually archived alongside the mod, addressed relative to the archive root -- the same way contracts/validation-report.schema.json's own path fields are POSIX-style paths relative to a root.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^(?!/)(?!.*://)(?!.*\\\\).+$",
+        "description": "A POSIX-style relative path inside the archived mod source (e.g. \"assets/screenshots/shop.png\"). Rejected if it contains a URL scheme (\"...://...\"), starts with \"/\" (an absolute filesystem path), or contains a backslash (a Windows-style absolute path) -- ADR-0059 Section 1."
+      }
+    },
+    "tags": {
+      "type": "array",
+      "description": "ADR-0059 Section 2: page content field \"tags[]\".",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "links": {
+      "type": "array",
+      "description": "ADR-0059 Section 2: page content field \"links[]\" (e.g. Discord, wiki, documentation). Unlike `screenshots`, these are genuinely external and MAY be absolute URLs -- they point off-site by nature, not at archived files. Shape ({label, url}) is not specified by any ADR read for this task; booked under Questions in docs/tasks/006-contracts.md.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "label",
+          "url"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Human-readable link text, e.g. \"Discord\"."
+          },
+          "url": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9+.-]*://\\S+$",
+            "description": "An absolute URL (any scheme). Deliberately the opposite constraint from `screenshots` -- a link is expected to leave the site; a screenshot is expected never to."
+          }
+        }
+      }
+    },
+    "deprecated": {
+      "type": "boolean",
+      "description": "ADR-0059 Section 2: page content field \"deprecated\". ADR-0041: authors may mark a mod deprecated (\"shown; new dependencies warned\") but this never removes or blocks existing versions -- it is page content, editable at any time, distinct from a version's own `status` (entry.schema.json), which only the pipeline writes."
+    }
+  }
+}

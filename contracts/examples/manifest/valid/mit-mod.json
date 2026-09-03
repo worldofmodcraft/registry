@@ -1,0 +1,21 @@
+{
+  "_comment": "A normal manifest with an MIT licence -- demonstrates acceptance criterion 4's 'MIT passes' case.",
+  "example": {
+    "id": "kelsi:housing",
+    "name": "Housing",
+    "version": "1.0.0",
+    "api_version": "1.0",
+    "license": "MIT",
+    "source": "https://github.com/kelsi/housing",
+    "type": "mod",
+    "description": "A cosy player-housing mod with garden paths and a small greenhouse.",
+    "tags": [
+      "housing",
+      "cosmetic"
+    ],
+    "screenshots": [
+      "assets/screenshots/garden.png"
+    ],
+    "ai_assisted": false
+  }
+}

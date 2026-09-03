@@ -1,0 +1,17 @@
+{
+  "_comment": "VIOLATES the `license` enum (ADR-0049: any OSI-approved licence): 'LicenseRef-Proprietary' is valid SPDX syntax for a non-standard, non-open licence reference, not an OSI-approved identifier. This is the named criterion-4 trap.",
+  "example": {
+    "id": "kelsi:housing",
+    "name": "Housing",
+    "version": "1.0.0",
+    "api_version": "1.0",
+    "license": "LicenseRef-Proprietary",
+    "source": "https://github.com/kelsi/housing",
+    "type": "mod",
+    "description": "A cosy player-housing mod.",
+    "tags": [
+      "housing"
+    ],
+    "screenshots": []
+  }
+}

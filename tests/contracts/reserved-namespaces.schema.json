@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://worldofmodcraft.com/schemas/reserved-namespaces.schema.json",
+  "title": "Reserved namespaces",
+  "description": "Validates /reserved-namespaces.json (repo root), the data file ADR-0119 Section 1 specifies: \"registry/reserved-namespaces.json, one entry per namespace with the reason it is reserved.\" This schema file lives under tests/contracts/ rather than contracts/ because this task's declared file scope names contracts/entry.schema.json, contracts/page.schema.json and contracts/manifest.schema.json explicitly and does not add a fourth contracts/*.schema.json file; tests/contracts/** is the declared scope this validator fits inside instead (see docs/tasks/006-contracts.md Questions). Each namespace's `owner` sub-shape intentionally duplicates entry.schema.json's `owner` definition (same three fields, same numeric-id rule) rather than referencing it via $ref, because the stdlib-only validator this repository's tests use (schema_check.py) does not implement $ref resolution -- ADR-0103: duplicating five lines is the boring choice next to building a $ref resolver for one use.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "namespaces"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Semantic version of this file's shape, matching the convention set by contracts/validation-report.schema.json."
+    },
+    "namespaces": {
+      "type": "object",
+      "description": "Namespace name -> { owner, reason }. ADR-0119 Section 1: \"Phase 1 contains exactly mc and test.\" Represented as an object keyed by namespace, not an array, for O(1) lookup by registry CI on every PR (ADR-0119 Section 3: CI must check whether a PR touches a reserved namespace on every PR, not just occasionally).",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "owner",
+          "reason"
+        ],
+        "properties": {
+          "owner": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "provider",
+              "id",
+              "name_at_registration"
+            ],
+            "description": "ADR-0119 Section 2: \"bound to the organisation's numeric account id ... following ADR-0058 Section 2 unchanged -- the binding mechanism is identical to every other namespace.\" Same shape as entry.schema.json's `owner`.",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "minLength": 1
+              },
+              "id": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Numeric account id, never a username string -- same rule as entry.schema.json's owner.id (ADR-0058 Section 2)."
+              },
+              "name_at_registration": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "description": "ADR-0119 Section 1: \"one entry per namespace with the reason it is reserved.\""
+          }
+        }
+      }
+    }
+  }
+}

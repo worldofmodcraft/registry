@@ -1,0 +1,14 @@
+{
+  "_comment": "VIOLATES the same rule as screenshot-absolute-url.json by a different route: a leading '/' makes this an absolute filesystem path rather than a path relative to the archive root (ADR-0059 Section 1).",
+  "example": {
+    "description": "A cosy player-housing mod.",
+    "screenshots": [
+      "/etc/passwd"
+    ],
+    "tags": [
+      "housing"
+    ],
+    "links": [],
+    "deprecated": false
+  }
+}

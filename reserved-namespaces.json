@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0.0",
+  "namespaces": {
+    "mc": {
+      "owner": {
+        "provider": "github",
+        "id": 324218296,
+        "name_at_registration": "worldofmodcraft"
+      },
+      "reason": "The core-mod namespace named in ADR-0003. Reserved so that no individual account can ever claim the platform's own core namespace by registering the GitHub username \"mc\" (ADR-0119 Section 1)."
+    },
+    "test": {
+      "owner": {
+        "provider": "github",
+        "id": 324218296,
+        "name_at_registration": "worldofmodcraft"
+      },
+      "reason": "Mission SITE-V1 publishes test:hello-world as the permanent pipeline canary. Reserved because the ordinary username-derived namespace rule would otherwise force registry CI to reject it, since \"test\" is not the publisher's own username (ADR-0119 Context and Section 1)."
+    }
+  }
+}

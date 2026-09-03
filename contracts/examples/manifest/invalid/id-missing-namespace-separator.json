@@ -1,0 +1,17 @@
+{
+  "_comment": "VIOLATES the `id` pattern (ADR-0030: 'id (namespace:name)'): 'housing' has no ':' separating a namespace from a name.",
+  "example": {
+    "id": "housing",
+    "name": "Housing",
+    "version": "1.0.0",
+    "api_version": "1.0",
+    "license": "MIT",
+    "source": "https://github.com/kelsi/housing",
+    "type": "mod",
+    "description": "A cosy player-housing mod.",
+    "tags": [
+      "housing"
+    ],
+    "screenshots": []
+  }
+}
