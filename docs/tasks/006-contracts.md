@@ -1880,3 +1880,69 @@ for a mismatched mtime to rewrite.
 
 **Status: fix round 4 complete, all six acceptance criteria demonstrated above with real
 command output. Ready for re-review.**
+
+---
+# Manager verification and merge decision — 2026-09-03
+
+Verified independently, in a **throwaway clone** (`git clone --no-local` of this worktree) so that
+nothing here was touched by the checks:
+
+**1. The contract is untouched by the round-4 fix**, as required:
+```
+$ git diff --name-only 547255e -- contracts/append-only.rules.md | wc -l
+0
+$ git diff --name-only 547255e -- .
+.gitignore
+docs/tasks/006-contracts.md
+docs/tasks/006-verify.sh
+tests/contracts/__pycache__/schema_check.cpython-314.pyc      (deletion — untracked)
+tests/contracts/__pycache__/test_contracts.cpython-314.pyc    (deletion — untracked)
+```
+
+**2. F2 is fixed where it actually failed — a fresh clone**, not this worktree:
+```
+$ git clone --no-local ~/wt/registry-task-006 <tmp> -b task/006-contracts && cd <tmp>
+$ ./docs/tasks/006-verify.sh ; echo "exit=$?"
+ALL CHECKS PASSED
+exit=0        (43 checks, up from 28)
+```
+
+**3. The artefact can now fail — mutation-tested by the manager, not taken from the log.** This is
+the check that matters: F1 and F3 were checks that passed while the thing they checked was broken,
+so a green run proves nothing on its own.
+
+| Mutation applied in the clone | Result |
+|---|---|
+| `raise SystemExit(...)` appended to the suite | `exit=3` — **C9.2 tests/contracts suite failed (exit 1)** |
+| Deletion verdict flipped "Always" → "Never a violation" (round-2 finding **B1**) | `exit=1` — **C10.1** red |
+| Rule 4's `pairwise-distinct`/`pairwise-unique` removed (round-1 finding **F2**) | `exit=3` — **C1.6a, C8.4a, C8.4b** all red |
+| All mutations reverted | `exit=0` |
+
+Each of the three properties that previously survived mutation now reddens a check named for it.
+
+## Merge decision, and why no fifth review
+Round 4 returned **PASS on `contracts/append-only.rules.md`** — the artefact was the only blocking
+part, and its reviewer wrote explicitly that this "should not become a fifth deep round". The fix
+is shell-only; the contract that task 007 codes from did not change; and the appropriate test of a
+verification artefact is mutation, which the manager performed independently above rather than
+re-reading the log.
+
+Merged under MANAGER.md §7: checklist green, criteria demonstrated, tests pass (23/23), docs moved
+with the work, log complete. Nothing here touches `docs/decisions/`, a mission spec, signing/keys,
+CI security checks, data deletion, or a takedown — so no §7 escalation to Ludwig is required.
+
+## Residual limitations, recorded rather than left silent
+- **`C1.2d`'s anchor also matches an unrelated section heading**, so it would not independently
+  redden if only the creation-time mention were deleted. Documented by the implementer; fixing it
+  needs multi-line matching and was judged outside the round's small budget. Recorded here so a
+  later reader does not mistake 43 green checks for 43 independent ones.
+- **`C5.1` and `C5.3` are frozen constants by design** — they assert facts about the immutable blob
+  `db457c1`, which is what makes "19 hits" reproducible forever. Their labels now say so.
+- **The rules still cannot be executed.** The checker walkthrough is a reading; the first real test
+  is task 007 being fed the malicious first-publish fixture, which is now written into task 007's
+  spec as an acceptance criterion, along with the requirement that the test assert *which rule
+  rejects which element*.
+
+**Status: done.** Four review rounds, one escalation, three manager specification errors found and
+recorded (the round-2 creation wording, the `git add -A` that committed bytecode, and criterion 14's
+relative path in task 023).
