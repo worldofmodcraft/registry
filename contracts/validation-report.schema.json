@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://worldofmodcraft.com/schemas/validation-report.schema.json",
+  "title": "Validation report",
+  "description": "Contract for edges E5 (N3 -> N4, registry PR trigger) and E6 (N5 -> N4, build pipeline) in docs/architecture/depgraph.md: the shape of the JSON report the asset scanner (tools/validation/scan_assets.py) writes for a single invocation over one directory tree. Both callers pass an input path and receive this report plus a process exit code (0 = clean, non-zero = at least one rejection or scan error).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "root", "summary", "accepted", "rejected", "scan_errors"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Semantic version of this report shape, bumped whenever a field is added, renamed or removed.",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "root": {
+      "type": "string",
+      "description": "The path argument the scanner was invoked with, verbatim (not resolved to an absolute path)."
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "files_inspected",
+        "files_accepted",
+        "files_rejected",
+        "files_skipped",
+        "skipped_reasons",
+        "scan_errors"
+      ],
+      "properties": {
+        "files_inspected": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of regular files the scanner actually opened and read a header from (ADR-0115 Section 1: a counter that reads reality, not a count of paths merely listed by the directory walk). Equals files_accepted + files_rejected."
+        },
+        "files_accepted": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of inspected files whose content matched a whitelisted format."
+        },
+        "files_rejected": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of inspected files rejected: a named Blizzard format, an unrecognised format, or malformed/hostile content. See the `rejected` array for the per-file detail this count summarises."
+        },
+        "files_skipped": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of filesystem entries deliberately not inspected for a benign, named reason (e.g. a symlink not followed). Never a silent drop -- every skip has a reason in skipped_reasons."
+        },
+        "skipped_reasons": {
+          "type": "object",
+          "description": "Every skip reason that occurred, mapped to how many entries were skipped for it. The sum of values equals files_skipped.",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "scan_errors": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of walk-level problems that are not about one file's content (e.g. a directory nested past the depth limit, a directory that could not be listed). See the top-level `scan_errors` array for detail. Any non-zero value makes the scan's exit code non-zero."
+        }
+      }
+    },
+    "accepted": {
+      "type": "array",
+      "description": "Every accepted file, sorted by path for deterministic output.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "format"],
+        "properties": {
+          "path": { "type": "string", "description": "POSIX-style path relative to `root`." },
+          "format": {
+            "type": "string",
+            "description": "The whitelisted format identifier matched: PNG, OGG, GLB, or TEXT (the shared bucket for plain text/JSON/Lua/Markdown source, which has no distinguishing magic bytes)."
+          }
+        }
+      }
+    },
+    "rejected": {
+      "type": "array",
+      "description": "Every rejected file, sorted by path for deterministic output. Required per file: path, detected format, matched signature offset, reason, and remedy (task acceptance criteria 6 and 17).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "detected_format", "signature_offset", "reason", "remedy"],
+        "properties": {
+          "path": { "type": "string", "description": "POSIX-style path relative to `root`." },
+          "detected_format": {
+            "type": "string",
+            "description": "What the file actually is, named explicitly -- never merely \"unknown\" when a real format was identified. One of the named Blizzard formats (DBC, MPQ, BLP, M2, WMO), UNKNOWN (content matched no whitelisted or named format), or MALFORMED (the input itself is truncated, empty, or structurally invalid, e.g. a GLB chunk length exceeding the file size)."
+          },
+          "signature_offset": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "description": "Byte offset of the matched signature (or, for a GLB structural failure, the offset of the chunk header that failed validation). Null when no offset is meaningful (e.g. an empty file, or content too short to contain any known signature)."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Human-readable explanation. For a GLB whose embedded payload was rejected, this names the embedding mechanism (BIN-chunk bufferView or JSON data URI), the image index, and the absolute file offset of the payload."
+          },
+          "remedy": {
+            "type": "string",
+            "minLength": 1,
+            "description": "What the author should do about this rejection, in their own terms (e.g. \"re-export the image without private chunks or embedded metadata\"). Required and never empty: ADR-0120 clause 3 -- a rejection the author cannot act on is a defect, not a security measure. Kept separate from `reason` so a caller can surface it on its own (a PR comment, a web upload form) without re-parsing prose."
+          }
+        }
+      }
+    },
+    "scan_errors": {
+      "type": "array",
+      "description": "Directory-level problems encountered during the walk that are not about a single file's content (e.g. depth-limit exceeded, a directory that could not be listed). Sorted by path.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "reason"],
+        "properties": {
+          "path": { "type": "string", "description": "POSIX-style path relative to `root`." },
+          "reason": { "type": "string" }
+        }
+      }
+    }
+  }
+}
