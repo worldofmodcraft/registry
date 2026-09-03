@@ -1,0 +1,19 @@
+{
+  "_comment": "ai_assisted is omitted entirely -- ADR-0030: \"omitted shows nothing\", an explicit valid state, not merely a default false.",
+  "example": {
+    "id": "mc:starter-quests",
+    "name": "Starter Quests",
+    "version": "1.0.1",
+    "api_version": "1.0",
+    "license": "MIT",
+    "source": "https://github.com/worldofmodcraft/starter-quests",
+    "type": "mod",
+    "description": "A handful of introductory quests for new characters.",
+    "tags": [
+      "quests"
+    ],
+    "screenshots": [
+      "assets/screenshots/quest-log.png"
+    ]
+  }
+}

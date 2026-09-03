@@ -1,0 +1,17 @@
+{
+  "_comment": "VIOLATES the `type` enum (ADR-0030: 'type (\"mod\" | \"modpack\")'): 'plugin' is neither.",
+  "example": {
+    "id": "kelsi:housing",
+    "name": "Housing",
+    "version": "1.0.0",
+    "api_version": "1.0",
+    "license": "MIT",
+    "source": "https://github.com/kelsi/housing",
+    "type": "plugin",
+    "description": "A cosy player-housing mod.",
+    "tags": [
+      "housing"
+    ],
+    "screenshots": []
+  }
+}

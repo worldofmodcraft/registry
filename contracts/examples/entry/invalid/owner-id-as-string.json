@@ -1,0 +1,24 @@
+{
+  "_comment": "VIOLATES ADR-0058 Section 2: owner.id is a string username ('kelsi') instead of the numeric account id. This is precisely the namespace-capture attack the ADR exists to prevent, and is rejected because entry.schema.json declares owner.id as type 'integer'.",
+  "example": {
+    "id": "kelsi:housing",
+    "owner": {
+      "provider": "github",
+      "id": "kelsi",
+      "name_at_registration": "kelsi"
+    },
+    "versions": [
+      {
+        "version": "1.0.0",
+        "commit": "a2e5fc500f2460d88494339ed6e546bfd79ae195",
+        "source_url": "https://github.com/kelsi/housing",
+        "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+        "source_sha256": "266580ef36485d188e55b570b0078b22c5584ca16dcde575ad0bd16f5f641d70",
+        "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+        "key_id": "E7A1B2C3D4E5F607",
+        "published_at": "2026-08-30T12:00:00Z",
+        "status": "published"
+      }
+    ]
+  }
+}

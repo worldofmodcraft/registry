@@ -1,0 +1,18 @@
+{
+  "_comment": "A modpack manifest with an Apache-2.0 licence and ai_assisted explicitly true (ADR-0030: 'ai_assisted (true / false / omitted)').",
+  "example": {
+    "id": "orrin:garden-paths",
+    "name": "Garden Paths",
+    "version": "0.3.1",
+    "api_version": "1.0",
+    "license": "Apache-2.0",
+    "source": "https://git.sr.ht/~orrin/garden-paths",
+    "type": "modpack",
+    "description": "A bundle of pathing and landscaping mods.",
+    "tags": [
+      "landscaping"
+    ],
+    "screenshots": [],
+    "ai_assisted": true
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "_comment": "VIOLATES the `links[]` item schema's `required` list: this link object has a `label` but no `url`.",
+  "example": {
+    "description": "A cosy player-housing mod.",
+    "screenshots": [],
+    "tags": [
+      "housing"
+    ],
+    "links": [
+      {
+        "label": "Discord"
+      }
+    ],
+    "deprecated": false
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "_comment": "VIOLATES page.schema.json's `tags` type: a single string is given instead of an array of strings (ADR-0059 Section 2: \"tags[]\").",
+  "example": {
+    "description": "A cosy player-housing mod.",
+    "screenshots": [],
+    "tags": "housing",
+    "links": [],
+    "deprecated": false
+  }
+}

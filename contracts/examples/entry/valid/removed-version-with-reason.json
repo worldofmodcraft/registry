@@ -1,0 +1,36 @@
+{
+  "_comment": "Demonstrates the optional `reason` field (ADR-0041: a removed version's \"registry entry [is] kept with status and reason\") alongside a normal published version -- the optional field only appears where needed.",
+  "example": {
+    "id": "mc:starter-quests",
+    "owner": {
+      "provider": "github",
+      "id": 324218296,
+      "name_at_registration": "worldofmodcraft"
+    },
+    "versions": [
+      {
+        "version": "1.0.0",
+        "commit": "552a21a16d5d0b06e3ea241c4d64875926d9407e",
+        "source_url": "https://github.com/worldofmodcraft/starter-quests",
+        "source_archive": "https://archive.worldofmodcraft.com/mc/starter-quests/1.0.0.tar.gz",
+        "source_sha256": "c09260008aeae61cdfd2aaf5025466ab8347bdc132d7338d4dc666dff159bb02",
+        "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+        "key_id": "E7A1B2C3D4E5F607",
+        "published_at": "2026-01-05T09:00:00Z",
+        "status": "removed",
+        "reason": "Contained a Blizzard-derived asset reported after publish; artefacts pulled per ADR-0041."
+      },
+      {
+        "version": "1.0.1",
+        "commit": "134805e00637af3a8d3f4ea13489d845e133ed59",
+        "source_url": "https://github.com/worldofmodcraft/starter-quests",
+        "source_archive": "https://archive.worldofmodcraft.com/mc/starter-quests/1.0.1.tar.gz",
+        "source_sha256": "f8f724c646ce38d4540332f1fe89e37b32669d3bfd501aa7469bc397e124c16c",
+        "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+        "key_id": "E7A1B2C3D4E5F607",
+        "published_at": "2026-01-06T09:00:00Z",
+        "status": "published"
+      }
+    ]
+  }
+}

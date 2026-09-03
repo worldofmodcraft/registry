@@ -1,0 +1,21 @@
+{
+  "_comment": "A normal page.json: description, two archive-relative screenshots, tags, one external link, not deprecated. Matches ADR-0059 Section 2 exactly.",
+  "example": {
+    "description": "A cosy player-housing mod with garden paths and a small greenhouse.",
+    "screenshots": [
+      "assets/screenshots/garden.png",
+      "assets/screenshots/greenhouse.png"
+    ],
+    "tags": [
+      "housing",
+      "cosmetic"
+    ],
+    "links": [
+      {
+        "label": "Discord",
+        "url": "https://discord.gg/example"
+      }
+    ],
+    "deprecated": false
+  }
+}

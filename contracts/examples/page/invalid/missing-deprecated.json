@@ -1,0 +1,13 @@
+{
+  "_comment": "VIOLATES page.schema.json's `required` list: `deprecated` is absent entirely (ADR-0059 Section 2 names it as one of the page content fields).",
+  "example": {
+    "description": "A cosy player-housing mod.",
+    "screenshots": [
+      "assets/screenshots/garden.png"
+    ],
+    "tags": [
+      "housing"
+    ],
+    "links": []
+  }
+}

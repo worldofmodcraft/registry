@@ -1,0 +1,16 @@
+{
+  "_comment": "VIOLATES manifest.schema.json's `required` list: `source` is absent entirely (ADR-0030: mod.lua field \"source\").",
+  "example": {
+    "id": "kelsi:housing",
+    "name": "Housing",
+    "version": "1.0.0",
+    "api_version": "1.0",
+    "license": "MIT",
+    "type": "mod",
+    "description": "A cosy player-housing mod.",
+    "tags": [
+      "housing"
+    ],
+    "screenshots": []
+  }
+}

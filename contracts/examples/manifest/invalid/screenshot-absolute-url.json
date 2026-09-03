@@ -1,0 +1,19 @@
+{
+  "_comment": "VIOLATES the `screenshots[]` relative-path rule (ADR-0059 Section 1, the same rule as page.schema.json's screenshots -- see the 'Traps' note in this task's instructions: screenshots relative everywhere).",
+  "example": {
+    "id": "kelsi:housing",
+    "name": "Housing",
+    "version": "1.0.0",
+    "api_version": "1.0",
+    "license": "MIT",
+    "source": "https://github.com/kelsi/housing",
+    "type": "mod",
+    "description": "A cosy player-housing mod.",
+    "tags": [
+      "housing"
+    ],
+    "screenshots": [
+      "https://raw.githubusercontent.com/kelsi/housing/main/assets/garden.png"
+    ]
+  }
+}
