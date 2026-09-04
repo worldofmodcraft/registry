@@ -118,3 +118,114 @@ Beyond MANAGER.md §3.7:
 ---
 # Task 025 log  (append-only, updated continuously by the executing agent)
 - 2026-09-04 spec approved; worktree created from registry `main` after task 006 merged (PR #2).
+- 2026-09-04 all six contracts written and committed one at a time, E11 and E13 first as the spec
+  asked (task 009 is coding against them live). Commits: `c942f6e` (E11 archive-layout.md),
+  `0354995` (E13 site-output.md), `8ce708d` (E7 artifact-naming.md), `8ad4a95` (E9
+  signature-format.md), `bbc9203` (E12 rebuild-trigger.md), `3839951` (E14 url-scheme.md),
+  `ee0a905` (`docs/contracts/README.md` index update).
+
+## Acceptance criteria — demonstrated
+
+1. **All six files exist, named per their edge and node pair, matching existing conventions.**
+   ```
+   $ ls -1 contracts/*.md
+   contracts/append-only.rules.md
+   contracts/archive-layout.md
+   contracts/artifact-naming.md
+   contracts/rebuild-trigger.md
+   contracts/signature-format.md
+   contracts/site-output.md
+   contracts/url-scheme.md
+   ```
+   Every new file opens with "Contract for edge **E<n>** (`N<x> -> N<y>` ...)" naming its edge id
+   and node pair explicitly, matching `append-only.rules.md`'s own opening line's convention.
+
+2. **Stated at implementer level, no "appropriate"/"sensible"/"as needed".** Checked by
+   re-reading each file for hedge words after writing it; none found. Every rule names a concrete
+   input/output pair (e.g. E7's exact tag string, E9's exact byte offsets, E12's exact
+   `event_type` string, E13's exact `CNAME` content, E14's exact path form).
+
+3. **Adversarial pass — one attack attempt per contract, recorded in each file's own "Attack
+   attempt(s)" section:**
+   - **E7** (`artifact-naming.md`): (a) pasting `id` verbatim into a git ref — `git tag` rejects
+     the literal `:` outright; (b) treating `entry.schema.json`'s pattern as sufficient — a
+     namespace like `com1` collides with a Windows reserved device name at the OS level even
+     though it is schema-valid.
+   - **E9** (`signature-format.md`): signature-reuse-across-identities — copying a genuinely
+     signed artefact's `source_archive`/`source_sha256`/`signature`/`key_id` onto an unrelated
+     entry passes every byte/hash/signature check; only the trusted-comment `id`/`version`
+     cross-check (rule 11) catches it.
+   - **E11** (`archive-layout.md`): a non-manifest-declared hostile tar entry using `../`
+     traversal, never looked up by name, defeats a check scoped only to manifest-declared paths;
+     the rule is stated over every archive entry during extraction instead.
+   - **E12** (`rebuild-trigger.md`): a near-miss `event_type` string (e.g. `registry-update`) is
+     a fully successful `repository_dispatch` call that GitHub never routes anywhere, with no
+     error surfaced on either side.
+   - **E13** (`site-output.md`): (a) a `dist/`+`CNAME` pair missing `.nojekyll` — GitHub Pages'
+     Jekyll processing silently drops Astro's `_astro/` assets; (b) a `CNAME` containing a
+     scheme/trailing-slash form GitHub Pages does not treat as a bare hostname.
+   - **E14** (`url-scheme.md`): (a) building the URL from a display label
+     (`owner.name_at_registration`) instead of the raw lowercase `id`; (b) treating a
+     trailing-slash variant as equivalent because a host happens to resolve both, breaking
+     canonical-URL dedup.
+
+4. **E11 states the path-escape rule; E7 states the awkward-characters rule; both demonstrated by
+   naming a concrete input that must be rejected.** E11: a tar entry
+   `mymod-abc123/assets/screenshots/../../../../../home/runner/.ssh/authorized_keys`, never
+   declared in `page.json`, must be rejected during extraction and the whole archive treated as
+   malformed. E7: the namespace `com1` (id `com1:anytool`, schema-valid) must be rejected at
+   first-publish time because its release tag/asset names would begin `com1.`, colliding with a
+   Windows reserved device name.
+
+5. **`docs/contracts/README.md` indexes all ten contracts.** Verified by re-reading the file's
+   "Files" table after editing: four task-006 rows plus six new rows, one per file.
+
+6. **Nothing from task 006 modified.**
+   ```
+   $ git diff --name-only 74f5739 HEAD -- contracts/entry.schema.json contracts/page.schema.json \
+       contracts/manifest.schema.json contracts/append-only.rules.md \
+       contracts/validation-report.schema.json
+   (no output)
+   ```
+   Full diff since the spec commit touches exactly the six new files plus
+   `docs/contracts/README.md`:
+   ```
+   $ git diff --name-only 74f5739 HEAD
+   contracts/archive-layout.md
+   contracts/artifact-naming.md
+   contracts/rebuild-trigger.md
+   contracts/signature-format.md
+   contracts/site-output.md
+   contracts/url-scheme.md
+   docs/contracts/README.md
+   ```
+
+7. **Every question booked under `## Questions`, with assumption and what rests on it.** Four
+   booked: two in `archive-layout.md` (whether the pipeline must normalise the archive's
+   top-level directory name; whether a nested README is ever a fallback), one in `site-output.md`
+   (whether a deploy workflow must mechanically verify this document's requirements, or whether
+   task 009's own acceptance criteria are relied on once at task-completion time), and one in
+   `url-scheme.md` (whether `www.worldofmodcraft.com` is ever configured). Each carries an
+   explicit "assumed meanwhile" and "what rests on this." E7, E9 and E12 each state explicitly
+   that no question remained open once their assigned decisions (naming scheme, byte layout,
+   event type/payload) were pinned per this task's own "what each contract must settle" list —
+   none of those three needed a genuinely-undecided call left to a future ADR.
+
+## What I could not verify
+
+- **GitHub Pages' exact Jekyll-processing and extension-less-path-resolution behaviour** (the
+  `.nojekyll`/`_astro/` interaction in `site-output.md`, and the trailing-slash resolution
+  mentioned in `url-scheme.md`) is stated from general, well-documented GitHub Pages/Jekyll
+  behaviour, not verified against this project's own live Pages instance — Pages is not yet
+  enabled (mission §6.1 is still pending Ludwig's action). If GitHub's actual behaviour ever
+  differs from what is described, that is a fact to re-verify once Pages is live, not something
+  this task could run a command against.
+- **The minisign reference implementation's exact byte offsets and trusted-comment signing
+  scheme** (`signature-format.md`) are stated from the published minisign file-format
+  specification, not from running `minisign` in this environment (no keypair exists to sign
+  anything with, deliberately, per this task's forbidden-key-material rule) — task 008's
+  implementer should confirm byte-for-byte against a real `minisign -Sm` run before relying on
+  this document for a hand-rolled verifier.
+- **Windows' exact reserved-device-name matching rule** (E7's rejection rule) is stated from
+  well-known, longstanding Windows filesystem behaviour, not tested against a live Windows
+  runner in this environment.
