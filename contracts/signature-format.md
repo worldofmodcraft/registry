@@ -52,6 +52,13 @@ minisign's own default).
 | 2–9 | The 8-byte key id, identical to the key id embedded in the public key that produced this signature (see "Deriving `key_id`" below). |
 | 10–73 | The 64-byte raw Ed25519 signature, over the file's raw bytes (`"Ed"` variant) or over BLAKE2b-512(file's raw bytes) (`"ED"` variant). |
 
+> **Unverified in this environment.** The four-line layout above and the "line 2 is exactly 74
+> bytes" byte table are transcribed from minisign's own published file-format specification, not
+> observed from a real `minisign -Sm` run — no signing keypair exists in this environment (this
+> document forbids real key material, see the top of this file), so nothing here has been produced
+> and byte-inspected locally. **Task 008's implementer must confirm this table byte-for-byte
+> against a real `minisign -Sm` run before shipping a verifier against this document.**
+
 **Line 3, the trusted comment**, is `"trusted comment: "` followed by this project's fixed
 payload grammar, defined below. Its raw bytes (everything after the `"trusted comment: "` prefix,
 up to but not including the line's trailing newline) are one of the two inputs to line 4's
@@ -95,13 +102,17 @@ variant a verifier should try to accommodate.
 
 ```
 untrusted comment: signature from minisign secret key
-RWRlxAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+RWQAAAAAAAAAAKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo=
 trusted comment: format=1;id=mc:hello-world;version=1.0.0;sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-RWQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7uw==
 ```
 
-(Neither base64 line above decodes to a real signature of anything; both are illustrative
-filler of the correct approximate shape and length only.)
+(Both base64 lines above decode successfully — checked with `base64.b64decode` — to exactly the
+byte lengths this document requires: line 2 to 74 bytes (`Ed` + eight `0x00` bytes as a placeholder
+key id + sixty-four `0xAA` bytes as a placeholder signature), line 4 to 64 bytes (all `0xBB`).
+Decoding successfully and having the right length is all these lines are for; neither one is a
+signature of anything, and the repeated-byte pattern is deliberate so nobody mistakes either line
+for real key material.)
 
 ## What `entry.json`'s `signature` field holds
 

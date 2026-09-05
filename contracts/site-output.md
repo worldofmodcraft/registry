@@ -54,6 +54,16 @@ its own.
 
 ## `.nojekyll`: required, and why it is not optional decoration
 
+> **Unverified in this environment.** The Jekyll-processing and underscore-directory-exclusion
+> behaviour described in this section is GitHub Pages' own generally documented, widely reported
+> behaviour, not observed against this project's own instance — GitHub Pages is not yet enabled for
+> `worldofmodcraft/site` (mission §6.1/§6.2 is still pending Ludwig's action; the repository is
+> currently empty). The requirement to include `.nojekyll` is kept exactly as normative below
+> regardless — it costs nothing to include whether or not the failure mode ever manifests here —
+> but the specific mechanism (silently dropped `_astro/` assets) should be confirmed at this
+> project's own first live deploy, not assumed to hold merely because it holds for GitHub Pages in
+> general.
+
 GitHub Pages runs every published tree through Jekyll by default unless a file named exactly
 `.nojekyll` (leading dot, all lowercase, empty content, at `dist/`'s root) is present. Jekyll's
 default behaviour **excludes any file or directory whose name begins with an underscore**. Astro's
@@ -120,6 +130,13 @@ document controls) — either way, "a non-empty file named `CNAME` exists" is sa
 custom domain does not actually take effect. The content rule above ("exactly the apex domain ...
 no scheme ... no trailing slash") is stated precisely so this shape is named as invalid rather than
 left to be discovered by a broken domain after a real deploy.
+
+> **Unverified in this environment.** GitHub Pages' exact handling of a malformed `CNAME` (rejects
+> the domain outright versus silently misconfiguring it) is documented GitHub Pages behaviour, not
+> observed against this project's own instance — Pages is not yet enabled for
+> `worldofmodcraft/site`. The content rule this document states (bare apex, no scheme, no trailing
+> slash) is kept exactly as normative regardless of which failure mode GitHub Pages actually
+> produces for a malformed file; the first live deploy is what confirms which one it is.
 
 ## What this document does not cover
 

@@ -30,9 +30,16 @@ implements directly — this document only states that the canonical form is alw
 nothing in the site's own generated links, sitemaps, or `<link rel="canonical">` tags should ever
 emit a bare `http://` URL for itself.
 
-**No subdomain (`www.worldofmodcraft.com` or any other) is part of this scheme.** No ADR or
-mission document read for this task reserves or configures a `www` host, and this document does
-not invent one — see Questions below for what is left open here.
+**No subdomain (`www.worldofmodcraft.com` or any other) is part of this canonical scheme** — no
+link the site generates, no sitemap entry, no `<link rel="canonical">` tag ever names a `www` host;
+every canonical reference this document fixes is the bare apex above. This is true regardless of
+what DNS record exists for `www`: **a `www.worldofmodcraft.com` CNAME to
+`worldofmodcraft.github.io` already exists and resolves** (mission log, DNS cutover session M2,
+2026-09-02: "`www` CNAME → `worldofmodcraft.github.io`"; re-verified 2026-09-05,
+`getent hosts www.worldofmodcraft.com` returns the CNAME target correctly) — the record's
+existence is a DNS fact, not something this document invents or needs to decide. What is still
+open is what that host should *serve*, which is a different question from whether it exists — see
+Questions below.
 
 ## Path form for a mod page: `/mods/<namespace>/<name>`, no trailing slash
 
@@ -47,7 +54,13 @@ treating the graph's line as merely illustrative.
 **A trailing-slash variant may or may not resolve to the same content depending on how the static
 host serves extension-less paths** (GitHub Pages' own path-resolution behaviour, not something
 this project configures) — this document does not forbid a host from also answering requests to
-the trailing-slash form; it forbids the *site itself* from treating that form as canonical. Every
+the trailing-slash form; it forbids the *site itself* from treating that form as canonical.
+**Unverified in this environment:** which way GitHub Pages actually resolves the trailing-slash
+variant for this project's own build output (`dist/mods/<ns>/<name>/index.html` per
+`contracts/site-output.md`, E13) has not been observed — Pages is not yet enabled for
+`worldofmodcraft/site`. That is why this document does not rely on either resolution outcome: the
+no-trailing-slash rule below is normative regardless of what a live deploy turns out to do, and the
+actual host behaviour should be confirmed at this project's first live deploy. Every
 link the site generates to a mod page — internal navigation, the browse page, Pagefind's indexed
 URLs, any `<link rel="canonical">` tag, any future sitemap — must use the no-trailing-slash form
 above, consistently, and a future link builder outside this codebase (a browser extension, a
@@ -128,12 +141,23 @@ implicitly good enough.
 
 ## Questions
 
-- **Whether `www.worldofmodcraft.com` should exist at all, and if so, whether it redirects to the
-  apex or serves independently.** No ADR, the mission, or `contracts/site-output.md`'s `CNAME`
-  content (the bare apex domain only) addresses this. **Assumed meanwhile:** `www` is not
-  configured, reserved, or part of this scheme at all — a request to it is undefined, host-level
-  behaviour (most likely an unresolved DNS lookup, since no record for it is described anywhere
-  read for this task) outside this project's control. **What rests on this:** if Ludwig's DNS
-  setup (mission §6.2) ever adds a `www` record pointing at the same GitHub Pages target, this
-  document does not yet say whether that should redirect to the apex or be treated as a separate,
-  unsupported host — worth settling before that DNS record is added, not after.
+- **What `www.worldofmodcraft.com` should serve, given that the DNS record already exists.** This
+  is not "should `www` exist" — it already does. Verified 2026-09-05: `getent hosts
+  www.worldofmodcraft.com` resolves it as a CNAME to `worldofmodcraft.github.io`, matching the
+  mission log's own DNS cutover record (session M2, 2026-09-02: "`www` CNAME →
+  `worldofmodcraft.github.io`") and its later re-verification (2026-09-03: "`www` CNAMEs
+  correctly"). The open question is what that host should serve once GitHub Pages is enabled for
+  the custom domain: redirect to the apex, serve independently, or remain unsupported. **This
+  document does not assert what GitHub Pages does with an apex+www pair, because that has not been
+  observed against this project's own instance** — Pages is not yet enabled for
+  `worldofmodcraft/site` (mission's outstanding manual step; the repository is currently empty, so
+  no custom domain has been claimed there yet). GitHub Pages' documented behaviour is that the
+  domain configured as the repository's custom domain becomes primary and the other of {apex, www}
+  redirects to it, but this project has not confirmed that behaviour live. **Assumed meanwhile:**
+  the canonical scheme this document fixes never uses `www` in a generated link, regardless of how
+  the host eventually resolves requests to it — that part does not depend on this question's
+  answer. **What rests on this:** once Pages is enabled and a custom domain is set (mission §6),
+  Ludwig's choice of which of {apex, www} to configure as primary determines which one redirects to
+  the other; this document does not yet say which one should be primary, and that is a decision to
+  make at that moment, not before, since GitHub's actual behaviour for this pair cannot be verified
+  before Pages exists for this domain.

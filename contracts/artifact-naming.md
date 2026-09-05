@@ -83,6 +83,16 @@ filename **before its first `.`**, regardless of what follows: `aux.txt`, `aux.t
 whose leading segment matches one of these names can fail to be created at all on a Windows
 runner or in a Windows-hosted clone, for the identical reason.
 
+> **Unverified in this environment.** The reserved-device-name list and the "matched on the
+> portion before the first `.`" behaviour above are stated from well-known, longstanding, publicly
+> documented Windows filesystem behaviour, not exercised against a live Windows runner or a
+> Windows-hosted git clone in this environment. The rule itself does not depend on that
+> confirmation — it is enforced by refusing to create the name in the first place, not by
+> detecting a failure after the fact — but anyone implementing the rejection check (task 008's
+> first-publish component) should confirm the exact matching behaviour (case-insensitivity, the
+> before-first-`.` scope, the exact device-name list) against a real Windows machine before relying
+> on this paragraph as the sole source.
+
 **A namespace matching one of these names, case-insensitively, must be rejected at first-publish
 time — before the namespace is bound (ADR-0058 §3) and before any release under this scheme is
 attempted — not silently substituted, escaped, or worked around.** The pipeline (or whichever
@@ -117,8 +127,14 @@ instructions. Two distinct answers, because two distinct problems exist:
    on one major OS — as a filename component. **Answer: rejected outright at publish time**, as
    described above, rather than accepted and given a mangled or escaped name. Every other
    character `[a-z0-9_-]` permits is already filename-safe, ref-safe, and URL-path-safe on every
-   platform this project's own tooling ADRs name (ADR-0040: Linux, Windows, macOS runners), so no
-   further substitution or rejection rule is needed beyond these two.
+   mainstream OS, so no further substitution or rejection rule is needed beyond these two. **This
+   rule stands on its own two merits regardless of any pipeline or build-runner detail** — an end
+   user on Windows cannot save the downloaded tarball under its given name, and `git` cannot create
+   the loose ref for the tag, full stop, for anyone on Windows, not only on a CI runner. ADR-0040
+   §1 (naming Linux, Windows and macOS runners explicitly) is cited only as supporting evidence
+   that Windows is a platform this project actually targets, not as the basis for the rule itself —
+   SITE-V1's mission scope excludes the build pipeline that ADR governs, so the rule must not, and
+   does not, depend on it.
 
 ## Attack attempts against this contract, recorded per acceptance criterion 3
 
@@ -139,8 +155,11 @@ validation already happened, so any string it accepts is fair game. **Outcome: t
 attempts to create a tag or write a release asset beginning `com1.`, and on a Windows-hosted
 runner or for any Windows user who later downloads and tries to save the tarball with its given
 name, the write fails at the OS level** — a namespace that was perfectly valid registry data
-produces a release that cannot exist on a real, supported build platform (ADR-0040 names Windows
-runners explicitly). Satisfying `entry.schema.json` was never sufficient on its own — schema
+produces a release that cannot exist on Windows at all: not on a build runner specifically, but for
+any end user who downloads the tarball and tries to save it, and for `git` itself when creating the
+loose ref for the tag (ADR-0040 §1 is supporting evidence that Windows is a platform this project
+targets; this outcome does not depend on that ADR governing the SITE-V1 build pipeline, which
+mission scope excludes). Satisfying `entry.schema.json` was never sufficient on its own — schema
 validity and filename validity are different properties, and this document exists specifically
 because the graph's one-line E7 definition does not say so.
 

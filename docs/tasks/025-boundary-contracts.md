@@ -31,6 +31,15 @@ it can archive or sign anything.
 - **ADR-0030** (manifest fields, including `screenshots`) — the paths E11 must locate.
 - **ADR-0058** §4 (provider neutrality) — nothing here may assume GitHub except where the mission
   explicitly does (Pages, `repository_dispatch`).
+- **ADR-0058** §3 (the first-publish confirmation that binds a namespace) — **added retroactively,
+  2026-09-05, as a manager Context-selection miss.** `artifact-naming.md` relies on it in two
+  places and it was never declared here. Review round 1, non-blocking finding 6; checklist item
+  4(b). Recorded as a manager error, not an agent one.
+- **ADR-0040** §1 (the pipeline's Linux/Windows/macOS runners) — **added retroactively,
+  2026-09-05, same manager miss.** `artifact-naming.md` cites it to establish that Windows runners
+  are a platform this project actually builds on. The citation is factually correct — ADR-0040 §1
+  names them explicitly — but SITE-V1's mission scope excludes the build pipeline, so the citation
+  must not be load-bearing for the *rule*; see the fix brief. Review round 1, finding 5.
 - **ADR-0103** (boring solutions) and **ADR-0056** (English).
 - `docs/tasks/MISSION-worldofmodcraft-site-v1.md` §4 D2, D3 and §7 in the platform repo.
 - In this repository: `contracts/entry.schema.json`, `contracts/append-only.rules.md` and
@@ -113,7 +122,54 @@ Beyond MANAGER.md §3.7:
 - Editing the four contracts task 006 shipped, or anything in the platform repository.
 
 ## Questions  (agent-maintained; see MANAGER.md §8b)
-- (none yet)
+
+Booked here in fix round 1 (2026-09-05), moved from the four contract files they were originally
+written into only, per review round 1 BLOCKING 4 (MANAGER.md §8b.1 puts questions in the task log,
+not only in the shipped contract). Left in place in their source contracts too (see "Fix round 1"
+section below for why); wording here and there is kept consistent, and the `www` question below is
+the corrected version — see BLOCKING 5 in that section for what was wrong with the original.
+
+1. **From `contracts/archive-layout.md`:** whether the pipeline must normalise the archive's
+   `<root>` top-level directory name to a fixed, predictable value (e.g. always `source/`) rather
+   than leaving it to whatever the archiving tool defaults to. No ADR read for this task requires a
+   specific root name, and ADR-0103 favours the boring default (`git archive`'s own naming) over
+   inventing a normalisation step with no stated need. **Assumed meanwhile:** the root name is
+   arbitrary and every reader determines it from the archive itself at extraction time. **What
+   rests on this:** if a future contract or tool needs to predict the root name without opening the
+   archive first, that tool cannot be written against this document as it stands and this question
+   would need an answer first.
+2. **From `contracts/archive-layout.md`:** whether a `README.md` deeper than the archive root
+   (e.g. `<root>/docs/README.md`) is ever considered as a fallback when the top-level one is
+   absent. No ADR states a fallback search order, and inventing one would be undocumented leniency
+   this document elsewhere declines to add. **Assumed meanwhile:** no fallback search; only
+   `<root>/README.md` counts. **What rests on this:** a mod whose README lives elsewhere in its
+   tree renders no README on the site under this document as written, until either the mod moves
+   its README or this question is answered.
+3. **From `contracts/site-output.md`:** whether a deploy workflow must mechanically verify this
+   document's requirements (a smoke test over `dist/` before the Pages action runs) or whether task
+   009's own acceptance criteria are taken as sufficient verification once, at task-completion
+   time, without a standing check on every future deploy. No ADR read for this task settles this;
+   it is an implementation decision for task 008/009's workflow, not a boundary-contract question.
+   **Assumed meanwhile:** this document states what "valid" means; whether that gets checked by an
+   automated step or relied on by convention is left to whoever implements E12/E13's workflow.
+   **What rests on this:** if no automated check is ever added, a future regression (someone's
+   Astro upgrade drops `.nojekyll` from a template default, for instance) would only be caught by
+   someone noticing the live site is broken, not by CI.
+4. **From `contracts/url-scheme.md`, rewritten in fix round 1 (see below — the original version of
+   this question rested on a false claim about live DNS):** what `www.worldofmodcraft.com` should
+   serve, given that the DNS record for it already exists (a CNAME to
+   `worldofmodcraft.github.io`, set up in the mission's own DNS cutover session M2, 2026-09-02, and
+   independently re-verified here 2026-09-05 with `getent hosts www.worldofmodcraft.com`) — not
+   whether it should exist at all. GitHub Pages is not yet enabled for `worldofmodcraft/site`
+   (still pending; the repo is empty), so this project has not observed GitHub's actual apex/www
+   redirect behaviour for its own domain pair. **Assumed meanwhile:** the canonical URL scheme
+   never uses `www` in a generated link, regardless of how the host eventually resolves requests to
+   it. **What rests on this:** once Pages is enabled and a custom domain is set (mission §6),
+   Ludwig's choice of which of {apex, www} to configure as primary determines which one redirects
+   to the other; this is a decision to make at that moment, not before, since it cannot be verified
+   before Pages exists for this domain. **This one bears directly on one of Ludwig's own manual
+   steps (mission §6 DNS/Pages setup)** — the reason BLOCKING 4 flagged it as a real consequence of
+   leaving the log's own Questions section empty.
 
 ---
 # Task 025 log  (append-only, updated continuously by the executing agent)
@@ -229,3 +285,155 @@ Beyond MANAGER.md §3.7:
 - **Windows' exact reserved-device-name matching rule** (E7's rejection rule) is stated from
   well-known, longstanding Windows filesystem behaviour, not tested against a live Windows
   runner in this environment.
+
+## Fix round 1 (2026-09-05)
+
+Independent adversarial review returned BLOCKING (checklist:
+`docs/manager/REVIEW-CHECKLIST.md`). This section records what changed, per finding, and where.
+Task file's Context section was already corrected by the manager before this round started (ADR-
+0058 §3 and ADR-0040 §1 added — a manager Context-selection miss, not something this round needed
+to redo).
+
+**BLOCKING 1 — `signature-format.md`, the four-line layout and "line 2 is 74 bytes" stated as
+unqualified fact.** Added an inline "Unverified in this environment" note directly under the
+byte-layout table (`contracts/signature-format.md`, immediately after the table, before "Line 3,
+the trusted comment"), stating the layout comes from minisign's published spec, not a real
+`minisign -Sm` run here, and naming task 008's implementer as the one who must confirm it
+byte-for-byte before shipping a verifier. The normative rule itself (the byte layout, the rejection
+list) is unchanged.
+
+**BLOCKING 2 — `artifact-naming.md`, Windows reserved-device-name behaviour stated as fact.**
+Added an inline "Unverified in this environment" note in the "Rejected namespaces" section,
+directly after the paragraph stating the reserved-name list and the before-first-`.` matching
+rule, noting this is documented-but-unexercised Windows behaviour and that task 008's first-publish
+implementer should confirm the exact matching behaviour against a real Windows machine. The
+rejection rule itself is unchanged and stays fully normative.
+
+**BLOCKING 3 — `site-output.md` and `url-scheme.md`, GitHub Pages behaviour stated as fact while
+Pages is not yet enabled.** Three inline notes added:
+- `contracts/site-output.md`, directly under the "`.nojekyll`: required..." heading, before the
+  Jekyll/`_astro/` explanation: notes the mechanism is GitHub Pages' generally documented
+  behaviour, not observed against this project's own instance, and that the `.nojekyll`
+  requirement stays normative regardless — confirm the specific mechanism at the first live
+  deploy.
+- `contracts/site-output.md`, directly after the second attack attempt (the malformed-`CNAME`
+  paragraph): notes GitHub Pages' exact handling of a malformed `CNAME` (reject vs. silently
+  misconfigure) is unverified here; the content rule stays normative regardless.
+- `contracts/url-scheme.md`, in the trailing-slash paragraph: strengthened the existing partial
+  hedge into an explicit "Unverified in this environment" statement — which way GitHub Pages
+  resolves the trailing-slash variant for this project's own build output has not been observed,
+  Pages is not enabled yet, and the no-trailing-slash canonical rule is normative regardless of
+  what a live deploy turns out to do.
+
+None of these three weakened any normative rule; each only adds where the supporting claim comes
+from and who/when confirms it.
+
+**BLOCKING 4 — the log's own `## Questions` said "(none yet)" while four real questions existed,
+booked only inside the shipped contracts.** All four questions are now booked in this file's own
+`## Questions` section above, each naming the contract file it came from, with its "assumed
+meanwhile" / "what rests on this" preserved. **Decision: left in the contracts as well as the
+log.** Reasoning: BLOCKING 1-3 above make the same point from the other direction — an implementer
+reading only a contract file has no way to see anything that lives only in the task log — so a
+genuinely open decision that could affect how a contract is implemented belongs in both places, not
+only the log. The log is where the manager triages and the next session looks first (MANAGER.md
+§8b.1); the contract is where task 008/009's implementer actually reads. Wording is kept
+consistent between the two; the `www` question (BLOCKING 5, below) was corrected in both places
+together so neither contradicts the other.
+
+**BLOCKING 5 — the `www` question in `url-scheme.md` rested on a false claim about live DNS.**
+Re-ran the check myself rather than trusting the manager's brief at face value:
+```
+$ getent hosts www.worldofmodcraft.com
+2606:50c0:8003::153 worldofmodcraft.github.io www.worldofmodcraft.com
+2606:50c0:8000::153 worldofmodcraft.github.io www.worldofmodcraft.com
+2606:50c0:8002::153 worldofmodcraft.github.io www.worldofmodcraft.com
+2606:50c0:8001::153 worldofmodcraft.github.io www.worldofmodcraft.com
+```
+confirmed, and cross-checked against the mission log's own record
+(`docs/tasks/MISSION-worldofmodcraft-site-v1-log.md`: session M2, 2026-09-02, "`www` CNAME →
+`worldofmodcraft.github.io`"; re-verified in that log 2026-09-03, "`www` CNAMEs correctly"). Also
+checked the apex and the live HTTP/TLS behaviour, to see whether anything else in `url-scheme.md`
+or `site-output.md` reasoned about live hosting rather than observing it:
+```
+$ getent hosts worldofmodcraft.com
+185.199.109.153 worldofmodcraft.com
+185.199.110.153 worldofmodcraft.com
+185.199.111.153 worldofmodcraft.com
+185.199.108.153 worldofmodcraft.com
+$ curl -sk -o /dev/null -w "HTTP:%{http_code}\n" https://worldofmodcraft.com
+HTTP:404
+$ curl -sv https://worldofmodcraft.com 2>&1 | tail -6
+* subjectAltName does not match hostname worldofmodcraft.com
+* SSL: no alternative certificate subject name matches target hostname 'worldofmodcraft.com'
+```
+This matches the mission log's own 2026-09-03 "Site status" note exactly (404 over HTTP, a
+certificate-name error over HTTPS, "the exact signature of DNS points at GitHub, no GitHub site
+claims this hostname yet") — DNS is correctly pointed at GitHub Pages, GitHub Pages itself is just
+not yet enabled for this domain (`worldofmodcraft/site` is empty). Nothing here contradicts any
+other claim already in `url-scheme.md`.
+
+Changes made in `contracts/url-scheme.md`:
+- "Scheme and host" section: replaced "No ADR or mission document read for this task reserves or
+  configures a `www` host, and this document does not invent one" (false — the record exists and
+  was deliberately configured) with a statement that the DNS record exists and resolves, cited
+  against both the mission log and today's own `getent` output, while keeping "no link this site
+  generates ever uses `www`" as the (still true, still normative) canonical-scheme rule.
+- `## Questions`: rewrote the entry from "whether `www` should exist at all" (false premise) to
+  "what `www` should serve, given the record already exists" — redirect vs. independent vs.
+  unsupported — explicitly declining to assert GitHub Pages' apex/www redirect behaviour since
+  Pages is not enabled yet and that behaviour has not been observed for this project's own domain.
+  Mirrored into this log's own `## Questions` item 4 above, in matching wording.
+
+**Non-blocking 6 — `artifact-naming.md`, ADR-0040 load-bearing for the reserved-name rule.**
+Reworded both ADR-0040 references (the "Characters legal..." section and Attack attempt 2) so the
+rule's stated basis is only its own two merits — a Windows end user cannot save the file; `git`
+cannot create the loose ref — with ADR-0040 §1 kept only as supporting evidence that Windows is a
+platform this project targets, explicitly noting SITE-V1 excludes the build pipeline ADR-0040
+governs so the rule must not depend on it. Chose to keep the citation (reworded) rather than drop
+it, since it is factually correct supporting evidence and dropping it entirely would lose the "this
+isn't a hypothetical platform" grounding — it is now clearly subordinate, not load-bearing.
+
+**Non-blocking 7 — `signature-format.md`, fabricated base64 examples were invalid base64 and the
+wrong length.** Verified the review's finding first:
+```
+$ python3 -c "import base64; base64.b64decode('RWRlxAAA...')"
+binascii.Error: Incorrect padding
+```
+Replaced both example lines with base64 that decodes successfully to the exact byte counts the
+document requires (74 bytes for line 2, 64 for line 4), built from repeated placeholder bytes
+(`Ed` + eight `0x00` + sixty-four `0xAA` for line 2; sixty-four `0xBB` for line 4) so nothing
+resembles real key material. Confirmed:
+```
+$ python3 -c "
+import base64
+l2='RWQAAAAAAAAAAKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo='
+l4='u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7uw=='
+print(len(base64.b64decode(l2)), len(base64.b64decode(l4)))
+"
+74 64
+```
+Updated the caption below the example to state plainly that both lines decode successfully to
+placeholder bytes of the correct length and are not signatures of anything.
+
+**BLOCKING 8 — the log never demonstrated the pre-existing suite still passes.** Re-ran it myself
+in this worktree, unmodified:
+```
+$ python3 -m unittest discover -s tests/contracts -v
+...
+----------------------------------------------------------------------
+Ran 23 tests in 0.007s
+
+OK
+```
+23 tests, all pass — matches the reviewer's own report exactly. Full verbose output was 23 `ok`
+lines across `DeterminismTests`, `EntryExampleTests`, `LicenseListTests`, `ManifestExampleTests`,
+`OwnerIdIsNumericTests`, `PageExampleTests`, `ProviderNeutralityTests`, `ReservedNamespacesTests`,
+`SchemaWellFormedTests`, `ScreenshotPathTests` — no test file touched this round (file scope is
+`contracts/*.md`, `docs/contracts/README.md`, this log).
+
+**Files changed this round:** `contracts/signature-format.md`, `contracts/artifact-naming.md`,
+`contracts/site-output.md`, `contracts/url-scheme.md`, `docs/tasks/025-boundary-contracts.md`
+(this file — Questions populated, this section appended). `docs/contracts/README.md` and
+`contracts/archive-layout.md` were not touched — no finding required a change to either (archive-
+layout.md's two questions were only copied into this log's Questions section verbatim, not
+reworded).
