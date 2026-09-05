@@ -129,12 +129,15 @@ not only in the shipped contract). Left in place in their source contracts too (
 section below for why); wording here and there is kept consistent, and the `www` question below is
 the corrected version — see BLOCKING 5 in that section for what was wrong with the original.
 
-1. **From `contracts/archive-layout.md`:** whether the pipeline must normalise the archive's
-   `<root>` top-level directory name to a fixed, predictable value (e.g. always `source/`) rather
-   than leaving it to whatever the archiving tool defaults to. No ADR read for this task requires a
-   specific root name, and ADR-0103 favours the boring default (`git archive`'s own naming) over
-   inventing a normalisation step with no stated need. **Assumed meanwhile:** the root name is
-   arbitrary and every reader determines it from the archive itself at extraction time. **What
+1. **From `contracts/archive-layout.md`, corrected in fix round 2 (see that section below — plain
+   `git archive` has no naming default of its own):** whether the pipeline must normalise the
+   archive's `<root>` top-level directory name to a fixed, predictable value (e.g. always
+   `source/`) rather than leaving it to whatever literal the pipeline's own `--prefix` argument
+   happens to pass. No ADR read for this task requires a specific root name, and ADR-0103 favours
+   the boring default (a fixed literal `--prefix` the pipeline chooses once and reuses) over
+   inventing a normalisation or derivation step with no stated need — this document does not fix
+   which literal that is. **Assumed meanwhile:** the root name is arbitrary and every reader
+   determines it from the archive itself at extraction time. **What
    rests on this:** if a future contract or tool needs to predict the root name without opening the
    archive first, that tool cannot be written against this document as it stands and this question
    would need an answer first.
@@ -437,3 +440,92 @@ lines across `DeterminismTests`, `EntryExampleTests`, `LicenseListTests`, `Manif
 `contracts/archive-layout.md` were not touched — no finding required a change to either (archive-
 layout.md's two questions were only copied into this log's Questions section verbatim, not
 reworded).
+
+## Fix round 2 (2026-09-05)
+
+Round 1's re-review found round 1's own eight findings all correctly closed — accepted in full,
+nothing revisited here — but caught two new factual errors by actually running the tools named in
+the text, one of which the reviewer's own round-1 pass had missed and had to retract clearance on.
+Both are fixed below by running the same tools myself rather than asserting a correction.
+
+**BLOCKING — `contracts/signature-format.md`, "Deriving `key_id`": the byte-order claim was
+backwards.** The document said the public key comment's 16-hex `key_id` is the blob's 8 key-id
+bytes "in the same byte order they appear there." That is false; it is the same bytes *reversed*.
+Demonstrated with a real, freshly generated `minisign 0.12` keypair (throwaway, not the project's
+signing key, discarded after this check):
+```
+$ minisign -G -p demo.pub -s demo.key
+$ cat demo.pub
+untrusted comment: minisign public key E4A0E24E5ABF73A1
+RWShc79aTuKg5LsZC56pzkPQAVClq17QOH5rTBPT0AsBv+ZupohN1I/y
+$ python3 -c "
+import base64
+blob = 'RWShc79aTuKg5LsZC56pzkPQAVClq17QOH5rTBPT0AsBv+ZupohN1I/y'
+d = base64.b64decode(blob)
+print('keyid raw, encounter order:', d[2:10].hex())
+print('keyid raw, reversed:', d[2:10][::-1].hex())
+"
+keyid raw, encounter order: a173bf5a4ee2a0e4
+keyid raw, reversed: e4a0e24e5abf73a1
+```
+The comment's `E4A0E24E5ABF73A1` is the reversed form (`e4a0e24e5abf73a1`, upper-cased), not the
+raw encounter-order bytes. **Corrected transform, in one sentence: the 16-hex `key_id` string
+(wherever it appears — a public key's comment line, or `entry.json`'s `key_id` field) is the raw
+8 key-id bytes read in reverse order, then hex-encoded uppercase — not the raw bytes in the order
+they occur in the blob.** Also signed a test file with the same demo key to check line 2's
+embedded key id (the byte-layout table's bytes 2-9):
+```
+$ minisign -Sm test.txt -s demo.key
+$ python3 -c "
+import base64
+line2 = 'RUShc79aTuKg5EdkVBtxmF8g+DwLh9W+7nTFWRe9NPq2HExH7vlPv4BrfZS54OFFgKbPXho6ZiaFL9WXGuQ7NeIHJNtacCv7OQU='
+d = base64.b64decode(line2)
+print('keyid raw, encounter order:', d[2:10].hex())
+"
+keyid raw, encounter order: a173bf5a4ee2a0e4
+```
+Line 2's embedded key id is the *unreversed* raw bytes (identical to the public key blob's own raw
+bytes) — so a verifier comparing `entry.json`'s `key_id` (reversed form) against line 2's embedded
+id must reverse line 2's raw bytes the same way before comparing. Rewrote "Deriving `key_id`" in
+`contracts/signature-format.md` with both demonstrations pasted in place of the old assertion, and
+rewrote rule 6 (the `key_id`-mismatch rejection rule) to state the transform explicitly and name
+what happens if it is skipped: rule 6, unfixed, rejected every correctly signed artefact this
+platform could ever produce, because task 008's signing secret was set this morning and a verifier
+built from the old text would have applied exactly the broken comparison. No other rule or byte
+offset in the document changed.
+
+**BLOCKING — `contracts/archive-layout.md`, the `git archive` root-naming claim was false.** The
+document said plain `git archive` "names the root after the ref and commit by default (e.g.
+`mymod-a1b2c3d`)." Verified in this environment that this is false:
+```
+$ git archive --format=tar HEAD | tar -t
+a.txt
+$ git archive --format=tar --prefix=mymod-a1b2c3d/ HEAD | tar -t
+mymod-a1b2c3d/
+mymod-a1b2c3d/a.txt
+```
+Plain `git archive` puts files at the tar's true top level with no root directory at all — exactly
+the shape this same document's "Malformed archives" section rejects. A root only appears with an
+explicit `--prefix=<name>/` argument; `git archive` never invents one. Corrected the "Root
+convention" section to state this, pasted the two-command demonstration above in place of the old
+assertion, and added the explicit consequence: if the pipeline uses `git archive`, it must pass a
+`--prefix`, or the archive it produces is malformed under this document's own rule. Corrected the
+matching claim repeated in the Questions section ("ADR-0103 favours the boring default (`git
+archive`'s own naming)") to "a fixed literal `--prefix` the pipeline chooses once and reuses," since
+there is no naming default to defer to. Mirrored the same correction into this log's own Questions
+item 1 above, so neither copy of that question still asserts the false claim.
+
+Re-ran the test suite, unmodified, once more after both fixes:
+```
+$ python3 -m unittest discover -s tests/contracts -v
+...
+Ran 23 tests in 0.009s
+
+OK
+```
+23 tests, all pass.
+
+**Files changed this round:** `contracts/signature-format.md`, `contracts/archive-layout.md`,
+`docs/tasks/025-boundary-contracts.md` (this file). No other file in scope needed a change;
+`rebuild-trigger.md` was re-checked by the coordinator against GitHub's published REST API
+description and left alone, per the escalation brief — not touched here.

@@ -47,10 +47,29 @@ the form `<root>/<rest>`, where `<root>` is the *same* string for every entry in
 satisfy this document and must be rejected by a reader — see "Malformed archives" below.
 
 **`<root>`'s literal string value is not specified by this document and a reader must not depend
-on it.** `git archive` (a plausible, boring implementation choice under ADR-0103) names the root
-after the ref and commit by default (e.g. `mymod-a1b2c3d`); nothing requires the pipeline to use
-that tool or that naming, and nothing here promises a name matching the mod's `id`, its `version`,
-or its `commit` hash. **A reader must determine `<root>` at extraction time by inspecting the
+on it.** **Corrected, fix round 2 (2026-09-05): plain `git archive` does *not* name a root by
+default — it puts every file at the tar's true top level, with no root directory at all, which this
+document's own "Malformed archives" section rejects.** Demonstrated in this environment:
+
+```
+$ git archive --format=tar HEAD | tar -t
+a.txt
+$ git archive --format=tar --prefix=mymod-a1b2c3d/ HEAD | tar -t
+mymod-a1b2c3d/
+mymod-a1b2c3d/a.txt
+```
+
+A root directory only appears when the archiving command is given an explicit `--prefix=<name>/`
+argument — `git archive` never invents one on its own. (The rooted, `<name>-<commit>`-style archive
+people may remember is GitHub's server-side "codeload" archive download, a different mechanism
+from the `git archive` command, and not what this document is describing.) **If the pipeline uses
+`git archive` to build this archive, it must pass an explicit `--prefix=<name>/`** — any non-empty
+value satisfies this document, since the exact string is unspecified and a reader determines it
+from the archive itself, as stated next — but *some* `--prefix` is required, because without one
+the produced archive has files at the true top level and this document rejects it as malformed.
+Nothing requires the pipeline to use `git archive` at all, or any particular prefix value, and
+nothing here promises a name matching the mod's `id`, its `version`, or its `commit` hash. **A
+reader must determine `<root>` at extraction time by inspecting the
 archive's own entries — read the first path component of any entry, or the top-level directory
 entry if the archive carries one — never by constructing it from fields already known from
 `entry.json` or the manifest.** A reader that assumes `<root>` equals, say, `<name>-<version>` and
@@ -195,12 +214,17 @@ than forced into the per-screenshot missing-file path.
 ## Questions
 
 - **Whether the pipeline must normalise `<root>` to a fixed, predictable name (e.g. always
-  `source/`) rather than leaving it to whatever the archiving tool defaults to.** No ADR read for
-  this task requires a specific root name, and ADR-0103 favours the boring default (`git archive`'s
-  own naming) over inventing a normalisation step with no stated need. **Assumed meanwhile:** the
-  root name is arbitrary and every reader determines it from the archive itself, as stated above.
-  **What rests on this:** if a future contract or tool needs to predict the root name without
-  opening the archive first, that tool cannot be written against this document as it stands and
+  `source/`) rather than leaving it to whatever value the pipeline's own `--prefix` argument
+  happens to pass.** (Corrected, fix round 2: plain `git archive` has no naming default of its own
+  to fall back on — see the "Root convention" section above — so there is no "`git archive`'s own
+  naming" to defer to here; whatever the pipeline picks, it must pick *something* and pass it
+  explicitly.) No ADR read for this task requires a specific root name, and ADR-0103 favours the
+  boring default (any fixed literal `--prefix` the pipeline chooses once and reuses, over inventing
+  a normalisation or derivation step with no stated need) — but this document does not fix which
+  literal that is. **Assumed meanwhile:** the root name is arbitrary and every reader determines it
+  from the archive itself, as stated above. **What rests on this:** if a future contract or tool
+  needs to predict the root name without opening the archive first, that tool cannot be written
+  against this document as it stands and
   this question would need an answer first.
 - **Whether a `README.md` deeper than the archive root (e.g. `<root>/docs/README.md`) is ever
   considered when the top-level one is absent.** No ADR states a fallback search order, and
