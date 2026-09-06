@@ -36,9 +36,10 @@ build, all reading these files. See `docs/tasks/006-contracts.md`, `docs/tasks/
 above (`entry.schema.json`, `page.schema.json`, `manifest.schema.json`,
 `validation-report.schema.json`) minus `reserved-namespaces.json` (its examples are the one real
 file plus the schema in `tests/contracts/`, not a separate examples directory). **None of the
-seven prose `.md` documents** — `append-only.rules.md` and task 025's six (`artifact-naming.md`,
+eight prose `.md` documents** — `append-only.rules.md`, task 025's six (`artifact-naming.md`,
 `signature-format.md`, `archive-layout.md`, `rebuild-trigger.md`, `site-output.md`,
-`url-scheme.md`) — **have a schema of their own to validate examples against**, so none has an
+`url-scheme.md`), and task 032's `ownership.md` — **have a schema of their own to validate
+examples against**, so none has an
 examples directory; each states its own worked examples and counter-examples inline instead,
 where one is useful.
 
@@ -70,12 +71,14 @@ free-form string or a generic URL pattern, never an enum naming specific hosts �
 
 ## What is deliberately not here
 
-- **No checking logic, in either task.** No file here reads a PR diff, calls a git host's API,
-  extracts a real archive, verifies a real signature, or enforces anything at merge or build time.
-  Task 006 and task 025 are both prose-and-schema only; task 007 builds the registry CI gates and
-  diff checker, task 008 the build pipeline (archiving, signing), task 009 the site build
-  (archive extraction, rendering, deploy) — all of them coding against the contracts indexed
-  above.
+- **No checking logic, in any of the three tasks.** No file here reads a PR diff, calls a git
+  host's API, extracts a real archive, verifies a real signature, or enforces anything at merge or
+  build time. Task 006, task 025 and task 032 are all prose-and-schema only (the live `gh api` /
+  `curl` commands pasted in `contracts/ownership.md` are one-off verification of environmental
+  facts made *while writing* the document, not checking logic the document itself runs); task 007
+  builds the registry CI gates and diff checker, task 008 the build pipeline (archiving, signing),
+  task 009 the site build (archive extraction, rendering, deploy) — all of them coding against the
+  contracts indexed above.
 - **No full `mod.lua` manifest.** `manifest.schema.json` is deliberately the ADR-0030 subset this
   task's acceptance criterion 4 names — fields meaningful only with a kernel (`declares`,
   `depends`, `permissions`, `server`/`client` blocks, …) are future work, once the kernel exists.
