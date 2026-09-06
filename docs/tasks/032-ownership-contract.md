@@ -1245,3 +1245,31 @@ identity only. No `gh auth token`, no config reading, no account switching, noth
 **Booked for Ludwig, unchanged:** Question 4 (who may open a takedown PR) and Question 3
 (case-folding, FYI). Finding 7 additionally suggests a **doctrine note** on verify-script scope pins
 rotting at merge — `006-verify.sh` is already red on `main` for the same reason.
+
+## Addendum to review round 2 — B1's fixture is verified live by two independent callers (2026-09-06)
+
+The reviewer's one network-blocked gap closed when GitHub's unauthenticated quota reset. It ran the
+three probes; **the manager then ran them again independently**, and both match
+`docs/tasks/032-b1-fixtures.json`'s `recorded_output` values byte-for-byte:
+
+```
+members no-follow : status=302 redirect=https://api.github.com/organizations/324218296/public_members/womcraft
+members follow    : final_status=404
+memberships       : status=401
+```
+
+Two things this closes, so round 3 does not re-derive them:
+
+1. **The recorded fixture is faithful** — not a plausible-looking transcript, but what GitHub returns
+   today, confirmed by two callers other than the one that captured it.
+2. **The advisory/deterministic separation holds in BOTH directions.** The reviewer has now observed
+   the advisory section *skip* (quota exhausted, and separately with `gh` masked) **and** *pass*
+   (quota available, `ADVISORY-PASS` ×3), with `FAILURES` untouched and exit 0 in every case. That
+   was the thing to check rather than trust, and the label is accurate.
+
+**The verdict is unchanged: BLOCKING.** All five findings are in text and artefact logic and none of
+them is network-dependent. The reviewer's remaining "could not verify" items — `gh api`/`octokit`
+redirect-following, the Actions `GITHUB_TOKEN`'s membership status, GitHub's documented `403` for an
+authenticated non-member, numeric-id reuse, and PR #4's server-side state — stand as not verified,
+for the reasons it gave. **The first three are unresolvable here without a second identity, which
+CLAUDE.md rule 11 forbids; they must stay marked, not settled.**
