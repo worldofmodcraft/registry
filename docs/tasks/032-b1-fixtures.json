@@ -1,0 +1,32 @@
+{
+  "_meta": {
+    "purpose": "Recorded HTTP evidence backing contracts/ownership.md's B1 claims about GET /orgs/{org}/members/{username} and GET /orgs/{org}/memberships/{username} for an UNAUTHENTICATED caller. docs/tasks/032-verify.sh's B1 checks assert that the document's pasted transcripts match this recorded evidence, rather than making a live network call inside the deterministic verify run (task 032 fix round 2, finding F-B: a live call inside the artefact is neither portable nor deterministic -- MANAGER.md Section 2c rule 4).",
+    "captured_at": "2026-09-06T12:27:39Z",
+    "captured_by": "task 032 fix round 2 (implementer, session 2026-09-06), from this worktree, using plain unauthenticated curl -- no token, no gh auth, no credential of any kind (CLAUDE.md rule 11)",
+    "against": "GitHub's real, public REST API at https://api.github.com. Org 'worldofmodcraft' (numeric id 324218296, see contracts/ownership.md's 'What identity is compared' section). User 'womcraft' -- a real org member, chosen because the document's own 'Member-caller branch' transcript already names this account, so both branches (member-caller, in the document; non-member/unauthenticated-caller, here) describe the same underlying membership fact.",
+    "how_to_recapture": [
+      "curl -s -m 10 -o /dev/null -w 'status=%{http_code} redirect=%{redirect_url}\\n' https://api.github.com/orgs/worldofmodcraft/members/womcraft",
+      "curl -s -m 10 -L -o /dev/null -w 'final_status=%{http_code}\\n' https://api.github.com/orgs/worldofmodcraft/members/womcraft",
+      "curl -s -m 10 -o /dev/null -w 'status=%{http_code} redirect=%{redirect_url}\\n' https://api.github.com/orgs/worldofmodcraft/memberships/womcraft"
+    ],
+    "caveat_guardrail_6b": "This is GitHub's live, real behaviour at the moment of capture, not a contractual guarantee from GitHub -- it could change. Re-running the three commands above and diffing the result against this file's recorded values is exactly what docs/tasks/032-verify.sh's ADVISORY live section does when network is reachable; that section is informational only and never gates the verdict or the exit code (fix round 2, finding F-B). If GitHub's behaviour ever changes, re-capture this file (update 'captured_at' and the three recorded blocks below) as its own reviewed change -- do not silently edit only the numbers.",
+    "why_unauthenticated_and_not_member_caller": "The member-caller branch (a caller that is itself an org member, e.g. the 'gh' identity active in this environment) is already exercised live, advisory-only, by docs/tasks/032-verify.sh's B6 section (which diffs it against contracts/ownership.md's own pasted 'gh api ... -i' transcript). This fixture covers only the non-member/unauthenticated branch, which is the one whose live-network dependency caused finding F-B (GitHub's 60-request/hour unauthenticated quota is shared per source IP and is exhausted easily, including by this project's own mutation-testing rounds)."
+  },
+  "unauthenticated_members_endpoint": {
+    "command": "curl -s -m 10 -o /dev/null -w 'status=%{http_code} redirect=%{redirect_url}\\n' https://api.github.com/orgs/worldofmodcraft/members/womcraft",
+    "recorded_output": "status=302 redirect=https://api.github.com/organizations/324218296/public_members/womcraft",
+    "status": 302,
+    "redirect_target": "https://api.github.com/organizations/324218296/public_members/womcraft"
+  },
+  "unauthenticated_members_endpoint_redirect_followed": {
+    "command": "curl -s -m 10 -L -o /dev/null -w 'final_status=%{http_code}\\n' https://api.github.com/orgs/worldofmodcraft/members/womcraft",
+    "recorded_output": "final_status=404",
+    "final_status": 404
+  },
+  "unauthenticated_memberships_endpoint": {
+    "command": "curl -s -o /dev/null -w 'status=%{http_code}\\n' https://api.github.com/orgs/worldofmodcraft/memberships/womcraft",
+    "recorded_output": "status=401",
+    "status": 401,
+    "redirect_target": ""
+  }
+}

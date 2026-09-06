@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# 032-verify.sh -- the runnable verification artefact for task 032, fix round 1.
+# 032-verify.sh -- the runnable verification artefact for task 032.
 #
 # MANAGER.md Section 2c: "Any task whose acceptance criteria are command-based ships
 # docs/tasks/NNN-verify.sh, committed and executable." Round 1's own finding B6 is the
@@ -9,38 +9,58 @@
 # script makes that kind of fabrication detectable by construction.
 #
 # Usage:  ./docs/tasks/032-verify.sh          (run from the worktree root, no arguments)
-# Exit:   0 if every check passed, non-zero otherwise (the failure count).
+# Exit:   0 if every check that decides the verdict passed, non-zero otherwise (the failure
+#         count). The exit code depends ONLY on the deterministic checks below -- see
+#         "FIX ROUND 2" for why that is now a hard guarantee, not just a convention.
 #
 # BOUNDARY -- read before adding anything here.
-# This script verifies task 032's fix-round-1 acceptance criteria. It implements NO ownership
-# check: it never reads a real PR diff, never decides whether a submitter is authorised to touch
-# a namespace, and never enforces anything. That is task 007's job and is forbidden here. What
+# This script verifies task 032's acceptance criteria. It implements NO ownership check: it
+# never reads a real PR diff, never decides whether a submitter is authorised to touch a
+# namespace, and never enforces anything. That is task 007's job and is forbidden here. What
 # this script does is exactly three kinds of thing:
 #   (1) assert textual facts about contracts/ownership.md and the two other prose files this
-#       round touched (docs/tasks/032-ownership-contract.md, docs/contracts/README.md) -- these
+#       task touched (docs/tasks/032-ownership-contract.md, docs/contracts/README.md) -- these
 #       are prose contracts; nothing executes them, so "the document says X" is the only kind of
 #       proof available for their content;
-#   (2) run the real, live commands this document's own transcripts claim to have run (gh api,
-#       curl, a throwaway git commit) and diff their output against what is pasted in the
-#       document -- NETWORK REQUIRED for this section; see "Network" below;
+#   (2) cross-check the document's pasted transcripts against RECORDED FIXTURES -- files
+#       committed under docs/tasks/, captured once from real commands, carrying inline when/how/
+#       against-what metadata (see "FIX ROUND 2" below) -- and, only as an ADVISORY bonus, a live
+#       re-run of the same commands, never required for the verdict;
 #   (3) run a structural check, in Python, against the pre-fix blob of contracts/ownership.md
-#       (pinned at commit fcde6d5, the commit this fix round started from) and against the
-#       current working tree, to prove finding B6's fabrication would have been caught by a
-#       check that existed before the fix (MANAGER.md Section 2c rule 5).
+#       (pinned at commit fcde6d5, the commit fix round 1 started from) and against the current
+#       working tree, to prove finding B6's fabrication would have been caught by a check that
+#       existed before the fix (MANAGER.md Section 2c rule 5).
 #
-# NETWORK. Sections "B1" and "B6-live" make real, unauthenticated HTTPS requests to
-# api.github.com (curl) and authenticated ones via the `gh` CLI (using whatever identity is
-# already active in this environment -- this script never authenticates as anything, per
-# CLAUDE.md rule 11). If the network or `gh` auth is unavailable, those specific checks report
-# NETWORK-SKIP (not PASS, not silently absent) and are counted separately from FAILURES, so a
-# disconnected run cannot be mistaken for a clean one.
+# FIX ROUND 2 (2026-09-06) -- why the design changed, and what "advisory" means here.
+# The manager's independent re-run (finding F-B, logged below "Manager verification of fix round
+# 1") reproduced the artefact reporting "ALL CHECKS PASSED" / exit 0 while B1's checks -- the
+# round's headline finding, the one that would have rejected every legitimate reserved-namespace
+# PR -- were silently SKIPPED for an unauthenticated GitHub API rate limit exhaustion (60
+# requests/hour, shared per source IP, easily exhausted by this project's own mutation testing).
+# A live network call inside an artefact that must re-run identically on any machine at any hour
+# is neither portable nor deterministic (Section 2c rule 4), and a skip that still yields a green
+# verdict is exactly the "asserted, not demonstrated" failure shape Section 2c exists to close.
 #
-# DETERMINISM. Text-based checks (contracts/ownership.md, the two other prose files) are fully
-# deterministic: same repository content, same result, on any machine, no network. Live-API
-# checks are pinned to the extent GitHub's API allows (fixed org, fixed repo, fixed PR number,
-# fixed known account) but their *availability* depends on network reachability and the active
-# `gh` identity's real, current membership state -- both are properties of the environment this
-# script runs in, not of this repository, and are reported as such rather than silently retried.
+# The fix: B1's evidence is now RECORDED FIXTURES (docs/tasks/032-b1-fixtures.json), captured
+# once from real, unauthenticated curl calls, carrying their own capture date, exact command, and
+# target inline (so a reader can re-capture and diff). The checks that decide this script's exit
+# code compare the document's pasted transcripts against that committed fixture -- a pure text
+# comparison, zero network calls, same result on any machine at any hour. A live re-run of the
+# same commands is kept as a clearly-labelled ADVISORY section: printed for extra confidence when
+# network is reachable, but it NEVER increments the failure count and NEVER gates the exit code,
+# in either direction -- a live check that could pass or fail unpredictably has no business
+# deciding a verdict that must be reproducible. The same treatment is applied to the B6 live
+# `gh api` diff section for the identical reason: it depends on an active `gh` identity, which is
+# not guaranteed on every machine, and B6's actual defect-catching power lives entirely in the
+# deterministic pinned-blob check (B6.1-B6.4) below, not in the live diff.
+#
+# DETERMINISM. Every check that contributes to $FAILURES (and therefore to the exit code) reads
+# only committed repository content -- contracts/ownership.md, the fixture file, the pinned git
+# blob, the local test suite -- and makes no network call. Same repository content, same result,
+# on any machine, with or without network, with or without an active `gh` identity. The ADVISORY
+# sections make real network/`gh` calls when available and report drift for a human to notice;
+# their availability depends on the environment, and that is exactly why they cannot be load-
+# bearing for the verdict.
 
 set -u
 set -o pipefail
@@ -48,14 +68,24 @@ set -o pipefail
 DOC="contracts/ownership.md"
 TASKLOG="docs/tasks/032-ownership-contract.md"
 CONTRACTS_README="docs/contracts/README.md"
-PREFIX_BLOB="fcde6d5:contracts/ownership.md"   # the commit this fix round started from
-ROUND_BASE="fcde6d5"
+B1_FIXTURE="docs/tasks/032-b1-fixtures.json"
+PREFIX_BLOB="fcde6d5:contracts/ownership.md"   # the commit fix round 1 started from
+ROUND2_BASE="38600d2"   # the commit fix round 2 started from (manager's F-A/F-B verification)
 FAILURES=0
-NETSKIPS=0
+ADVISORY_OK=0
+ADVISORY_DRIFT=0
+ADVISORY_SKIP=0
 
 pass() { printf 'PASS  %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n' "$1"; FAILURES=$((FAILURES + 1)); }
-netskip() { printf 'SKIP  %s -- network/gh-auth unavailable, not counted as pass or fail\n' "$1"; NETSKIPS=$((NETSKIPS + 1)); }
+# ADVISORY: for live/network/gh-auth-dependent checks only. These NEVER touch $FAILURES in
+# either direction -- not on drift, not on skip -- because a check whose availability or outcome
+# depends on the network or an active `gh` identity cannot be allowed to decide a verdict that
+# must be reproducible on any machine at any hour (fix round 2, finding F-B). They exist purely
+# to give a human extra confidence when the environment permits it.
+advise_pass() { printf 'ADVISORY-PASS  %s\n' "$1"; ADVISORY_OK=$((ADVISORY_OK + 1)); }
+advise_drift() { printf 'ADVISORY-DRIFT %s\n' "$1"; ADVISORY_DRIFT=$((ADVISORY_DRIFT + 1)); }
+advise_skip() { printf 'ADVISORY-SKIP  %s -- network/gh-auth unavailable, advisory only, never affects the verdict or exit code\n' "$1"; ADVISORY_SKIP=$((ADVISORY_SKIP + 1)); }
 
 expect_hits() {
     local label="$1" pattern="$2" file="${3:-$DOC}" hits
@@ -175,98 +205,184 @@ else
 fi
 
 # --------------------------------------------------------------------------------
-section "B6 -- live re-run of every command pasted in the document, diffed against the paste"
+section "B6 -- ADVISORY: live re-run of every command pasted in the document, diffed against the paste (never gates the verdict -- fix round 2)"
+# B6's actual defect-catching power is the deterministic pinned-blob check above (B6.1-B6.4),
+# which needs no network and cannot be skipped. This section is a bonus freshness check: it
+# depends on an active `gh` identity, which is not guaranteed on every machine, so -- per the
+# same fix-round-2 design applied to B1 below -- none of its outcomes touch $FAILURES.
 
 if ! gh auth status > /dev/null 2>&1; then
-    netskip "B6.5 gh auth status -- no active gh identity, live gh api checks skipped"
+    advise_skip "B6.5 gh auth status -- no active gh identity, live gh api checks skipped"
 else
     LIVE_PR3=$(gh api repos/worldofmodcraft/registry/pulls/3 --jq '{merged, user:{login:.user.login,id:.user.id}}' 2>/dev/null)
     DOC_PR3=$(grep -A1 "pulls/3 --jq '{merged, user:{login:.user.login,id:.user.id}}'" "$DOC" | tail -1)
     printf '  $ gh api repos/worldofmodcraft/registry/pulls/3 --jq ...\n  live: %s\n  doc:  %s\n' "$LIVE_PR3" "$DOC_PR3"
-    if [ "$LIVE_PR3" = "$DOC_PR3" ]; then
-        pass "B6.6 live PR#3 shape matches the document's paste exactly"
+    if [ -n "$LIVE_PR3" ] && [ "$LIVE_PR3" = "$DOC_PR3" ]; then
+        advise_pass "B6.6 live PR#3 shape matches the document's paste exactly"
     else
-        fail "B6.7 live PR#3 shape ($LIVE_PR3) does not match the document's paste ($DOC_PR3)"
+        advise_drift "B6.7 live PR#3 shape ($LIVE_PR3) does not match the document's paste ($DOC_PR3)"
     fi
 
     LIVE_ORG=$(gh api orgs/worldofmodcraft --jq '{login,id,type}' 2>/dev/null)
     DOC_ORG=$(grep -A1 "gh api orgs/worldofmodcraft --jq '{login,id,type}'" "$DOC" | tail -1)
     printf '  $ gh api orgs/worldofmodcraft --jq ...\n  live: %s\n  doc:  %s\n' "$LIVE_ORG" "$DOC_ORG"
-    if [ "$LIVE_ORG" = "$DOC_ORG" ]; then
-        pass "B6.8 live org id/login/type matches the document's paste exactly"
+    if [ -n "$LIVE_ORG" ] && [ "$LIVE_ORG" = "$DOC_ORG" ]; then
+        advise_pass "B6.8 live org id/login/type matches the document's paste exactly"
     else
-        fail "B6.9 live org id/login/type ($LIVE_ORG) does not match the document's paste ($DOC_ORG)"
+        advise_drift "B6.9 live org id/login/type ($LIVE_ORG) does not match the document's paste ($DOC_ORG)"
     fi
 
     LIVE_REPO=$(gh api repos/worldofmodcraft/registry --jq '{full_name,owner:{login:.owner.login,id:.owner.id,type:.owner.type}}' 2>/dev/null)
     DOC_REPO=$(grep -A1 "gh api repos/worldofmodcraft/registry --jq '{full_name,owner:" "$DOC" | tail -1)
     printf '  $ gh api repos/worldofmodcraft/registry --jq ...\n  live: %s\n  doc:  %s\n' "$LIVE_REPO" "$DOC_REPO"
-    if [ "$LIVE_REPO" = "$DOC_REPO" ]; then
-        pass "B6.10 live repo-owner shape matches the document's paste exactly (including nested key order)"
+    if [ -n "$LIVE_REPO" ] && [ "$LIVE_REPO" = "$DOC_REPO" ]; then
+        advise_pass "B6.10 live repo-owner shape matches the document's paste exactly (including nested key order)"
     else
-        fail "B6.11 live repo-owner shape ($LIVE_REPO) does not match the document's paste ($DOC_REPO)"
+        advise_drift "B6.11 live repo-owner shape ($LIVE_REPO) does not match the document's paste ($DOC_REPO)"
     fi
 
     LIVE_MEMBER_STATUS=$(gh api orgs/worldofmodcraft/members/womcraft -i 2>/dev/null | head -1 | tr -d '\r')
     if [ "$LIVE_MEMBER_STATUS" = "HTTP/2.0 204 No Content" ]; then
-        pass "B6.12 live member-caller membership check for womcraft returns 204 (matches the document)"
+        advise_pass "B6.12 live member-caller membership check for womcraft returns 204 (matches the document)"
     else
-        fail "B6.13 live member-caller membership check returned '$LIVE_MEMBER_STATUS', expected 'HTTP/2.0 204 No Content'"
+        advise_drift "B6.13 live member-caller membership check returned '$LIVE_MEMBER_STATUS', expected 'HTTP/2.0 204 No Content'"
     fi
 
     LIVE_GHOST=$(gh api users/ghost --jq '{login,id,type}' 2>/dev/null)
     DOC_GHOST=$(grep -A1 "gh api users/ghost --jq '{login,id,type}'" "$DOC" | tail -1)
     printf '  $ gh api users/ghost --jq ...\n  live: %s\n  doc:  %s\n' "$LIVE_GHOST" "$DOC_GHOST"
-    if [ "$LIVE_GHOST" = "$DOC_GHOST" ]; then
-        pass "B6.14 live ghost-account shape matches the document's paste exactly"
+    if [ -n "$LIVE_GHOST" ] && [ "$LIVE_GHOST" = "$DOC_GHOST" ]; then
+        advise_pass "B6.14 live ghost-account shape matches the document's paste exactly"
     else
-        fail "B6.15 live ghost-account shape ($LIVE_GHOST) does not match the document's paste ($DOC_GHOST)"
+        advise_drift "B6.15 live ghost-account shape ($LIVE_GHOST) does not match the document's paste ($DOC_GHOST)"
     fi
 fi
 
 # --------------------------------------------------------------------------------
-section "B1 -- the org-membership endpoint: live, unauthenticated (no credential used)"
+section "B1 -- the org-membership endpoint: recorded fixture, deterministic, no network required (fix round 2, finding F-B)"
+# This is the section that used to make a live, unauthenticated curl call and SKIP -- silently,
+# with the verdict unaffected -- when GitHub's 60-request/hour unauthenticated quota was
+# exhausted (finding F-B). The checks below never touch the network: they read the committed
+# fixture docs/tasks/032-b1-fixtures.json (captured once, with inline when/how/against-what
+# metadata) and compare it against the document's own pasted transcripts. Same result, any
+# machine, any hour, network or none.
+
+if [ ! -f "$B1_FIXTURE" ]; then
+    fail "B1.0 fixture file $B1_FIXTURE is missing -- B1's evidence has nowhere to be recorded"
+else
+    python3 - "$B1_FIXTURE" "$DOC" <<'PY'
+import json, re, sys
+
+fixture_path, doc_path = sys.argv[1], sys.argv[2]
+failures = 0
+
+def pf(label, ok, detail=""):
+    global failures
+    if ok:
+        print("PASS  %s" % label)
+    else:
+        failures += 1
+        print("FAIL  %s%s" % (label, (" -- " + detail) if detail else ""))
+
+with open(fixture_path) as f:
+    fx = json.load(f)
+
+# --- Fixture provenance: a fixture with no capture metadata is not evidence (round-2 spec). ---
+meta = fx.get("_meta", {})
+required_meta = ["captured_at", "captured_by", "against", "how_to_recapture"]
+missing = [k for k in required_meta if not meta.get(k)]
+pf("B1.0a fixture carries its own capture date/command/target metadata inline",
+   not missing, "missing keys: %s" % missing)
+
+with open(doc_path) as f:
+    doc = f.read()
+
+def doc_has_line(literal):
+    return literal in doc
+
+# --- Probe 1: unauthenticated GET /orgs/{org}/members/{username} -> 302 + redirect target. ---
+p1 = fx["unauthenticated_members_endpoint"]
+print("  fixture (captured %s): %s" % (meta.get("captured_at", "?"), p1["recorded_output"]))
+pf("B1.2 fixture records status=302 for the unauthenticated members-endpoint probe",
+   p1["status"] == 302, "fixture says status=%s" % p1["status"])
+pf("B1.3 the document's pasted transcript matches the fixture's recorded status=302/redirect line exactly",
+   doc_has_line(p1["recorded_output"]), "recorded_output=%r not found verbatim in %s" % (p1["recorded_output"], doc_path))
+pf("B1.4 the fixture's redirect target is the public_members endpoint",
+   "public_members" in p1["redirect_target"], "redirect_target=%r" % p1["redirect_target"])
+
+# --- Probe 2: following the redirect (default client behaviour) -> 404. ---
+p2 = fx["unauthenticated_members_endpoint_redirect_followed"]
+print("  fixture (captured %s): %s" % (meta.get("captured_at", "?"), p2["recorded_output"]))
+pf("B1.5 fixture records final_status=404 after following the redirect",
+   p2["final_status"] == 404, "fixture says final_status=%s" % p2["final_status"])
+pf("B1.6 the document's pasted transcript matches the fixture's recorded final_status=404 line exactly",
+   doc_has_line(p2["recorded_output"]), "recorded_output=%r not found verbatim in %s" % (p2["recorded_output"], doc_path))
+
+# --- Probe 3: unauthenticated GET /orgs/{org}/memberships/{username} -> 401 (refuses outright). ---
+p3 = fx["unauthenticated_memberships_endpoint"]
+print("  fixture (captured %s): %s" % (meta.get("captured_at", "?"), p3["recorded_output"]))
+pf("B1.7 fixture records status=401 for the unauthenticated memberships-endpoint probe",
+   p3["status"] == 401, "fixture says status=%s" % p3["status"])
+pf("B1.8 the document's pasted transcript matches the fixture's recorded status=401 line exactly",
+   doc_has_line(p3["recorded_output"]), "recorded_output=%r not found verbatim in %s" % (p3["recorded_output"], doc_path))
+
+sys.exit(1 if failures else 0)
+PY
+    PYRC=$?
+    if [ $PYRC -ne 0 ]; then
+        fail "B1.9 one or more fixture-vs-document checks above failed (see the FAIL line(s) printed above, python exit=$PYRC)"
+    fi
+fi
+
+# --------------------------------------------------------------------------------
+section "B1 -- ADVISORY: live re-run of the same three probes against real GitHub, diffed against the fixture (never gates the verdict)"
+# Kept for a human's extra confidence that the recorded fixture still matches GitHub's real,
+# current behaviour. Never required, never load-bearing: whether this section runs, skips, or
+# finds drift has zero effect on $FAILURES or the exit code -- that is the entire point of the
+# fix (finding F-B). To re-capture the fixture itself (not just check for drift), see
+# docs/tasks/032-b1-fixtures.json's own "how_to_recapture" field.
 
 RATE_REMAINING=$(curl -s -m 10 https://api.github.com/rate_limit 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('resources',{}).get('core',{}).get('remaining','?'))" 2>/dev/null || echo "?")
 if ! curl -s -m 10 -o /dev/null https://api.github.com 2>/dev/null; then
-    netskip "B1.1 curl reachability to api.github.com"
+    advise_skip "B1-live reachability to api.github.com"
 elif [ "$RATE_REMAINING" = "0" ]; then
-    # GitHub's unauthenticated rate limit is 60 requests/hour per source IP. This script's own
-    # mutation-testing round (README, this file's own log) made enough unauthenticated requests
-    # in one run to exhaust it -- a real, demonstrated hazard, not a hypothetical one. A 403 here
-    # means "this machine asked GitHub too many times recently," not "the document is wrong," so
-    # it is reported as a skip, not a failure, with the exact remaining-quota reading shown.
+    # GitHub's unauthenticated rate limit is 60 requests/hour per source IP -- a real,
+    # demonstrated hazard (this project's own mutation testing exhausted it more than once).
+    # This is exactly the condition finding F-B was about; the difference now is that hitting
+    # it only skips an ADVISORY section, never the verdict.
     printf '  $ curl https://api.github.com/rate_limit -> core.remaining=%s\n' "$RATE_REMAINING"
-    netskip "B1.2..B1.9 unauthenticated GitHub API rate limit exhausted (core.remaining=0) -- re-run after the reset time GitHub reports, or from a different source IP"
+    advise_skip "B1-live unauthenticated GitHub API rate limit exhausted (core.remaining=0) -- re-run after the reset time GitHub reports, or from a different source IP"
 else
     printf '  $ curl https://api.github.com/rate_limit -> core.remaining=%s\n' "$RATE_REMAINING"
+    FX_STATUS1=$(python3 -c "import json; print(json.load(open('$B1_FIXTURE'))['unauthenticated_members_endpoint']['status'])")
+    FX_REDIRECT1=$(python3 -c "import json; print(json.load(open('$B1_FIXTURE'))['unauthenticated_members_endpoint']['redirect_target'])")
+    FX_STATUS2=$(python3 -c "import json; print(json.load(open('$B1_FIXTURE'))['unauthenticated_members_endpoint_redirect_followed']['final_status'])")
+    FX_STATUS3=$(python3 -c "import json; print(json.load(open('$B1_FIXTURE'))['unauthenticated_memberships_endpoint']['status'])")
+
     UNAUTH_STATUS=$(curl -s -m 10 -o /dev/null -w '%{http_code}' https://api.github.com/orgs/worldofmodcraft/members/womcraft)
     UNAUTH_REDIRECT=$(curl -s -m 10 -o /dev/null -w '%{redirect_url}' https://api.github.com/orgs/worldofmodcraft/members/womcraft)
-    printf '  $ curl (unauthenticated) -> status=%s redirect=%s\n' "$UNAUTH_STATUS" "$UNAUTH_REDIRECT"
-    if [ "$UNAUTH_STATUS" = "302" ]; then
-        pass "B1.2 unauthenticated caller to /orgs/{org}/members/{username} gets 302, not a direct 204/404"
+    printf '  $ curl (unauthenticated) -> status=%s redirect=%s   [fixture: status=%s redirect=%s]\n' \
+        "$UNAUTH_STATUS" "$UNAUTH_REDIRECT" "$FX_STATUS1" "$FX_REDIRECT1"
+    if [ "$UNAUTH_STATUS" = "$FX_STATUS1" ] && [ "$UNAUTH_REDIRECT" = "$FX_REDIRECT1" ]; then
+        advise_pass "B1-live.1 live unauthenticated members-endpoint probe matches the recorded fixture"
     else
-        fail "B1.3 unauthenticated caller got status=$UNAUTH_STATUS, expected 302"
+        advise_drift "B1-live.1 live unauthenticated members-endpoint probe (status=$UNAUTH_STATUS redirect=$UNAUTH_REDIRECT) drifted from the fixture (status=$FX_STATUS1 redirect=$FX_REDIRECT1) -- consider re-capturing"
     fi
-    case "$UNAUTH_REDIRECT" in
-        *public_members*) pass "B1.4 the redirect target is the public_members endpoint" ;;
-        *) fail "B1.5 the redirect target ('$UNAUTH_REDIRECT') is not the expected public_members endpoint" ;;
-    esac
 
     FOLLOWED_STATUS=$(curl -s -m 10 -L -o /dev/null -w '%{http_code}' https://api.github.com/orgs/worldofmodcraft/members/womcraft)
-    printf '  $ curl -L (following the redirect) -> final_status=%s\n' "$FOLLOWED_STATUS"
-    if [ "$FOLLOWED_STATUS" = "404" ]; then
-        pass "B1.6 following the redirect (default client behaviour) lands on 404 for a real, private member -- the redirect-following hazard, reproduced live"
+    printf '  $ curl -L (following the redirect) -> final_status=%s   [fixture: final_status=%s]\n' "$FOLLOWED_STATUS" "$FX_STATUS2"
+    if [ "$FOLLOWED_STATUS" = "$FX_STATUS2" ]; then
+        advise_pass "B1-live.2 live redirect-followed probe matches the recorded fixture"
     else
-        fail "B1.7 following the redirect gave $FOLLOWED_STATUS, expected 404"
+        advise_drift "B1-live.2 live redirect-followed probe (final_status=$FOLLOWED_STATUS) drifted from the fixture (final_status=$FX_STATUS2) -- consider re-capturing"
     fi
 
     MEMBERSHIPS_UNAUTH=$(curl -s -m 10 -o /dev/null -w '%{http_code}' https://api.github.com/orgs/worldofmodcraft/memberships/womcraft)
-    printf '  $ curl (unauthenticated) /memberships/{username} -> status=%s\n' "$MEMBERSHIPS_UNAUTH"
-    if [ "$MEMBERSHIPS_UNAUTH" = "401" ]; then
-        pass "B1.8 the memberships candidate endpoint refuses an unauthenticated caller outright (401), no public-view degrade"
+    printf '  $ curl (unauthenticated) /memberships/{username} -> status=%s   [fixture: status=%s]\n' "$MEMBERSHIPS_UNAUTH" "$FX_STATUS3"
+    if [ "$MEMBERSHIPS_UNAUTH" = "$FX_STATUS3" ]; then
+        advise_pass "B1-live.3 live memberships-endpoint probe matches the recorded fixture"
     else
-        fail "B1.9 memberships candidate endpoint (unauthenticated) returned $MEMBERSHIPS_UNAUTH, expected 401"
+        advise_drift "B1-live.3 live memberships-endpoint probe (status=$MEMBERSHIPS_UNAUTH) drifted from the fixture (status=$FX_STATUS3) -- consider re-capturing"
     fi
 fi
 
@@ -391,15 +507,24 @@ else
     fail "S2 tests/contracts suite failed (exit $SUITE_RC)"
 fi
 
-CHANGED=$( { git diff --name-only "$ROUND_BASE" -- .; git ls-files --others --exclude-standard; } \
+# Baseline note (fix round 2): this used to compare against fcde6d5 (fix round 1's start
+# commit). That baseline broke on its own terms after round 1: v.html was committed (out of
+# scope) and later removed by the manager (commit 90a3940) -- both AFTER fcde6d5 -- so a diff
+# against fcde6d5 shows v.html's deletion as a permanent, unavoidable "changed file" forever,
+# even though v.html exists nowhere in the working tree or in HEAD. Found by actually running
+# this check (guardrail 6c), not assumed: `git show fcde6d5:v.html` succeeds (292 lines) and
+# `git diff --stat fcde6d5 -- v.html` shows "292 deletions" against a clean, current working
+# tree. The fix: pin the scope check to THIS round's own start commit (the manager's F-A/F-B
+# verification, 38600d2 -- v.html was already gone by then) rather than the whole task's.
+CHANGED=$( { git diff --name-only "$ROUND2_BASE" -- .; git ls-files --others --exclude-standard; } \
     | grep -v '__pycache__' | sort -u )
-printf '  $ { git diff --name-only %s -- . ; git ls-files --others --exclude-standard ; } | grep -v __pycache__ | sort -u\n' "$ROUND_BASE"
+printf '  $ { git diff --name-only %s -- . ; git ls-files --others --exclude-standard ; } | grep -v __pycache__ | sort -u\n' "$ROUND2_BASE"
 printf '%s\n' "$CHANGED" | sed 's/^/  /'
-EXPECTED=$(printf 'contracts/ownership.md\ndocs/contracts/README.md\ndocs/tasks/032-ownership-contract.md\ndocs/tasks/032-verify.sh\n')
+EXPECTED=$(printf 'docs/tasks/032-b1-fixtures.json\ndocs/tasks/032-ownership-contract.md\ndocs/tasks/032-verify.sh\n')
 if [ "$CHANGED" = "$EXPECTED" ]; then
-    pass "S3 exactly the four declared in-scope files changed since $ROUND_BASE"
+    pass "S3 exactly the three files this round declared (the new B1 fixture, the task log, and this script) changed since $ROUND2_BASE"
 else
-    fail "S4 changed-file set does not match the declared scope for this round"
+    fail "S4 changed-file set does not match the declared scope for this round (expected: $(printf '%s' "$EXPECTED" | tr '\n' ' '))"
 fi
 
 # Lexical convention check (matches 006-verify.sh's own): this script must contain no ownership-
@@ -412,11 +537,17 @@ fi
 
 # --------------------------------------------------------------------------------
 printf '\n== RESULT ==\n'
-if [ "$NETSKIPS" -gt 0 ]; then
-    printf '%d check(s) skipped for network/gh-auth unavailability (not counted as pass or fail)\n' "$NETSKIPS"
+# Fix round 2 (finding F-B): the exit code below is a function of $FAILURES ONLY -- the
+# deterministic checks above, every one of which reads committed repository content and makes
+# no network call. The advisory tally is printed for a human's information and is never added
+# to $FAILURES anywhere in this script; a skip or a drift in the advisory section can change
+# this line's wording, never the exit code.
+if [ "$((ADVISORY_OK + ADVISORY_DRIFT + ADVISORY_SKIP))" -gt 0 ]; then
+    printf 'advisory (live, network/gh-auth dependent, informational only -- NEVER affects the verdict or exit code): %d matched fixture/paste, %d drifted, %d not evaluated\n' \
+        "$ADVISORY_OK" "$ADVISORY_DRIFT" "$ADVISORY_SKIP"
 fi
 if [ "$FAILURES" -eq 0 ]; then
-    printf 'ALL CHECKS PASSED\n'
+    printf 'ALL CHECKS PASSED (deterministic verdict -- 0 network calls required to reach it)\n'
     exit 0
 fi
 printf '%d CHECK(S) FAILED\n' "$FAILURES"
