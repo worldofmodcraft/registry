@@ -8,9 +8,72 @@
   is not duplicated here in full; see that file for the complete acceptance-criteria wording quoted
   below.
 - **File scope (declared):** `contracts/page.schema.json`, `contracts/manifest.schema.json`,
-  `tests/contracts/test_contracts.py` (fixtures added, none weakened or removed), this log.
+  `tests/contracts/test_contracts.py` (fixtures added, none weakened or removed), this log, and
+  (added by the 2026-09-06 fix round below) `docs/tasks/034-verify.sh`.
   `links[].url`, `source`, `source_url`, `source_archive` were explicitly out of scope and were
   **not** touched.
+
+## Context — **added 2026-09-06, fix round 1, correcting a review-round selection miss**
+This section did not exist before the fix round below. REVIEW-CHECKLIST item 4 is bidirectional —
+(a) the ADRs listed are followed, (b) the diff touches no area whose governing ADR was not listed —
+and the independent review of PR #5 found (b) failing: the diff changes
+`manifest.schema.json`'s `properties.screenshots.items.pattern`, and **ADR-0030 governs exactly
+that field**, but ADR-0030 was never named anywhere in this task's context. **Recorded here plainly
+as a manager error (a Context-selection miss), not folded in silently** — the corresponding platform
+spec (`~/wom` `docs/tasks/034-schema-traversal.md`) was corrected the same way, independently, by
+the manager (commit `616aece`).
+
+- **ADR-0059** §1 (page content is read from the *archived* source, so a screenshot value is a path
+  into a tarball, never a live URL) and §3 (`page.json` publishes on a deliberately lighter gate than
+  `entry.json` — the asymmetry task 009's proven exploit used).
+- **ADR-0030 — the omission the review found.** It governs `mod.lua`'s `screenshots` field, which is
+  exactly what `contracts/manifest.schema.json`'s changed pattern validates. This repository's own
+  precedent cites ADR-0030 for that field repeatedly: `docs/contracts/README.md` lines 20 and 24,
+  `docs/tasks/025-boundary-contracts.md` ("ADR-0030 (manifest fields, including `screenshots`)"),
+  `docs/tasks/006-contracts.md`, and ADR-0059's own `Related` header.
+  **Re-verified against the diff, not taken on trust** (see "ADR-0030 re-verification" below): the
+  change only *tightens* the item pattern and its description; it does not touch the field's
+  existence, type, required-ness, or top-level meaning.
+- **ADR-0120** (content whitelisting, not container framing) — named because it is what the
+  *content* a screenshot path resolves to would eventually be checked against. This task checks only
+  the **path string**; scanning the file it resolves to is a different, later task (blocked on an
+  archive existing).
+- **Contracts:** `contracts/page.schema.json`, `contracts/manifest.schema.json` (both touched),
+  `contracts/archive-layout.md` (prose only, not touched — it separately states the
+  `../`/absolute-path/symlink escape rule applied to every archive entry at extraction time; this
+  task's schema-level check is one layer earlier, on the path string itself, before any extraction).
+
+### ADR-0030 re-verification (not taken on trust)
+Confirmed with real commands, not by reading the diff and assuming:
+
+```
+$ git show 454911a --stat -- contracts/manifest.schema.json contracts/page.schema.json
+ contracts/manifest.schema.json | 4 +-
+ contracts/page.schema.json     | 4 +-
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+```
+
+Only two lines changed per file (the `pattern` and `description` strings inside
+`properties.screenshots.items`). Confirmed the field's other properties are untouched:
+
+```
+$ python3 -c "
+import json
+d = json.load(open('contracts/manifest.schema.json'))
+print('required includes screenshots:', 'screenshots' in d['required'])
+print('screenshots outer keys (excl. items):', sorted(k for k in d['properties']['screenshots'] if k != 'items'))
+"
+required includes screenshots: True
+screenshots outer keys (excl. items): ['description', 'type']
+```
+
+`screenshots` is still `required`, still `type: array`, still has only its original two outer keys
+(`type`, `description`) — no key was added or removed at that level. Only `items.pattern` (tightened
+to also reject a whole `..` path segment) and `items.description` (rewritten to state the new rule)
+changed. **Conclusion: the diff conforms to ADR-0030 — it does not reinterpret the field's existence
+or meaning, only narrows what one already-declared string field accepts.** Both checks above are
+now permanent, automated checks in `docs/tasks/034-verify.sh` (`ADR-0030.1`–`ADR-0030.4`, see the
+Fix round 1 section below), not a one-time manual read.
 
 ## The hole (as proven, task 009 review; reproduced independently by the manager)
 
@@ -315,3 +378,166 @@ trap were unambiguous and the fix stayed inside the declared file scope.
   out-of-scope fields; consumers of the schema files themselves were not mentioned in the spec, so
   I did not investigate further, per MANAGER.md §3.3's "stop and report, do not fix" — reporting
   it here as unverified rather than silently assuming it is fine).
+
+# Fix round 1 (implementer, 2026-09-06)
+
+The independent review of PR #5 returned **BLOCKING on two checklist items**. The substantive
+schema fix (the pattern change itself) was **not** touched in this round — the review reproduced
+the mutation test independently, ran the suite in a fresh clone, and could not break the new
+pattern with any adversarial payload. Both findings were about what was missing *around* the fix,
+not the fix itself.
+
+## Finding 1 (BLOCKING) — `docs/tasks/034-verify.sh` was missing
+
+MANAGER.md §2c: *"Any task whose acceptance criteria are command-based ships
+`docs/tasks/NNN-verify.sh`, committed and executable."* All seven of this task's acceptance
+criteria are command-based and no such script existed. Written: `docs/tasks/034-verify.sh`, one
+check per criterion (further split wherever a label would otherwise cover more than one fact —
+§2c rule 3), exit codes distinguishing accepted (0) / rejected (1) / usage-error (2) — the
+`scan_assets.py` convention recorded in `docs/manager/OPERATIONS.md`, chosen because "reading a
+usage error as a rejection once produced a completely false verification on this project."
+
+### The script's real output, current (fixed) worktree — ALL GREEN
+
+```
+$ ./docs/tasks/034-verify.sh
+034-verify.sh -- task 034 acceptance verification
+repo root: /home/ludwig/wt/registry-task-034
+[... 36 checks, each printed as PASS with its supporting grep hits / unittest output ...]
+
+== RESULT ==
+ALL CHECKS PASSED
+$ echo $?
+0
+```
+
+Full run captured; 36/36 `PASS`, 0 `FAIL`, exit 0. (Full pasted transcript kept out of this log
+entry for length — every check's real command is on disk in the script itself, which is exactly
+the point of §2c: nothing here needs to be trusted, it needs to be re-run.)
+
+### Criterion 5's mutation test, run live inside the script itself (§2c rules 2 and 5)
+
+The script does not narrate a mutation test that was run once during development — it **performs
+one on every invocation**, live, against a throwaway scratch copy, pulling the exact pre-fix
+pattern out of git history (`bf8d9cb:contracts/{page,manifest}.schema.json`, never hand-retyped)
+so the fixture reproduces the actual historical regression, not a paraphrase of it. Real output
+from the same run above, mutated section:
+
+```
+== Criterion 5 -- mutation-tested: revert the pattern to the proven-vulnerable value pulled from
+   git history, watch the fixtures redden, then confirm the real worktree was never touched ==
+  pre-fix pattern (commit bf8d9cb): ^(?!/)(?!.*://)(?!.*\\).+$
+  mutated /tmp/tmp.XXXXXXXXXX/contracts/page.schema.json: screenshots[].items.pattern reverted to the pre-fix value
+  mutated /tmp/tmp.XXXXXXXXXX/contracts/manifest.schema.json: screenshots[].items.pattern reverted to the pre-fix value
+    test_legitimate_paths_still_accepted_in_manifest_schema ... ok
+    test_legitimate_paths_still_accepted_in_page_schema ... ok
+    test_traversal_paths_rejected_in_manifest_schema ...
+      (path='../etc/passwd') ... FAIL
+      (path='a/../../etc/passwd') ... FAIL
+      (path='./../x') ... FAIL
+      (path='a/..') ... FAIL
+      (path='..') ... FAIL
+      (path='../../../../../../../../etc/passwd') ... FAIL
+    test_traversal_paths_rejected_in_page_schema ...
+      (path='../etc/passwd') ... FAIL
+      (path='a/../../etc/passwd') ... FAIL
+      (path='./../x') ... FAIL
+      (path='a/..') ... FAIL
+      (path='..') ... FAIL
+      (path='../../../../../../../../etc/passwd') ... FAIL
+
+    Ran 4 tests in 0.005s
+    FAILED (failures=12)
+PASS  C5.1 reverting to the pre-fix pattern reddens all 6 page-schema traversal subtests (found 6 FAIL blocks)
+PASS  C5.3 reverting to the pre-fix pattern reddens all 6 manifest-schema traversal subtests (found 6 FAIL blocks)
+PASS  C5.5 the mutated (pre-fix) run's overall exit code is non-zero (1) -- the suite as a whole reddens
+PASS  C5.7 the positive controls (LEGITIMATE_PATHS) still pass even against the mutated pre-fix pattern
+PASS  C5.9 the real worktree's schema files are byte-identical before and after the mutation test
+  [... unittest -v output for ScreenshotTraversalTests against the real, unmutated worktree, all ok ...]
+PASS  C5.11 restored: the real (unmutated, fixed) worktree's ScreenshotTraversalTests are green again
+```
+
+This closes §2c rule 5 directly: **the found break (the permissive pattern accepting
+`../../../../etc/passwd`) is in the suite as a fixture, and every run of this script shows it
+failing before showing it fixed** — not a one-time claim in a log, a re-runnable proof.
+
+### Mutation-testing the verify script itself (§2c rule 2 — the artefact must be able to fail, demonstrated)
+
+Eight representative mutations were made directly to the tracked files, the script re-run, the
+exact expected check(s) confirmed red (and, in every case, that no unrelated check reddened
+alongside it — proving the split labels required by rule 3 actually isolate what they claim to),
+then `git checkout --` restored the file and the script re-confirmed green. `git status --short`
+was clean before the first mutation and after the last.
+
+1. **Page pattern reverted to the pre-fix value directly in the tracked file** (not the scratch
+   copy) → `FAIL C1.2` (page rejects traversal) reddened; `C1.3` (manifest) and `C2.1`/`C2.3`
+   (legitimate paths, both schemas) stayed green, correctly isolating the break to the one schema
+   and one direction (rejection, not acceptance). `C5.12` also correctly reddened as a downstream
+   consequence (the "restored" re-check at the end of Criterion 5 saw the real worktree was, in
+   fact, still broken). Restored via `git checkout -- contracts/page.schema.json`; re-run: 0
+   failures.
+2. **Deleted the clamping-trap fixture** (`"../../../../../../../../etc/passwd"`) from
+   `TRAVERSAL_PATHS` → only `FAIL C4.6` reddened (the check named for exactly that literal), no
+   other check moved. Restored via `git checkout --`; re-run: 0 failures.
+3. **Injected `import jsonschema`** into `schema_check.py` (after `from __future__ import
+   annotations`, so the file still parses) → only `FAIL C3.2` reddened. (A first attempt inserted
+   the import as literally the first line, ahead of the module docstring and the `__future__`
+   import — Python rejected that with `SyntaxError: from __future__ imports must occur at the
+   beginning of the file`, cascading into ten unrelated failures. That failure mode is itself
+   informative and is recorded here rather than discarded: it is why the second, syntactically
+   valid injection point was used for the citation above — a script that reddens on a syntax error
+   is not a useless result, but it is not the isolated proof this rule asks for.)
+4. **Added a live `re.fullmatch(".*", "x")` call** to `schema_check.py`'s `validate()` body → only
+   `FAIL C3.4` reddened. Restored; re-run: 0 failures.
+5. **Stripped the traversal-rule wording** from `page.schema.json`'s `screenshots.items.description`
+   → `FAIL C7.1` and `FAIL C7.2` reddened (both facts this task's description must state), `C7.3`/
+   `C7.4` (the manifest schema's description, untouched by this mutation) stayed green. Restored;
+   re-run: 0 failures.
+6. **Ran the script from outside any git checkout**
+   (`/tmp/.../not-a-repo`) → `USAGE ERROR: not inside a git repository`, **exit 2**, zero PASS/FAIL
+   lines printed — confirming the usage-error path is structurally distinct from a rejected check,
+   the exact failure mode `docs/manager/OPERATIONS.md` warns about.
+7. **Removed `"screenshots"` from `manifest.schema.json`'s `required` array** → only
+   `FAIL ADR-0030.2` reddened. Restored; re-run: 0 failures.
+8. **Added an extra key (`minItems`) to the `screenshots` property itself** (not `.items`) →
+   `FAIL ADR-0030.4` reddened (plus `C6.8`, correctly — the added `minItems: 1` also broke an
+   existing example with an empty screenshots array, a real second-order consequence, not a bug in
+   the check). Restored; re-run: 0 failures.
+
+Every mutation was restored with `git checkout --` before the next was applied; `git status
+--short` showed only the new, still-uncommitted `docs/tasks/034-verify.sh` throughout, never a
+leftover mutation.
+
+### Fresh clone (§2c rule 4)
+
+**Recorded after the commit below**, so the clone actually contains the script and log this
+section describes rather than an uncommitted copy of them — see the addendum at the end of this
+section, added in the follow-up commit for that reason.
+
+## Finding 2 (BLOCKING) — ADR-0030 missing from Context, recap
+
+Handled in full in the "Context" section near the top of this file (added above, same fix round).
+Summary for this log's chronological record: REVIEW-CHECKLIST item 4(b) found that the diff
+touches a field ADR-0030 governs without ADR-0030 ever appearing in this task's context — a
+**manager Context-selection miss**, recorded as such, not silently absorbed. Re-verified against
+the diff with real commands (see "ADR-0030 re-verification" above): the fix only tightens the
+`screenshots[].items.pattern` and updates its description; it does not reinterpret or conflict
+with ADR-0030's definition of the field.
+
+## What changed in this fix round (file list)
+
+- `docs/tasks/034-verify.sh` — new, executable. 36 checks covering all 7 acceptance criteria plus
+  4 informational ADR-0030 conformance checks.
+- `docs/tasks/034-schema-traversal.md` — this log: added the `## Context` section (with the
+  ADR-0030 re-verification), this `# Fix round 1` section, and this file list.
+- **Not changed:** `contracts/page.schema.json`, `contracts/manifest.schema.json`,
+  `tests/contracts/test_contracts.py` — explicitly out of scope for this round ("do not redesign
+  the fix"). Confirmed: `git diff --stat 454911a -- contracts/ tests/` is empty after this round's
+  commits (checked below, alongside the fresh-clone run).
+
+## What I could not verify (this round)
+
+- Whether the independent reviewer's fresh-clone run of the *substantive fix* used the exact same
+  Python version as this environment (3.14.4) — the review report was not re-read line-by-line for
+  this round (out of scope: "do not redesign the fix"), so this is stated as an assumption carried
+  forward, not a re-confirmed fact.
