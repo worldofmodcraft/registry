@@ -510,9 +510,32 @@ leftover mutation.
 
 ### Fresh clone (§2c rule 4)
 
-**Recorded after the commit below**, so the clone actually contains the script and log this
-section describes rather than an uncommitted copy of them — see the addendum at the end of this
-section, added in the follow-up commit for that reason.
+Committed first (`a20783c`), then cloned fresh from that commit and run there — proving the
+script does not depend on this authoring worktree's absolute paths, mtimes, or any uncommitted
+state (Task 006's script "passed only where it was written"; this one does not):
+
+```
+$ git clone --branch task/034-schema-traversal --single-branch \
+    file:///home/ludwig/wt/registry-task-034/.git /tmp/.../fresh-clone-034
+$ cd /tmp/.../fresh-clone-034
+$ git log --oneline -2
+a20783c Task 034 fix round 1: ship 034-verify.sh, correct the ADR-0030 Context miss
+454911a Task 034: close the path-traversal hole in screenshots[] pattern
+$ git status --short
+   (empty)
+$ ./docs/tasks/034-verify.sh
+[... identical 36 checks, all PASS, including the full live mutation test in Criterion 5 with its
+own fresh scratch copy under /tmp/tmp.MKZo9kL2OX/ ...]
+
+== RESULT ==
+ALL CHECKS PASSED
+$ echo $?
+0
+```
+
+Byte-for-byte the same 36/36 pass, same check labels, same real command output, run from a
+directory that has never seen anything but `git clone`. This is the fresh-clone proof §2c rule 4
+requires.
 
 ## Finding 2 (BLOCKING) — ADR-0030 missing from Context, recap
 
