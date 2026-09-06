@@ -784,3 +784,92 @@ matching the fix brief's own triage of B3 and B5.
   `contracts/append-only.rules.md`, `contracts/entry.schema.json`, or any other out-of-scope path.
 - 2026-09-06 Committed and pushed to `task/032-ownership-contract`, updating PR #4. Not merged, per
   this round's instructions.
+
+## Manager verification of fix round 1 — TWO BLOCKING FINDINGS, not mergeable yet (2026-09-06)
+
+The round did real work and did it honestly: it re-ran the reproductions with the permitted
+unauthenticated mechanism, it found **two transcript drifts nobody had found** (a stale committer
+address, and `gh api --jq` alphabetising nested-object keys against the filter's literal order) by
+actually re-running rather than trusting the paste, and it declared its own limitation rather than
+hiding it. Both findings below are about the *artefact and the scope*, not about honesty.
+
+### F-A (BLOCKING, now fixed by the manager) — a file outside the declared scope was committed and pushed
+`git diff --stat main...HEAD` on the returned branch listed a fifth file:
+
+```
+ v.html | 292 ++++++++++++++++++++++++++++++
+```
+
+`v.html` is a saved copy of GitHub Docs' *"Variables reference"* page — a research scratch artefact
+from checking `GITHUB_ACTOR_ID`. It is **not** in this task's declared file scope
+(`contracts/ownership.md`, `docs/contracts/README.md`, `docs/tasks/032-ownership-contract.md`,
+`docs/tasks/032-verify.sh`), nothing references it, and it was **committed and pushed to a public
+repository**.
+
+Checked before acting: no token, no `Authorization`/`Bearer` header, no key material —
+`grep -cE 'gh[pousr]_…|github_pat_|Authorization:|Bearer |RWT…' v.html` → **0**. So it is clutter,
+not a leak.
+
+**MANAGER.md §3.3 requires an agent that wants to touch files outside its declared scope to stop and
+report.** This one did neither. Removed by the manager in a follow-up commit rather than by
+rewriting history — the branch is pushed, and §3.9 forbids rewriting pushed history (it needs
+`--force`, banned by §3.7). The blob therefore stays in the branch's history, which is the correct
+price of the rule and is recorded here so nobody later "tidies" it with a force-push.
+
+**Pattern worth naming: this is the third over-staging incident today**, and two of the three were
+the manager's own (`git add -A` twice picked up supervisor runtime artefacts on `session/6-status`).
+The lesson is the same each time — **stage by path, never by `-A`, in a repository with untracked
+runtime or scratch output.**
+
+### F-B (BLOCKING) — the verify artefact is non-deterministic, and reports green while its most important checks did not run
+Manager's independent re-run:
+
+```
+$ ./docs/tasks/032-verify.sh ; echo "EXIT=$?"
+SKIP  B1.2..B1.9 unauthenticated GitHub API rate limit exhausted (core.remaining=0) -- re-run after
+      the reset time GitHub reports, or from a different source IP -- network/gh-auth unavailable,
+      not counted as pass or fail
+== RESULT ==
+1 check(s) skipped for network/gh-auth unavailability (not counted as pass or fail)
+ALL CHECKS PASSED
+EXIT=0
+```
+
+**The skipped checks are B1's.** B1 is the round's headline finding — the org-membership rule that,
+implemented as originally written, rejects every legitimate reserved-namespace PR including
+`test:hello-world`. So the artefact reports `ALL CHECKS PASSED` with **exit 0** while the evidence
+for the single most consequential fix was never evaluated.
+
+Two doctrine violations, and the second is the serious one:
+
+1. **§2c rule 4 — "portable and deterministic".** A check whose outcome depends on an
+   unauthenticated GitHub quota (60/hr, shared per source IP, and exhausted by the round's own
+   mutation testing) is neither. It passes or skips according to the time of day.
+2. **§2c rule 1's principle — a check that does not evaluate is not a clean result.** The script is
+   *honest* about skipping, and that is to its credit; but the final verdict line and the exit code
+   are what a re-runner, a reviewer in a hurry, or CI actually consumes, and both say green. This
+   project's signature failure is *a test that can only confirm what its author already believes*;
+   a green total covering unrun checks is the same defect wearing a caveat.
+
+**The fix is to stop putting a live network call inside a deterministic artefact.** B1's evidence
+should be **recorded fixtures**: capture the real responses once, commit them, and have the checks
+assert that the contract's text matches the recorded evidence. Live calls belong in the round's log,
+where they are dated and attributed, not in the script that must re-run identically on any machine
+at any hour. If a live check is kept at all, it must **not** contribute to the pass verdict, and a
+skip must **not** exit 0.
+
+**Consequence right now:** the manager cannot independently verify B1 either — the same rate limit is
+exhausted, which is itself the argument for the fixture design.
+
+### Also required before merge: an adversarial re-review
+Ludwig's ruling stands — contracts get an independent adversarial review, and this round did not
+merely correct text: it **wrote new normative rules** (B3's namespace-string MUST-equal-username
+rule with its case-folding decision, B1's rewritten caller-dependent behaviour, B2's reserved
+first-publish exception). New normative text that task 007 will code from has never been reviewed by
+anyone but its author. The byte-order catch in `signature-format.md` was exactly this shape.
+
+### Booked for Ludwig, per the round's own request
+- **Question 4 — who may open a takedown PR** against a namespace they do not own. Correctly
+  declared as an exclusion rather than invented.
+- **Question 3 — the case-folding rule** for namespace vs. username comparison, an FYI since it
+  introduces a normalisation no ADR states in those words.
