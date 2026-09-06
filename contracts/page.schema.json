@@ -24,8 +24,8 @@
       "items": {
         "type": "string",
         "minLength": 1,
-        "pattern": "^(?!/)(?!.*://)(?!.*\\\\).+$",
-        "description": "A POSIX-style relative path inside the archived mod source (e.g. \"assets/screenshots/shop.png\"). Rejected if it contains a URL scheme (\"...://...\"), starts with \"/\" (an absolute filesystem path), or contains a backslash (a Windows-style absolute path) -- ADR-0059 Section 1."
+        "pattern": "^(?!/)(?!.*://)(?!.*\\\\)(?!.*(?:^|/)\\.\\.(?:/|$)).+$",
+        "description": "A POSIX-style relative path inside the archived mod source (e.g. \"assets/screenshots/shop.png\"). Rejected if it contains a URL scheme (\"...://...\"), starts with \"/\" (an absolute filesystem path), contains a backslash (a Windows-style absolute path), or contains a \"..\" path-traversal segment (a whole path segment equal to \"..\", anywhere in the path -- e.g. \"../etc/passwd\" or \"a/../../etc/passwd\") -- ADR-0059 Section 1. Two dots that are merely part of a longer segment, such as \"a..b/c.png\" or \"screenshots/v1.2.3.png\", are not a traversal segment and remain valid (task 034)."
       }
     },
     "tags": {

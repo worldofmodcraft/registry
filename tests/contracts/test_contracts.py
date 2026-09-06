@@ -196,6 +196,77 @@ class ScreenshotPathTests(unittest.TestCase):
         validate(doc["example"], SCHEMAS["page"])  # must not raise
 
 
+class ScreenshotTraversalTests(unittest.TestCase):
+    """Task 034: closes the path-traversal hole in `screenshots[]` shared by
+    page.schema.json and manifest.schema.json. Task 009's review proved
+    `../../../../etc/passwd` satisfied the old pattern
+    (`^(?!/)(?!.*://)(?!.*\\).+$`) end-to-end -- it blocks a leading '/', a
+    URL scheme and backslashes, but never '..'.
+
+    These fixtures were added and run *before* the pattern was changed, and
+    were shown failing against the vulnerable pattern (see the task log,
+    docs/tasks/034-schema-traversal.md, criterion 4) -- Ludwig's rule that a
+    suite is judged by the breaking cases it contains, not the count it
+    passes. TRAVERSAL_PATHS is criterion 1; LEGITIMATE_PATHS is criterion 2,
+    which is half the task: a pattern that rejects a '..' that is not a
+    whole path segment (e.g. inside "a..b") is a regression, not a fix.
+    """
+
+    TRAVERSAL_PATHS = [
+        "../etc/passwd",
+        "a/../../etc/passwd",
+        "./../x",
+        "a/..",
+        "..",
+        # The task's named trap: path.join clamps excess ".." at the
+        # filesystem root, so on a shallow tree this can resolve to a real
+        # file while on a deeper tree it resolves to "not found" -- a
+        # false negative that looks exactly like a correct rejection. This
+        # fixture never touches a filesystem; it only asserts the schema's
+        # verdict on the string itself.
+        "../../../../../../../../etc/passwd",
+    ]
+
+    LEGITIMATE_PATHS = [
+        "assets/screenshots/shop.png",
+        "docs/img/a.b/c.png",
+        "screenshots/v1.2.3.png",
+        "a..b/c.png",  # two dots inside a segment -- not a traversal segment
+    ]
+
+    def test_traversal_paths_rejected_in_page_schema(self) -> None:
+        schema = SCHEMAS["page"]["properties"]["screenshots"]["items"]
+        for path in self.TRAVERSAL_PATHS:
+            with self.subTest(path=path):
+                with self.assertRaises(
+                    SchemaValidationError,
+                    msg=f"{path!r} should be rejected as path traversal but validated cleanly",
+                ):
+                    validate(path, schema)
+
+    def test_traversal_paths_rejected_in_manifest_schema(self) -> None:
+        schema = SCHEMAS["manifest"]["properties"]["screenshots"]["items"]
+        for path in self.TRAVERSAL_PATHS:
+            with self.subTest(path=path):
+                with self.assertRaises(
+                    SchemaValidationError,
+                    msg=f"{path!r} should be rejected as path traversal but validated cleanly",
+                ):
+                    validate(path, schema)
+
+    def test_legitimate_paths_still_accepted_in_page_schema(self) -> None:
+        schema = SCHEMAS["page"]["properties"]["screenshots"]["items"]
+        for path in self.LEGITIMATE_PATHS:
+            with self.subTest(path=path):
+                validate(path, schema)  # must not raise
+
+    def test_legitimate_paths_still_accepted_in_manifest_schema(self) -> None:
+        schema = SCHEMAS["manifest"]["properties"]["screenshots"]["items"]
+        for path in self.LEGITIMATE_PATHS:
+            with self.subTest(path=path):
+                validate(path, schema)  # must not raise
+
+
 class ReservedNamespacesTests(unittest.TestCase):
     """Acceptance criterion 5."""
 

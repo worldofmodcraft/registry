@@ -216,8 +216,8 @@
       "items": {
         "type": "string",
         "minLength": 1,
-        "pattern": "^(?!/)(?!.*://)(?!.*\\\\).+$",
-        "description": "A POSIX-style relative path inside the mod's own source tree, never an absolute URL or filesystem path -- see page.schema.json's `screenshots` for the identical rule."
+        "pattern": "^(?!/)(?!.*://)(?!.*\\\\)(?!.*(?:^|/)\\.\\.(?:/|$)).+$",
+        "description": "A POSIX-style relative path inside the mod's own source tree, never an absolute URL or filesystem path, and never containing a \"..\" path-traversal segment (a whole path segment equal to \"..\", anywhere in the path) -- see page.schema.json's `screenshots` for the identical rule. Two dots that are merely part of a longer segment, such as \"a..b/c.png\", are not a traversal segment and remain valid (task 034)."
       }
     },
     "ai_assisted": {
