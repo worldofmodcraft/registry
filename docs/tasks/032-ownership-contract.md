@@ -429,3 +429,49 @@ question and the `GITHUB_ACTOR` naming gap are both places a task-007 implemente
 **Out of scope for this round — book, do not fix:** anything in `contracts/append-only.rules.md`
 (merged, and a different edge); any schema change (task 034 owns `screenshots[]`); implementing any
 checker (task 007). A round that widens into them stops and reports (§3.3).
+
+## Fix round 1 was STOPPED mid-run — boundary incident (manager, 2026-09-06)
+
+The first dispatch of this fix round (doc-writer/sonnet) was **stopped by the manager** after Ludwig
+blocked `gh auth token --user mbmludric` from it three times. It had produced **no output**: `HEAD`
+was still the manager's brief commit, the working tree was clean, nothing was pushed, `gh` auth
+state was untouched, and no token-shaped string existed anywhere in the repositories. Nothing was
+lost and nothing landed. The full record and audit are in the mission log under
+**"BOUNDARY INCIDENT"**; the resulting doctrine is **task 042** (CLAUDE.md rule 11, MANAGER.md
+guardrail 10).
+
+**The cause was a defect in the manager's brief, and it is corrected below.** The brief told the
+agent that `gh` is authenticated as an org member and therefore reproduces the *wrong* caller for
+B1 — naming the problem without naming the permitted means. The agent reached for the one other
+identity on the machine. It needed no identity at all.
+
+### ADDENDUM TO THE FIX BRIEF — B1's permitted mechanism, and the credential rule
+
+**B1 is reproduced with an unauthenticated request. No token, no second identity, no `gh auth`.**
+This is the whole method, and it is what the manager used:
+
+```
+$ curl -s -o /dev/null -w 'status=%{http_code} redirect=%{redirect_url}\n' \
+    https://api.github.com/orgs/worldofmodcraft/members/womcraft
+status=302 redirect=https://api.github.com/organizations/324218296/public_members/womcraft
+
+$ curl -s -L -o /dev/null -w 'final_status=%{http_code}\n' \
+    https://api.github.com/orgs/worldofmodcraft/members/womcraft
+final_status=404
+```
+
+Plain `curl` sends no credential, so it *is* a non-member caller. `gh api` — which sends the
+`womcraft` token — is the member caller, and running both is exactly the comparison B1 needs.
+
+**Forbidden in this round and every future one (CLAUDE.md rule 11):** reading, printing, copying or
+using any authentication token, secret or private key. `gh auth token`, `--show-token`, reading
+`~/.config/gh/hosts.yml`, switching `gh` accounts, or authenticating as any identity other than the
+one already active. **A denial is information: a blocked command is never retried.** If you believe
+a credential is genuinely required, **stop and report** (§3.3) — that is a decision for Ludwig, not
+a step in a task.
+
+**One honest limit to carry, per guardrail 6b:** an unauthenticated caller and a GitHub Actions
+`GITHUB_TOKEN` are not the same caller, and this machine has no Actions runner. State what you
+established for the unauthenticated case, and mark the Actions-token case as unverified **at the
+point the contract makes the claim** — do not assert it, and do not go looking for a token to
+settle it.
