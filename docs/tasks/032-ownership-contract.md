@@ -1083,3 +1083,165 @@ lines.)
   the F-A incident.
 - 2026-09-06 Committed and pushed to `task/032-ownership-contract`, updating PR #4. Not merged,
   per this round's instructions.
+
+---
+
+# Review round 2 — BLOCKING. Findings and the fix brief (manager, 2026-09-06, session 6)
+
+A **second, fresh** adversarial reviewer (not the author, not the round-1 reviewer). Dispatched
+because the fix round did not merely correct text — it **wrote new normative rules that nobody but
+their author had ever read.** Three of those rules are still wrong. This is why the re-review
+happened before merge rather than after.
+
+## B1 (BLOCKING) — the failure taxonomy is a closed list of three, and two MUSTs have no entry in it
+`contracts/ownership.md:388-395` enumerates "one of **three** failure modes", and `:234` reinforces
+the closure. Two rules stated elsewhere have no mode:
+- `:158-166`, the **ordinary first-publish** id rule — mode 1 is explicitly scoped to the
+  *existing-namespace* case.
+- `:167-178`, **B2's own new reserved-namespace exception**, which requires `owner` to equal
+  `reserved-namespaces.json`'s recorded value.
+
+**A checker built from the taxonomy accepts this:** a `worldofmodcraft` member first-publishes
+`mc:core` declaring `owner: {github, 324089373, "womcraft"}` — their *personal* id, not the org's
+`324218296`. Mode 1 n/a (no `old`), mode 2 passes (they are a member), mode 3 n/a (reserved,
+exempt) → **accepted**. `append-only.rules.md:158-163` then freezes `owner` forever, and ADR-0119's
+Consequences say a reserved namespace cannot be transferred to an individual without a superseding
+ADR. **`mc:` is permanently bound to a personal account.**
+
+Milder variant, same hole: `mallory` (id 999) first-publishes `mods/mallory.tool/entry.json` with
+`owner.id` set to *alice's* id. Mode 3 passes (`mallory` == `mallory`), 1 and 2 n/a → accepted.
+
+This is the same shape round 1's B3 was raised on. The fix added the third mode and left two more
+uncovered. `append-only.rules.md:86-91` delegates exactly this check here in as many words, so the
+delegation still lands on a rule with no rejection path.
+
+## B2 (BLOCKING) — "the namespace" has two sources and nothing requires them to agree
+`:129-130` extracts the namespace **from the path**; `:195-196`, `:156` and `:184` take it from
+**`id` before the `:`**. Nothing in `contracts/` ties `mods/<ns>.<name>/`'s `<ns>` to `entry.json`'s
+`id` — the reviewer checked `append-only.rules.md` and `entry.schema.json` too.
+
+**A checker built from these does:** `mallory` creates `mods/alice.cooltool/entry.json` with
+`id: "mallory:cooltool"`, `owner: {github, 999, "mallory"}`. Path-enumeration finds namespace
+`alice`, no `old` → first publish; B3's rule reads `id`'s namespace `mallory` and compares to
+`mallory` → pass → **accepted**, and `mods/alice.cooltool/` is squatted permanently. Three faithful
+checkers (path for both, `id` for both, one each) give three different verdicts.
+
+## B3 (BLOCKING) — `page.json` for a namespace with no `entry.json` is undefined, while claiming completeness
+`:400-406` says the `page.json` namespace is evaluated "against `old.owner.id` (ordinary case) or the
+reserved-namespace membership rule... **This is the entirety of what this document requires for
+`page.json`.**" But `contracts/page.schema.json`'s properties are
+`['deprecated','description','links','screenshots','tags']` — **no `owner`, no `id`** (verified).
+
+For a PR creating `mods/alice.cooltool/page.json` where no `entry.json` exists at the merge-base:
+there is no `old.owner.id`, and `:42-44` routes the no-`old` case to the first-publish rule, which
+reads fields this file does not have. A faithful checker crashes, passes vacuously, or rejects every
+legitimate page-only PR. `append-only.rules.md:11-19` declines `page.json`, so nothing else covers
+it.
+
+## B4 (BLOCKING) — B1's "design 1" leaves `302` undefined, reintroducing round 1's exact failure
+`:320-328` offers two designs as "either is acceptable". **Design 1** ("run as a caller confirmed to
+be an org member, so `302` is never reached") supplies no mechanism for that precondition and
+**prescribes no behaviour if a `302` arrives anyway** — token rotated, membership changed. A
+design-1 checker has no `302` arm, every default client follows the redirect to `404`, and the
+document's own `:330` describes the result: *"rejects every genuine private-member PR — including the
+first publish of `test:hello-world`, mission acceptance criterion 2."* Compounding it, `:335-345`
+admits that whether CI's caller is an org member **cannot currently be established** — so design 1's
+precondition is unverifiable by the document's own words. **Design 2's `302` arm must be mandatory,
+with design 1 an addition rather than an alternative.**
+
+## B5 (BLOCKING, checklist item 8) — a check that stays green while its subject is broken
+`docs/tasks/032-verify.sh:409-410`. `B2.2` matches `'324218296.*organisation'` against *every*
+flattened paragraph, and the reserved-namespace section at `:264-284` contains an independent
+paragraph with both strings — so the check never looks at the exception it names. Reviewer's
+reproduction, in a throwaway clone:
+
+```
+$ sed -i 's/`id: 324218296`, the `worldofmodcraft`/`id: 999999999`, the `worldofmodcraft`/' contracts/ownership.md
+$ ./docs/tasks/032-verify.sh | grep 'B2\.'
+PASS  B2.2 the exception names the required owner value (organisation id 324218296) at first publish
+```
+
+The single most consequential number in B2's new rule can be wrong and the suite calls it PASS.
+`B2.4` reads only `reserved-namespaces.json` and never compares it against the document.
+
+## Non-blocking — fix deliberately, they are not optional reading
+6. **The deterministic suite catches a falsified key set, not a falsified value.** The reviewer
+   changed **both** central numeric identities in the document and the only `FAIL` was `S4`, the
+   scope check — which it separately showed fires on a whitespace-only change. Zero content checks
+   reddened.
+7. **The artefact goes permanently red on merge.** `S3/S4` pin `ROUND2_BASE=38600d2`; merged onto
+   current `origin/main` the suite exits 1 on `S4`. The pin has already moved once this task.
+   **`docs/tasks/006-verify.sh` has the identical rot on `main` today** — a project-wide pattern
+   worth a doctrine note. A merge-base-relative scope check survives.
+8. **The round-2 log promises a demonstration it does not contain** (`:1041-1050`): a heading, a
+   command line, "(Full output below...)", and then the next section. The claim is true — the
+   reviewer re-ran it — but asserted, in the log of the round whose own finding was about
+   asserted-not-demonstrated results.
+9. `:136`'s two-namespace example's first conjunct is a tautology about the namespace's owner and
+   names no PR author; the example is what an implementer copies.
+10. **`old` is the merge-base at `:32-33` and the target branch at `:42`.** ADR-0058 §5 makes every
+    publish PR fork-based, so stale forks are the normal case, and this decides first-publish
+    classification. `append-only.rules.md:26-28` uses merge-base; `:42` should match.
+11. `owner.name_at_registration` at first publish is **described, never checked** — the same
+    descriptive-not-a-check shape as round 1's B3, surviving in the adjacent bullet.
+12. **B3 overstates its closure:** alice renames away → `mallory` registers `alice` → `mallory`
+    first-publishes `alice:cooltool` and the namespace string matches her *current* username →
+    accepted, bound forever. Attempt 4 records the analogous residual for existing namespaces; the
+    new section records none for first publish.
+13. A PR touching **only `reserved-namespaces.json`** enumerates zero namespaces and passes
+    vacuously. ADR-0119 §4's human review is the real guard; **name it**, as B5's takedown gap was
+    named.
+14. The case-folding rule's load-bearing premise — GitHub usernames are unique case-insensitively —
+    is unstated. **The reviewer verified it live** (`users/womcraft`, `users/WOMCRAFT`,
+    `users/WomCraft` all resolve to id 324089373), so this is documentation, not a hole.
+15. `docs/tasks/032-b1-fixtures.json` is self-inconsistent: `_meta.how_to_recapture[2]` and
+    `unauthenticated_memberships_endpoint.command` use different `-w` formats, so a reader following
+    the file's own instructions fails `B1.8`.
+16. `:335-336` is garbled — "whether the identity registry CI **authenticates as is itself** an
+    organisation member" — and it is the sentence carrying the 6b caveat.
+17. `:321-323` states the `curl` case **backwards**: `-L` is opt-**in**, and the document's own
+    transcript at `:307-312` shows plain `curl` not following. (`requests` verified as
+    `allow_redirects=True`; `gh api`/`octokit` unverified.)
+18. **ADR-0030 is not in the task's Context**, though its line 30 states "the namespace is the GitHub
+    username" and ADR-0119 amends it for exactly the reserved case B2/B3 implement. Task 034 was
+    required to correct the identical miss this session. **Manager's call, and the manager's answer
+    is: add it** — ADR-0030 adds nothing ADR-0039 does not, but the consistency rule is the point,
+    and round 1 escalated the ADR-0059 miss as a manager error on the same grounds.
+
+## What the review verified as correct, recorded so coverage is visible
+The suite re-run by the reviewer (43 PASS, 0 FAIL) **and in a fresh clone**; the advisory/deterministic
+separation **genuinely holds** (masked `gh` plus an exhausted quota → both advisory sections skipped,
+`FAILURES` untouched, exit 0 — verified structurally, not by trusting the label); B1's fixture-side
+checks have teeth (deleting the fixture, removing `_meta.captured_at`, flipping 302→200 each redden);
+`S1/S2` fires on an injected failing test; **the B6 positive/negative control pair is the suite's
+strongest check** and errors out if the pinned pre-fix blob ever passes; all five live `gh api`
+transcripts reproduce byte-for-byte including the `--jq` key-order correction; the throwaway-commit
+demonstration reproduces exactly; **all four GitHub documentation claims verified live** — GitHub's
+own REST reference states the `204`/`302`/`404` caller-dependence verbatim, so B1's rewritten rule is
+a correct restatement; every cross-document quotation checked against its source; 23 tests OK on the
+branch, 27 on the merged tree, none weakened; merges cleanly onto `b725b5d`. **B5's takedown gap is
+declared and not invented** — checked specifically.
+
+**Credential rule honoured absolutely:** unauthenticated `curl` and `gh api` under the already-active
+identity only. No `gh auth token`, no config reading, no account switching, nothing blocked.
+
+## FIX BRIEF — round 3 (NOT dispatched; the session passed its 30 % soft threshold)
+1. **B1: make the taxonomy exhaustive, or stop calling it closed.** Every MUST in the document needs
+   a rejection path. Prefer deriving the failure list *from* the MUSTs rather than maintaining a
+   parallel prose list that can drift — the drift is the defect, twice now.
+2. **B2: state which source is authoritative** for the namespace, path or `id`, and **require the
+   other to agree**, with the disagreement as its own failure mode.
+3. **B3: define the no-`entry.json` `page.json` case.** It has no `owner` field, so the first-publish
+   rule cannot apply to it; say what happens instead.
+4. **B4: make design 2's `302` arm mandatory.**
+5. **B5: rewrite `B2.2` to look at the exception**, not at any paragraph containing two strings, and
+   add the reproduction as a fixture shown red first (§2c rule 5). Then re-audit **every**
+   `expect_hits`-style check in the file for the same whole-document-scope defect — B5 is a class,
+   not an instance.
+6. **Non-blocking 6, 7, 10, 15, 16, 17 and 18 are all in scope**; 8, 9, 11, 12, 13 and 14 are
+   documentation fixes that should land in the same round.
+7. **Still out of scope:** `append-only.rules.md`; any schema change; implementing any checker.
+
+**Booked for Ludwig, unchanged:** Question 4 (who may open a takedown PR) and Question 3
+(case-folding, FYI). Finding 7 additionally suggests a **doctrine note** on verify-script scope pins
+rotting at merge — `006-verify.sh` is already red on `main` for the same reason.
