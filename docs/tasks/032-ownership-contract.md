@@ -833,7 +833,7 @@ Manager's independent re-run:
 $ ./docs/tasks/032-verify.sh ; echo "EXIT=$?"
 032-verify.sh -- task 032 fix-round-1 acceptance verification
 repo root: /home/ludwig/wt/registry-task-032
-doc: contracts/ownership.md (915 lines)
+doc: contracts/ownership.md (924 lines)
 
 == B6 -- the fixture that would have caught the fabrication, shown failing against the pre-fix blob ==
 $ git show fcde6d5:contracts/ownership.md | (parse the PR#3 transcript)
@@ -876,8 +876,13 @@ PASS  B1.7 fixture records status=401 for the unauthenticated memberships-endpoi
 PASS  B1.8 the document's pasted transcript matches the fixture's recorded status=401 line exactly
 
 == B1 -- ADVISORY: live re-run of the same three probes against real GitHub, diffed against the fixture (never gates the verdict) ==
-  $ curl https://api.github.com/rate_limit -> core.remaining=0
-ADVISORY-SKIP  B1-live unauthenticated GitHub API rate limit exhausted (core.remaining=0) -- re-run after the reset time GitHub reports, or from a different source IP -- network/gh-auth unavailable, advisory only, never affects the verdict or exit code
+  $ curl https://api.github.com/rate_limit -> core.remaining=5
+  $ curl (unauthenticated) -> status=302 redirect=https://api.github.com/organizations/324218296/public_members/womcraft   [fixture: status=302 redirect=https://api.github.com/organizations/324218296/public_members/womcraft]
+ADVISORY-PASS  B1-live.1 live unauthenticated members-endpoint probe matches the recorded fixture
+  $ curl -L (following the redirect) -> final_status=404   [fixture: final_status=404]
+ADVISORY-PASS  B1-live.2 live redirect-followed probe matches the recorded fixture
+  $ curl (unauthenticated) /memberships/{username} -> status=403   [fixture: status=401]
+ADVISORY-DRIFT B1-live.3 live memberships-endpoint probe (status=403) drifted from the fixture (status=401) -- consider re-capturing
 
 == T -- the rejection taxonomy is DERIVED from the MUSTs, and drift is detectable (round-2 finding B1) ==
 PASS  T1 the document declares verdict rules in the `**Rn (MUST)**` form (>= 11 expected)
@@ -1038,7 +1043,12 @@ PASS  B3.5 the mallory/alice first-publish-capture attack is worked in the attac
 PASS  B3.6 that attack attempt names the review finding it came from
         **Attempt 5 — first-publish into a namespace named after someone else, relying on the id rule alone.** An account whose real numeric id is `999` and whose current username is `mallory` opens a first-publish PR creating `mods/alice.cooltool/entry.json` with `owner: {provider: "github", id: 999, nam
 PASS  B3.7 name_at_registration at first publish is a rule with a verdict, not a description (round-2 finding 11)
-        **R6 (MUST)** — at that same first publish, `new.owner.name_at_registration` MUST equal the PR author's username as the PR object reports it (`pulls.user.login`), compared case-insensitively per `R4`'s folding rule. ADR-0058 §2 defines this field as the account's username at registration, so requ
+        **R6 (MUST)** — at that same first publish, `new.owner.name_at_registration` MUST equal the PR author's username as the PR object reports it (`pulls.user.login`), compared case-insensitively per `R4`'s folding rule. The value is frozen forever and is what ADR-0058 §3's confirmation text names the
+PASS  B3.8 R6 names itself as this document's DERIVATION, so a reader can see the rule rests on an interpretation (Ludwig, 2026-09-07)
+        **R6 (MUST)** — at that same first publish, `new.owner.name_at_registration` MUST equal the PR author's username as the PR object reports it (`pulls.user.login`), compared case-insensitively per `R4`'s folding rule. The value is frozen forever and is what ADR-0058 §3's confirmation text names the
+PASS  B3.9 R6 says plainly that ADR-0058 does not state the rule in those words
+        **R6 (MUST)** — at that same first publish, `new.owner.name_at_registration` MUST equal the PR author's username as the PR object reports it (`pulls.user.login`), compared case-insensitively per `R4`'s folding rule. The value is frozen forever and is what ADR-0058 §3's confirmation text names the
+PASS  B3.10 R6 is not softened into a recommendation (the attribution marks the basis, never the strength)
 
 == B4 (round 1) -- page.json enumeration ==
   $ grep -c "page.json" contracts/ownership.md -> 27
@@ -1115,7 +1125,7 @@ PASS  S3 every path changed since the merge-base with origin/main is inside task
 PASS  S5 (lexical convention check, not a structural guarantee) this script contains no old.owner.id/new.owner.id equality logic (no ownership-gate implementation)
 
 == RESULT ==
-advisory (live, network/gh-auth dependent, informational only -- NEVER affects the verdict or exit code): 5 matched fixture/paste, 0 drifted, 1 not evaluated
+advisory (live, network/gh-auth dependent, informational only -- NEVER affects the verdict or exit code): 7 matched fixture/paste, 1 drifted, 0 not evaluated
 ALL CHECKS PASSED (deterministic verdict -- 0 network calls required to reach it)
 EXIT=0
 ````
@@ -1682,7 +1692,7 @@ this pattern match somewhere other than the place its label makes a claim about?
   green with both names absent) became `N2a`/`N2b`/`N2c`.
 
 **44 new checks were added.** The script now holds **70 pattern-matching checks, 63 of them
-scoped**, and 105 checks in total (up from 43), 0 failing.
+scoped**, and 108 checks in total (up from 43), 0 failing.
 
 The scoping helpers enforce their own scope: `expect_hits_in_para` **fails** if its anchor matches
 more than one paragraph, and `expect_hits_in`/`expect_no_hits_in` **fail** if the section pattern
@@ -1777,7 +1787,7 @@ restored: byte-identical
 ```
 
 **The positive controls sit beside the breaking cases**, per §2c rule 5's first consequence: the
-105-check green run below is on the real, unmutated content, and `B6.1`/`B6.2` remain a matched
+108-check green run below is on the real, unmutated content, and `B6.1`/`B6.2` remain a matched
 negative/positive pair (the pinned pre-fix blob must fail, the current tree must pass, and the
 script *errors out* if the pre-fix blob ever passes). A suite that only rejects things would score
 perfectly by rejecting everything; this one has to accept the real document too.
@@ -1901,20 +1911,37 @@ remaining questions in `contracts/ownership.md`'s `## Questions` are unchanged f
 (re-evaluating reserved membership per CI run; the absent account-migration recovery path), and
 neither is blocking.
 
-**One new question, booked, not blocking, nothing built on a guess:**
+**No question from this round remains open.** One was booked mid-round and has since been ruled on;
+it is recorded below rather than deleted, so the reasoning behind `R6` stays visible.
 
-1. **`R6` (`owner.name_at_registration` must equal the author's username at first publish) is this
-   document's own derivation, not an ADR's sentence.** Round-2 finding 11 said the field was
-   "described, never checked" and named it the same descriptive-not-a-check shape as round 1's B3;
-   the shapes the fix could take were (a) make it a rule, (b) declare explicitly that it is never
-   checked. **Assumed: (a).** The reasoning is that ADR-0058 §2 *defines* the field as the
-   account's username at registration, so requiring the recorded value to be that username enforces
-   the field's own definition rather than adding policy; it is frozen forever; and it is what
-   ADR-0058 §3's confirmation text names the account by, so a false value is permanent
-   misinformation. It is also consistent by construction with `R4`: at a non-reserved first publish
-   the namespace, `name_at_registration` and the author's username are all the same string, folded.
-   **What rests on it:** task 007 gains one more first-publish comparison. If Ludwig prefers (b),
-   delete `R6` and its taxonomy row — `T5`/`T6` will demand both go together.
+### Answered: `R6` — ruled by Ludwig, 2026-09-07 (source: Ludwig, in session, relayed by the manager)
+
+The question booked mid-round was whether `R6` (`owner.name_at_registration` must equal the author's
+username at first publish) should be **(a)** a checked rule or **(b)** an explicitly declared
+non-check, given that it is this document's own derivation rather than a sentence any ADR contains.
+Round-2 finding 11 raised it, naming the field "described, never checked" — the same
+descriptive-not-a-check shape as round 1's B3.
+
+**Ruling: (a), keep it as a checked rule.** Ludwig's reasoning: it is derivable from ADR-0058 §2 and
+it is checkable, and the guardrail says check what you can check rather than caveat it. The rule
+therefore stands exactly as committed, unchanged in strength.
+
+**Required addition, made in this follow-up commit:** `R6` must be **honestly attributed** — the
+contract has to show that the rule is *this document's derivation from* ADR-0058 §2, not §2's
+literal text, so a reader can see it rests on an interpretation and revisit it if §2 is ever
+clarified. His words: *"Checked AND honestly attributed."* Written into `R6`'s own paragraph, not a
+footnote and not this log, on the same principle as guardrail 6b: the basis travels with the rule.
+The text states plainly that ADR-0058 §2 does not state the check in those words, and it marks the
+basis without softening the requirement — `R6` is still a MUST.
+
+`T5`/`T6` are unchanged, deliberately: if the ruling is ever reversed to (b), they fail unless `R6`
+and its taxonomy row are removed together, which is what keeps the reversal clean.
+
+Three checks were added for this, written first and shown red before the text was written, then
+mutation-tested: `B3.8` (the paragraph names itself a derivation), `B3.9` (it admits ADR-0058 does
+not state this in those words), and `B3.10` (an absence check that `R6` has not been softened into
+a "should"). All three redden when their claim is broken — stripping the attribution, removing the
+admission, and downgrading the MUST respectively — and each was restored byte-identically.
 
 ## Log
 
@@ -1955,14 +1982,51 @@ neither is blocking.
   and moved `main` on: the new scope check stays green and still catches an out-of-scope file,
   while the round-2 pinned-hash check goes red on the same tree.
 - 2026-09-07 Updated `docs/contracts/README.md`'s index row (rule 9), verified scope by path,
-  committed to `task/032-ownership-contract`. **Not pushed; PR #4 untouched.**
+  committed to `task/032-ownership-contract` as `68e986a`. **Not pushed; PR #4 untouched.**
+- 2026-09-07 **Follow-up commit, after Ludwig ruled on the booked `R6` question** (option (a),
+  keep it checked, plus a required attribution — see "Answered: `R6`" above). Wrote `B3.8`/`B3.9`/
+  `B3.10` first and showed them red, then added the derivation attribution to `R6`'s own paragraph,
+  then mutation-tested all three (M10-M12: strip the attribution, remove the "not in those words"
+  admission, soften the MUST to "should" — each reddens, each restored byte-identically). Suite:
+  **108 PASS, 0 FAIL, exit 0**, output re-pasted below. Attempt 8 kept exactly as written, per
+  Ludwig. Nothing else touched; not pushed.
 
 ## The full, real output of `docs/tasks/032-verify.sh`
 
 Pasted unedited except for the `unittest` elapsed-time line, which the script itself normalises.
-Run immediately before this log entry was committed. The advisory section's one skip is the
-unauthenticated rate limit exhausted by this round's own live probes; it does not touch the verdict
-or the exit code, which is what fix round 2 built it to do.
+Run immediately before this log entry was committed.
+
+**Read the advisory block as advisory, and here is the proof that it is.** Two consecutive runs of
+this script, minutes apart, produced **identical deterministic output and different advisory
+output** — the live section drifted because this round's own probes had nearly exhausted GitHub's
+60-request/hour unauthenticated quota, and a rate-limited request comes back `403` rather than the
+`401` the fixture records:
+
+```
+$ diff <run A> <run B>
+46c46
+<   $ curl https://api.github.com/rate_limit -> core.remaining=11
+---
+>   $ curl https://api.github.com/rate_limit -> core.remaining=5
+51,52c51,52
+<   $ curl (unauthenticated) /memberships/{username} -> status=401   [fixture: status=401]
+< ADVISORY-PASS  B1-live.3 live memberships-endpoint probe matches the recorded fixture
+---
+>   $ curl (unauthenticated) /memberships/{username} -> status=403   [fixture: status=401]
+> ADVISORY-DRIFT B1-live.3 live memberships-endpoint probe (status=403) drifted from the fixture (status=401) -- consider re-capturing
+
+$ diff <run A minus the advisory lines> <run B minus the advisory lines>   # no output
+$ grep -c '^PASS' <run A> <run B>          -> 108 / 108
+$ tail -1 <run A>; tail -1 <run B>         -> ALL CHECKS PASSED (both), exit 0 (both)
+```
+
+That is finding F-B's design holding under a live condition rather than being trusted: an
+`ADVISORY-DRIFT` and an `ADVISORY-PASS` produce the same 108-check verdict and the same exit code.
+**The `403` is not evidence that the fixture is stale** — it is GitHub rate-limiting this source IP,
+and re-capturing a fixture from a throttled response would be the wrong reaction. The recorded `401`
+was confirmed live earlier in this same round (see the guardrail-6c table above) and independently
+by two other callers in the round-2 addendum. The run pasted below is the later of the two, drift
+line included, because hiding it would be the opposite of the point.
 
 ```
 $ ./docs/tasks/032-verify.sh ; echo "EXIT=$?"

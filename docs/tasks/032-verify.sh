@@ -832,6 +832,16 @@ expect_hits_in "B3.6 that attack attempt names the review finding it came from" 
     'Attack attempts' 'found in review round 1 \(finding B3\)'
 expect_hits_in_para "B3.7 name_at_registration at first publish is a rule with a verdict, not a description (round-2 finding 11)" \
     '\*\*R6 \(MUST\)\*\*' 'name_at_registration'
+# Ludwig, 2026-09-07: R6 stays a checked rule (option a), AND must be honestly attributed --
+# it is this document's derivation from ADR-0058 Section 2's definition of the field, not that
+# section's literal text. The attribution has to travel with the rule (guardrail 6b's shape), so
+# it is checked in R6's own paragraph, not in a footnote.
+expect_hits_in_para "B3.8 R6 names itself as this document's DERIVATION, so a reader can see the rule rests on an interpretation (Ludwig, 2026-09-07)" \
+    '\*\*R6 \(MUST\)\*\*' 'derivation'
+expect_hits_in_para "B3.9 R6 says plainly that ADR-0058 does not state the rule in those words" \
+    '\*\*R6 \(MUST\)\*\*' 'not (state|say)|does not state|in those words'
+expect_no_hits_in "B3.10 R6 is not softened into a recommendation (the attribution marks the basis, never the strength)" \
+    'What a first publish binds' '`new\.owner\.name_at_registration` should equal'
 
 # --------------------------------------------------------------------------------
 section "B4 (round 1) -- page.json enumeration"

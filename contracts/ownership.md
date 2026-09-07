@@ -271,12 +271,21 @@ submitting this PR right now."
 
 **R6 (MUST)** — at that same first publish, `new.owner.name_at_registration` MUST equal the PR
 author's username as the PR object reports it (`pulls.user.login`), compared case-insensitively
-per `R4`'s folding rule. ADR-0058 §2 defines this field as the account's username at registration,
-so requiring the recorded value to actually be that username enforces the field's own definition
-rather than adding a policy to it. The value is frozen forever and is what ADR-0058 §3's
-confirmation text names the account by, so a false one is permanent misinformation in the
-registry's own history. It stays informational *for authorisation*: no rule ever compares it to
-decide who may touch an existing namespace — `R3` compares `owner.id`, and only `owner.id`.
+per `R4`'s folding rule. The value is frozen forever and is what ADR-0058 §3's confirmation text
+names the account by, so a false one is permanent misinformation in the registry's own history. It
+stays informational *for authorisation*: no rule ever compares it to decide who may touch an
+existing namespace — `R3` compares `owner.id`, and only `owner.id`.
+**Where this rule comes from, attributed rather than assumed:** it is **this document's derivation
+from ADR-0058 §2**, which *defines* `name_at_registration` as the account's username at
+registration. Requiring the recorded value to actually be that username is this document reading
+that definition as a requirement; **ADR-0058 §2 does not state the check in those words**, and no
+ADR read for this task does. The rule is required as written — that is the point of stating the
+basis rather than softening the rule — but a reader should be able to see that it rests on an
+interpretation, so it can be revisited if ADR-0058 §2 is ever clarified or amended. Ruled by
+Ludwig on 2026-09-07 (option (a): keep it checked, because it is derivable and it is checkable,
+and guardrail 6c says check what can be checked rather than caveat it). If a future decision
+reverses that, `R6` and its row in the rejection taxonomy are removed together — `docs/tasks/032-verify.sh`'s
+`T5`/`T6` fail if only one of the two goes.
 
 **R8 (MUST)** — **Exception for a namespace on the reserved list (ADR-0119 §2), stated here at the
 point the ordinary rule is made, so the two never have to be reconciled by a reader:** at a first
