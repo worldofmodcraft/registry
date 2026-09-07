@@ -760,8 +760,8 @@ section "B2 (round 2) -- one authoritative source for the namespace, and the oth
 
 expect_hits_in "B2a.1 a section states which of the two sources is authoritative" \
     'directory path is authoritative' 'the directory path.*authoritative|authoritative.*directory path'
-expect_hits_in "B2a.2 the same section states WHY the path wins (page.json carries neither id nor owner)" \
-    'directory path is authoritative' 'page\.json'
+expect_hits_in_para "B2a.2 I2's own paragraph carries the reason the path wins -- page.schema.json has neither id nor owner (round-3 non-blocking 4: the old pattern was the bare string 'page.json', satisfied by R1's paragraph instead)" \
+    '\*\*I2 \(MUST\)\*\*' 'page\.schema\.json. has no .id. and no .owner.'
 expect_hits_in_para "B2a.3 the agreement requirement is a rule, not a description: entry.json's id must agree with its own directory" \
     '\*\*R2 \(MUST\)\*\*' 'agree|equal'
 expect_hits_in "B2a.4 the mods/alice.cooltool + id mallory:cooltool disagreement is worked as an attack attempt" \
@@ -778,8 +778,8 @@ expect_hits_in "B3a.2 the page.json section states page.json carries neither own
     'page\.json. PRs' 'neither .?owner.? nor .?id.?|no .owner. field and no .id. field'
 expect_hits_in_para "B3a.3 the no-entry.json case has a rule with a verdict, not a gap" \
     '\*\*R10 \(MUST\)\*\*' 'reject'
-expect_hits_in "B3a.4 the page.json section states what happens when the SAME PR also creates the entry.json" \
-    'page\.json. PRs' 'same PR|same diff'
+expect_hits_in_para "B3a.4 case 2 -- the same PR creating the entry.json -- says which rules then decide the whole PR (round-3 non-blocking 4: the old pattern 'same PR|same diff' was satisfied by R10's paragraph)" \
+    'No .entry\.json. exists at the merge-base, but the same PR creates one' 'first-publish rules decide the whole PR'
 expect_no_hits_in "B3a.5 the page.json section no longer claims completeness while leaving the case undefined" \
     'page\.json. PRs' 'This is the entirety of what this document requires'
 
@@ -892,8 +892,8 @@ section "K -- Ludwig's two rulings of 2026-09-07 are written into the contract a
 # rules, not implicit behaviour and not open questions -- his reasoning, binding on how this is
 # written: "no ADR states this in those words, so the contract must."
 
-expect_hits_in "K1 the takedown section states who may OPEN a takedown PR, as a ruling with its date" \
-    'Takedown PRs' '2026-09-07'
+expect_hits_in_para "K1 the ruling paragraph states WHAT Ludwig ruled, not merely that something was ruled on a date (round-3 non-blocking 4: the old pattern was the bare date)" \
+    'Ludwig ruled on 2026-09-07' 'may open a takedown PR.*human gate sits on the merge, not on the opening'
 expect_hits_in_para "K2 the takedown opener is a verdict rule, so an unauthorised opener has a rejection path" \
     '\*\*R11 \(MUST\)\*\*' 'takedown'
 expect_hits_in "K3 the takedown section keeps MANAGER.md Section 7's written-approval gate on the MERGE, unsoftened" \
@@ -908,8 +908,11 @@ expect_hits_in "K7 the case-folding claim carries its verification inline (three
     'namespace string itself' 'WOMCRAFT|WomCraft'
 expect_no_hits_in "K8 Questions 3 and 4 are no longer booked as open questions for Ludwig" \
     '^## Questions$' 'Booked to Ludwig as an FYI|An authority question sitting with Ludwig'
-expect_hits_in "K9 both answers are recorded with Ludwig and the date, so no round re-asks them" \
-    'answered by Ludwig' '2026-09-07'
+# 2c rule 3: two answers were recorded, so two checks. A bare date could not tell them apart.
+expect_hits_in_para "K9a the case-folding answer is recorded with Ludwig and the date, so no round re-asks it" \
+    'Case-folding the namespace/username comparison' 'Answered by Ludwig, 2026-09-07'
+expect_hits_in_para "K9b the takedown-opener answer is recorded with Ludwig, the date, and the merge gate it leaves to MANAGER.md Section 7" \
+    'Who may open a legally-mandated takedown PR against a namespace they do not own' 'Answered by Ludwig, 2026-09-07.*written-approval gate governs the merge'
 
 # --------------------------------------------------------------------------------
 section "P -- Ludwig's takedown ruling is OPERATIVE, and its exception surface stays narrow (round-3 finding 2)"
@@ -958,14 +961,24 @@ expect_hits_in "B1.10 the document states three GitHub-documented outcomes inclu
     'reserved-namespace case' 'requester is not an organization member'
 expect_hits_in "B1.11 the document states a checker must NOT follow the redirect and treat the result as the answer" \
     'reserved-namespace case' 'MUST NOT follow the .302.'
-expect_hits_in "B1.12a the redirect-following default is stated for curl, and matches what was run here" \
-    'reserved-namespace case' 'curl'
-expect_hits_in "B1.12b the redirect-following default is stated for Python's requests" \
-    'reserved-namespace case' 'requests'
-expect_hits_in "B1.12c the redirect-following default is stated for gh api" \
-    'reserved-namespace case' 'gh api'
-expect_hits_in "B1.12d octokit's redirect default is marked unverified here rather than asserted" \
-    'reserved-namespace case' 'octokit[^.]*(not established|not verified|unverified)|(not established|not verified|unverified)[^.]*octokit'
+# FIX ROUND 4, finding 4. Round 3 split the old B1.12 alternation into four checks, per 2c
+# rule 3 -- but two of the four resulting patterns were the bare strings `curl` and `gh api`,
+# scoped to a 174-line section containing three unrelated `curl` transcripts and three unrelated
+# `gh api` transcripts. B1.12a's label read "and matches what was run here" while the document
+# could state the exact opposite of what was run here and the check stayed green (reproduction
+# C2), and deleting the `gh api` sentence outright left B1.12c green (reproduction C3). A split
+# that produces two weaker checks instead of two stronger ones is not the rule-3 split.
+# All four now read the ONE paragraph that makes the per-client claim, and each asserts the claim
+# its own label makes -- the direction included, since the direction is the whole content.
+CLIENTS_PARA='verified in this environment.*client by client'
+expect_hits_in_para "B1.12a curl is stated NOT to follow a redirect by default, which is what was run here" \
+    "$CLIENTS_PARA" 'plain .curl. does \*\*not\*\* follow a redirect'
+expect_hits_in_para "B1.12b Python's requests is stated to follow one by default, with allow_redirects=True named as the reason" \
+    "$CLIENTS_PARA" 'requests.{0,4}\*\*does\*\*.*allow_redirects=True'
+expect_hits_in_para "B1.12c gh api is stated to follow one, with the facebook/jest -> jestjs/jest evidence that showed it" \
+    "$CLIENTS_PARA" '.gh api. \*\*does\*\*.*jestjs/jest'
+expect_hits_in_para "B1.12d octokit's redirect default is marked NOT established here rather than asserted (guardrail 6b)" \
+    "$CLIENTS_PARA" 'octokit[^.]*(not established|not verified|unverified)|(not established|not verified|unverified)[^.]*octokit'
 expect_hits_in "B1.13 the document marks the GITHUB_TOKEN/Actions-caller case as unverified, at the point the claim is made" \
     'reserved-namespace case' 'no GitHub Actions runner'
 expect_hits_in "B1.14 the document names the memberships endpoint as a candidate, not an answer" \
@@ -1012,8 +1025,15 @@ expect_hits_in_para "B3.8 R6 names itself as this document's DERIVATION, so a re
     '\*\*R6 \(MUST\)\*\*' 'derivation'
 expect_hits_in_para "B3.9 R6 says plainly that ADR-0058 does not state the rule in those words" \
     '\*\*R6 \(MUST\)\*\*' 'not (state|say)|does not state|in those words'
-expect_no_hits_in "B3.10 R6 is not softened into a recommendation (the attribution marks the basis, never the strength)" \
-    'What a first publish binds' '`new\.owner\.name_at_registration` should equal'
+# FIX ROUND 4, finding 6. `should equal` was matched case-sensitively, so `SHOULD equal` left R6
+# declared **(MUST)** and bodied SHOULD -- internally contradictory, one character from the state
+# Ludwig explicitly ruled against -- with the whole suite green. The character class below closes
+# every casing, and B3.11 is the positive half: an absence check alone cannot tell "MUST is still
+# there" from "the sentence was deleted", which is the difference between a guard and a hole.
+expect_no_hits_in "B3.10 R6 is not softened into a recommendation in ANY casing (the attribution marks the basis, never the strength)" \
+    'What a first publish binds' '`new\.owner\.name_at_registration` [sS][hH][oO][uU][lL][dD] equal'
+expect_hits_in_para "B3.11 R6's body still states MUST, so the rule's declaration and its text cannot disagree" \
+    '\*\*R6 \(MUST\)\*\*' '`new\.owner\.name_at_registration` MUST equal'
 
 # --------------------------------------------------------------------------------
 section "B4 (round 1) -- page.json enumeration"
@@ -1054,8 +1074,8 @@ else
 fi
 expect_hits_in "B5.3 the takedown section still names both contracts the delegation falls between" \
     'Takedown PRs' 'append-only\.rules\.md'
-expect_hits_in "B5.4 the takedown section states what happens to a takedown PR from any other account" \
-    'Takedown PRs' 'rejected'
+expect_hits_in_para "B5.4 R11's own paragraph says what happens to a takedown PR from any other account, naming the rules that reject it (round-3 non-blocking 4: the old pattern was the bare word 'rejected', matched by three paragraphs)" \
+    '\*\*R11 \(MUST\)\*\*' 'Every other author is rejected by .R3. or .R7.'
 expect_hits_in "B5.6 the takedown section records which review finding raised it" \
     'Takedown PRs' 'finding B5'
 
@@ -1081,8 +1101,8 @@ expect_hits "N5 docs/contracts/README.md's worked-examples count names eight pro
     'eight prose' "$CONTRACTS_README"
 expect_hits "N5b docs/contracts/README.md's checking-logic paragraph names three tasks" \
     'in any of the three tasks' "$CONTRACTS_README"
-expect_hits_in "N9 the two-namespace example names a concrete PR author instead of restating the owner (round-2 finding 9)" \
-    'Against what' 'opened by|the PR author is'
+expect_hits_in_para "N9 the two-namespace example names alice as the concrete PR author instead of restating the owner (round-2 finding 9; round-3 non-blocking 4: the old pattern 'opened by' matched elsewhere)" \
+    'The two-namespace case, stated explicitly' '\*\*opened by\*\* .alice.'
 expect_hits_in_para "N10 the first-publish classification paragraph says merge-base, matching append-only.rules.md, not 'target branch' (round-2 finding 10)" \
     'this is a first publish' 'merge-base'
 expect_hits_in_para "N13 a PR touching ONLY reserved-namespaces.json is named as enumerating no namespace, with ADR-0119's human review as its guard (round-2 finding 13)" \
