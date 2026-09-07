@@ -38,6 +38,20 @@ of two classes:
   Breaking one is a defect in the checker, or in the process around it, rather than a reason to
   reject a particular PR, so they have no taxonomy row.
 
+**Where one rule disapplies another, both ends say so.** A verdict rule may be overridden by
+another verdict rule — `R8` replaces `R4`, `R5` and `R6` for a reserved namespace; `R11` lifts `R3`
+and `R7` for an authorised takedown. Every such pair is declared **in the overriding rule's own
+paragraph**, in the exact form **`Precedence: R8 over R4, R5, R6`**, and every rule named after
+`over` cites the overriding rule in its own declaring paragraph. Both halves are required, and
+`docs/tasks/032-verify.sh`'s `T10`-`T13` fail the verification run if either is missing, or if a
+verdict rule states an exception against another verdict rule with no declared pair at all. This
+convention exists because review round 3 (finding 2) found Ludwig's takedown ruling written into
+`R11` while `R3`, 792 lines earlier, stayed unconditional: two faithful readings of the same
+document disagreed about whether the platform's own legally-mandated takedown is accepted or
+rejected, which is the same "a checker had a *choice*" defect review round 2 found for the
+namespace source. An exception that is reconcilable only by a reader who happens to read both ends
+of the document is not reconciled.
+
 **The taxonomy is derived from the rules, not maintained beside them.** Two consecutive review
 rounds of this document found the same defect: a prose list of "the failure modes" sitting next to
 a growing set of requirements and drifting from them, each time leaving a requirement that could
@@ -66,9 +80,19 @@ every well-behaved input and silently authorises the one attack this document ex
 
 **R3 (MUST)** — for a namespace that already exists at the PR's merge-base and is not on the
 reserved list, the PR author's real `(provider, id)` pair MUST equal `old.owner.provider` and
-`old.owner.id`. This is the ordinary case and the most common rejection; it is stated as a rule
-here, beside the comparison model it depends on, so that the model and the requirement cannot
-drift apart.
+`old.owner.id`, **unless `R11` authorises the PR as a takedown** — the single exception to this
+rule, stated here at the point the ordinary rule is made, in the same form `R8`'s reserved-list
+exception takes, so that the two never have to be reconciled by a reader. This is the ordinary
+case and the most common rejection; it is stated as a rule here, beside the comparison model it
+depends on, so that the model and the requirement cannot drift apart. **The precedence, stated so
+that a faithful checker has no choice left to make: `R11` is evaluated first, and if, and only if,
+`R11` authorises a PR as a takedown — its author is the platform's own identity *and* its diff is
+nothing but the takedown mutation `contracts/append-only.rules.md` defines — `R3` does not apply to
+that PR at all**, so `I7`'s "every rule that applies to it" is satisfied without it. In every other
+case, and specifically including a PR that makes the takedown mutation *and* any other change,
+`R11` authorises nothing, `R3` applies in full, and the PR is rejected exactly as any other
+unauthorised PR is. The exception turns on `R11` *authorising*, never on the diff merely looking
+like a takedown: Attempt 9 below is what that distinction is for.
 
 For a namespace that does not yet exist at the PR's merge-base with the target branch (no `old`
 value — this is a first publish), there is nothing in `old` to compare against; "What a first
@@ -192,7 +216,10 @@ applied. A PR can therefore only legitimately touch several *existing* namespace
 account that opened it owns every one of them.
 
 **I7 (MUST)** — every namespace the PR touches is evaluated independently, and the PR is accepted
-only if *every* namespace passes every rule that applies to it. There is no partial-merge path in
+only if *every* namespace passes every rule that applies to it. Which rules apply is decided by the
+rules themselves and never by the checker's own judgement: where one rule disapplies another, the
+overriding rule says so in the `Precedence:` form "How to read this document" describes, and a rule
+that a precedence declaration disapplies for a given PR is not a rule that applies to it. There is no partial-merge path in
 this model: `contracts/append-only.rules.md`'s own gate operates on the PR as a whole, and this
 check is a further whole-PR precondition, not a per-file filter.
 
@@ -262,16 +289,18 @@ section states.
 **R5 (MUST)** — at a first publish of a namespace **not** on the reserved list,
 `new.owner.provider` and `new.owner.id` MUST equal the PR author's real `(provider, id)` pair as
 read from the PR object (`pulls.user.id`, GitHub in phase 1), never a value taken from the PR's own
-proposed `entry.json` without that cross-check against the live PR object. A checker that trusts
+proposed `entry.json` without that cross-check against the live PR object. For a namespace on the
+reserved list this rule is replaced by `R8`, which declares that precedence in its own paragraph. A checker that trusts
 the JSON's self-declared `owner.id` at a first publish lets a PR create an entry claiming any
 numeric id at all — including someone else's — with nothing to stop it, because there is no `old`
 value yet to contradict it. The check at a first publish is therefore not "does `new.owner.id`
 equal `old.owner.id`" but "does `new.owner.id` equal the real, forge-verified id of whoever is
 submitting this PR right now."
 
-**R6 (MUST)** — at that same first publish, `new.owner.name_at_registration` MUST equal the PR
-author's username as the PR object reports it (`pulls.user.login`), compared case-insensitively
-per `R4`'s folding rule. The value is frozen forever and is what ADR-0058 §3's confirmation text
+**R6 (MUST)** — at that same first publish of a namespace **not** on the reserved list,
+`new.owner.name_at_registration` MUST equal the PR author's username as the PR object reports it
+(`pulls.user.login`), compared case-insensitively per `R4`'s folding rule; for a namespace on the
+reserved list this rule is replaced by `R8`, which declares that precedence in its own paragraph. The value is frozen forever and is what ADR-0058 §3's confirmation text
 names the account by, so a false one is permanent misinformation in the registry's own history. It
 stays informational *for authorisation*: no rule ever compares it to decide who may touch an
 existing namespace — `R3` compares `owner.id`, and only `owner.id`.
@@ -292,7 +321,7 @@ point the ordinary rule is made, so the two never have to be reconciled by a rea
 publish of a namespace on the reserved list, `new.owner` MUST equal the owner
 `reserved-namespaces.json` records for that namespace at the PR's merge-base — in phase 1
 `{"provider": "github", "id": 324218296, "name_at_registration": "worldofmodcraft"}`, the
-`worldofmodcraft` organisation — and never the PR author's own id. `R4`, `R5` and `R6` do not
+`worldofmodcraft` organisation — and never the PR author's own id. **Precedence: R8 over R4, R5, R6.** They do not
 apply to these namespaces and could never be satisfied for them anyway: no individual account's
 numeric id can equal the organisation's, which "The reserved-namespace case" below proves from
 this project's own data. Authorisation for such a PR is `R7`, organisation membership, from the
@@ -310,7 +339,9 @@ namespace's first publish, short of a future ADR that amends both documents toge
 
 **R4 (MUST)** — at a first publish of a namespace **not** on the reserved list, the namespace
 string (derived from the directory path per `I2`) MUST equal the PR author's current GitHub
-username (`pulls.user.login`), compared case-insensitively.
+username (`pulls.user.login`), compared case-insensitively. For a namespace that **is** on the
+reserved list this rule is replaced by `R8`, which declares that precedence in its own paragraph;
+a reserved namespace's string derives from no account's username at all (ADR-0119 §1-2).
 
 Without this rule, nothing in the id-based rules stops a fresh account from first-publishing into
 a namespace named after someone else's username entirely: `R5` only ever asks whether the PR
@@ -549,7 +580,14 @@ itself, applied to list membership instead of the ownership field.
 
 **R7 (MUST)** — a PR touching a namespace on the reserved list is authorised only if the PR author
 is a **current member** of the organisation `reserved-namespaces.json` records as that namespace's
-owner. This is a reservation, not an ownership exemption: every other account is rejected, exactly
+owner, **unless `R11` authorises the PR as a takedown**, on exactly the terms and with exactly the
+precedence `R3` states above: `R11` is evaluated first, and only a PR whose author is the
+platform's own identity and whose diff is nothing but the takedown mutation escapes this rule. The
+exception is stated here for completeness of the reconciliation rather than because it changes many
+verdicts — the platform's own identity is the organisation that owns every reserved namespace
+today, so such a PR normally satisfies this rule outright — but `R11` names `R3` **and** `R7` as
+the rules it lifts, and a rule named as overridden that carries no trace of the override is exactly
+the defect review round 3 found (finding 2). This is a reservation, not an ownership exemption: every other account is rejected, exactly
 as an ordinary namespace rejects a non-owner, citing ADR-0119 by name in the rejection message
 (ADR-0119 §3: "rejects it otherwise with a message naming this ADR"). It applies to a first publish
 and to every later version alike — see "governs a reserved namespace's first publish" above — and
@@ -575,11 +613,11 @@ one: it is exactly as long as the set of verdict rules is, and it grows when the
 |---|---|---|
 | `R1` | a touched path under `mods/` does not parse as `mods/<namespace>.<name>/entry.json` or `.../page.json` | the offending path, and that no namespace could be attributed to it |
 | `R2` | an `entry.json`'s `id` names a different namespace than its own directory does | the path's namespace, the `id`'s namespace, and that the path is authoritative (`I2`) |
-| `R3` | an existing, non-reserved namespace's `old.owner` `(provider, id)` is not the PR author's | the namespace, the author's real `(provider, id)`, and the `owner.id` it did not match |
+| `R3` | an existing, non-reserved namespace's `old.owner` `(provider, id)` is not the PR author's, and `R11` has not authorised the PR as a takedown | the namespace, the author's real `(provider, id)`, and the `owner.id` it did not match |
 | `R4` | at a first publish, the namespace string is not the author's username, folded to lowercase | the namespace, the author's username, and that a first publish binds the namespace to the name it derives from (ADR-0039) |
 | `R5` | at a first publish, the proposed `new.owner` `(provider, id)` is not the submitter's own | the namespace, the author's real `(provider, id)`, and the `owner` the PR proposed instead |
 | `R6` | at a first publish, `new.owner.name_at_registration` is not the author's username | the namespace, the author's username, and the value the PR proposed instead |
-| `R7` | the PR author is not a current member of the organisation owning a reserved namespace | the namespace, the organisation, and ADR-0119 by name, per ADR-0119 §3 |
+| `R7` | the PR author is not a current member of the organisation owning a reserved namespace, and `R11` has not authorised the PR as a takedown | the namespace, the organisation, and ADR-0119 by name, per ADR-0119 §3 |
 | `R8` | at a reserved namespace's first publish, `new.owner` is not what `reserved-namespaces.json` records | the namespace, the recorded owner, and the `owner` the PR proposed instead |
 | `R9` | the membership question answered neither `204` nor `404` — a `302`, or anything else | the status received, that membership could not be determined, and that the check fails closed rather than guessing |
 | `R10` | a `page.json` is touched where no `entry.json` exists at the merge-base and none is created in the same PR | the path, and that no entry exists for that namespace to own it |
@@ -786,6 +824,28 @@ purposes and is judged in full by `R3`/`R7`, which reject it because the platfor
 own that namespace. `append-only.rules.md`'s own frozen-field rule is the second, independent
 barrier against the `owner`-editing variant, exactly as it is for Attempt 1.
 
+**Attempt 9 — claim the precedence without the authorisation.** An account that is **not** the
+platform's own identity opens a PR whose diff is *nothing but* a takedown mutation: one existing
+version's `status` set to `"removed"` with a reason, in exactly the shape
+`append-only.rules.md` defines, no other file and no other field touched. The bet is on how a
+checker implements `R3`'s exception — that it reads the precedence as a property of the **diff's
+shape** ("this PR looks like a takedown, so `R3` does not apply to it") rather than as a
+consequence of `R11` having **authorised** the PR. Under such a checker the PR is exempted from
+`R3` before anyone asks who opened it, and any account at all can then remove any version of
+anyone's entry. A takedown is the one registry mutation that destroys published value (ADR-0041,
+MANAGER.md §7), so this is the worst outcome anything in this document can produce, and it is
+reachable by writing the exception with its two clauses in the wrong order. **What the contract
+does about it:** the precedence in `R3`, `R7` and `R11` is conditional on `R11` *authorising* the
+PR — "if, and only if, `R11` authorises a PR as a takedown" — and never on the PR being
+takedown-shaped. `R11` authorises exactly one identity and, until task 007's implementer
+establishes which concrete `pulls.user.id` the platform's own takedown PRs carry, it authorises
+nobody at all, so the precedence never fires and every takedown PR is rejected by `R3`/`R7`. The
+exception has two clauses that are load-bearing in opposite directions — **who** (`R11`'s identity
+test, this attempt) and **what** (`R11`'s "nothing but the takedown mutation itself", Attempt 8) —
+and removing either one opens one of the two attempts. `docs/tasks/032-verify.sh`'s `P` checks fail
+if either clause leaves the document, and its `T10`-`T13` fail if the precedence is ever declared
+at one end only. Found in review round 3 (finding 2).
+
 **On GitHub's documented username-recycling behaviour, quoted verbatim, underpinning attempts 1
 and 4 above:**
 > "After changing your username, your old username becomes available for anyone else to claim."
@@ -873,7 +933,15 @@ authorised only when its author is the platform's own identity: the account
 covers **nothing but** the takedown mutation itself, in the shape `append-only.rules.md` defines: a
 PR that sets `status` to `"removed"` with its reason *and* makes any other change — a new version,
 an edited `owner`, a `page.json` rewrite — is not a takedown for this rule's purposes and is judged
-in full by the ordinary rules (Attempt 8 above).
+in full by the ordinary rules (Attempt 8 above). **`R11` does not merely narrow who may open a
+takedown; it is what makes one openable at all, and the rules it lifts are named here rather than
+left for a reader to infer — Precedence: R11 over R3, R7.** For the one PR `R11` authorises, `R3`
+and `R7` do not apply, so `I7`'s "every rule that applies to it" is satisfied without them; for
+every other PR `R11` grants nothing and `R3`/`R7` apply in full. This sentence exists because
+review round 3 (finding 2) found the ruling written into this document's prose while its logic left
+`R3` unconditional, so a checker built faithfully from the text still rejected the platform's own
+legally-mandated takedown — review round 1's finding B5, unchanged. **A decision that lives in
+prose but not in the logic is not a decision** (Ludwig, 2026-09-07, ruling on that finding).
 
 **The mechanism, marked rather than assumed (guardrail 6b).** A GitHub Organization does not itself
 authenticate, so which concrete `pulls.user.id` a PR opened on the organisation's behalf actually
@@ -883,8 +951,9 @@ it by reading a stored credential is forbidden (CLAUDE.md rule 11, MANAGER.md gu
 rule above names the *identity*; task 007's implementer must establish which id the platform's own
 takedown PRs present and configure `R11` against it. The rule is required as written — that belief
 about the mechanism is what is untested, not the rule. **Until it is configured, `R11` authorises
-nobody:** the check fails closed and every takedown PR is rejected by `R3`/`R7`, which is exactly
-today's state. It never fails the other way, into "accept any PR that says it is a takedown."
+nobody:** the check fails closed, the precedence above never fires because there is no authorised
+PR for it to fire on, and every takedown PR is rejected by `R3`/`R7`, which is exactly today's
+state. It never fails the other way, into "accept any PR that says it is a takedown."
 
 **I8 (MUST)** — passing this gate is not authorisation to merge. MANAGER.md §7 requires Ludwig's
 explicit **written approval**, given in session and referenced in the PR, before a takedown PR is

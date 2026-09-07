@@ -656,6 +656,78 @@ for p in paras:
 pf("T8 every paragraph containing a normative MUST cites a rule id (no MUST outside the scheme)",
    not orphan, "%d paragraph(s) with a MUST and no rule id: %s" % (len(orphan), orphan))
 
+# --- PRECEDENCE: an exception may not live in one rule's prose while the rule it overrides
+#     carries no trace of it. Round-3 finding 2: Ludwig's takedown ruling was written into the
+#     document as `R11` while `R3` stayed unconditional and `I7` required every rule to pass, so
+#     a faithful checker still rejected the platform's own legally-mandated takedown -- round-1
+#     finding B5's outcome, unchanged. "A decision that lives in prose but not in the logic is
+#     not a decision" (Ludwig, 2026-09-07). The convention this enforces is stated in the
+#     document's own "How to read this document" section:
+#       * where one rule disapplies another, the overriding rule's OWN paragraph carries the
+#         declaration `Precedence: Rx over Ry, Rz`
+#       * and every rule named after `over` cites `Rx` in its own declaring paragraph
+#     so the exception can never again be reconcilable only by a reader who happens to read both
+#     ends of the document.
+DECL_ANY = re.compile(r'^\*\*(R\d+|I\d+) \(MUST(?: NOT)?\)\*\*')
+para_of_rule = {}
+for p in paras:
+    flat = ' '.join(p.split())
+    m = DECL_ANY.match(flat)
+    if m and m.group(1) not in para_of_rule:
+        para_of_rule[m.group(1)] = flat
+
+PREC = re.compile(r'Precedence: (R\d+) over ((?:R\d+)(?:,\s*R\d+)*)')
+pairs = []          # (declaring rule, overriding rule, [overridden rules])
+for rid, flat in sorted(para_of_rule.items()):
+    for m in PREC.finditer(flat):
+        pairs.append((rid, m.group(1), re.findall(r'R\d+', m.group(2))))
+
+pf("T10 the document declares at least one precedence pair in the `Precedence: Rx over Ry` form (a search that finds nothing is a broken search: with no pair declared, T11 and T12 would both be vacuous)",
+   len(pairs) >= 2, "found %d: %s" % (len(pairs), pairs))
+
+bad = []
+for declarer, over, unders in pairs:
+    if declarer != over:
+        bad.append("`Precedence: %s over ...` is declared inside %s's paragraph, not %s's own" % (over, declarer, over))
+    for r in [over] + unders:
+        if r not in declared:
+            bad.append("%s names %s, which the document does not declare as a verdict rule" % (over, r))
+    if over in unders:
+        bad.append("%s is declared as overriding itself" % over)
+pf("T11 every precedence declaration sits in the overriding rule's own paragraph and names only declared verdict rules",
+   not bad, "; ".join(bad))
+
+unreconciled = []
+for _, over, unders in pairs:
+    for u in unders:
+        body = para_of_rule.get(u, "")
+        if not body:
+            unreconciled.append("%s has no declaring paragraph to carry the exception" % u)
+        elif not re.search(r'\b%s\b' % over, body):
+            unreconciled.append("%s is overridden by %s but its own paragraph never mentions %s" % (u, over, over))
+pf("T12 every rule that another rule overrides cites its override in its own paragraph (the exception is reconciled at BOTH ends, never only at the overriding one -- round-3 finding 2)",
+   not unreconciled, "; ".join(unreconciled))
+
+# The reverse fence: exception language inside a VERDICT rule's paragraph, naming another verdict
+# rule, must be backed by a declared pair. This is what stops the next exception landing in prose
+# with no precedence statement. Scoped to R rules deliberately -- they are the rules that reject,
+# and an unreconciled exception among them is the defect that reached three review rounds.
+EXC = re.compile(r'\bunless\b|\bdoes not apply\b|\bdo not apply\b|\bException for\b|\breplaces\b|\breplaced by\b|\bsupersede', re.I)
+in_a_pair = set()
+for _, over, unders in pairs:
+    in_a_pair.add(over)
+    in_a_pair.update(unders)
+loose = []
+for rid, flat in sorted(para_of_rule.items()):
+    if not rid.startswith('R'):
+        continue
+    others = {x for x in re.findall(r'\bR\d+\b', flat) if x != rid and x in declared}
+    if others and EXC.search(flat) and rid not in in_a_pair:
+        loose.append("%s: exception language naming %s with no declared precedence pair -- `%s`"
+                     % (rid, sorted(others), flat[:120]))
+pf("T13 no verdict rule states an exception against another verdict rule without a declared precedence pair (an exception cannot land unreconciled again)",
+   not loose, "; ".join(loose))
+
 # --- the taxonomy must actually cover the five cases the last two review rounds found missing ---
 need = {
     "R5":  "first publish, non-reserved: the declared owner is not the submitter (round-2 B1, mode 1 of 2 missing)",
@@ -838,6 +910,44 @@ expect_no_hits_in "K8 Questions 3 and 4 are no longer booked as open questions f
     '^## Questions$' 'Booked to Ludwig as an FYI|An authority question sitting with Ludwig'
 expect_hits_in "K9 both answers are recorded with Ludwig and the date, so no round re-asks them" \
     'answered by Ludwig' '2026-09-07'
+
+# --------------------------------------------------------------------------------
+section "P -- Ludwig's takedown ruling is OPERATIVE, and its exception surface stays narrow (round-3 finding 2)"
+# Round-3 finding 2, and Ludwig's own words on it: "A decision that lives in prose but not in the
+# logic is not a decision." R11 existed, said who may OPEN a takedown, and lifted nothing: R3 was
+# unconditional, I7 required every applicable rule to pass, and a faithful checker therefore still
+# rejected the platform's own legally-mandated takedown. T10-T13 above enforce the SHAPE of the
+# reconciliation mechanically; these checks assert its CONTENT, at the two places a reader and a
+# checker each look, and they are deliberately split (2c rule 3) so that no one of them can be
+# green while another half of the exception is missing.
+# P4 and P5 are the fixture for the dangerous half. The exception's surface -- "the platform's own
+# identity" AND "nothing but the takedown mutation itself" -- is what stops a non-takedown change
+# riding through it (Attempt 8), and what stops a takedown-SHAPED diff from any account riding
+# through it (Attempt 9). Delete either clause and the suite reddens.
+expect_hits_in_para "P1 R3 carries the takedown exception in its own paragraph, at the point the ordinary rule is made" \
+    '\*\*R3 \(MUST\)\*\*' 'unless .R11. authorises'
+expect_hits_in_para "P2 R3's exception is conditional on R11 AUTHORISING the PR, never on the PR merely being takedown-shaped" \
+    '\*\*R3 \(MUST\)\*\*' 'if, and only if, .R11. authorises'
+expect_hits_in_para "P3 R3 states what happens in every other case: R11 grants nothing and R3 applies in full" \
+    '\*\*R3 \(MUST\)\*\*' 'R3. applies in full'
+expect_hits_in_para "P4 R7 carries the same exception, so the reserved-namespace path cannot be the one left unreconciled" \
+    '\*\*R7 \(MUST\)\*\*' 'unless .R11. authorises'
+expect_hits_in_para "P5 R11 declares the precedence itself, in its own paragraph, in the checked form" \
+    '\*\*R11 \(MUST\)\*\*' 'Precedence: R11 over R3, R7'
+expect_hits_in_para "P6 R11's authorisation still covers NOTHING BUT the takedown mutation (the clause that keeps a non-takedown change from riding through the exception -- Attempt 8)" \
+    '\*\*R11 \(MUST\)\*\*' 'nothing but.. the takedown mutation itself'
+expect_hits_in_para "P7 R11 still fails closed until the platform's concrete id is configured, so the precedence cannot fire before anyone knows who it authorises" \
+    'the mechanism, marked rather than assumed|A GitHub Organization does not itself' 'authorises nobody'
+expect_hits_in "P8 the attack-attempts section works the PRECEDENCE STATEMENT itself as an attempt, not just the takedown rule" \
+    'Attack attempts' 'Attempt 9'
+expect_hits_in "P9 that attempt is the takedown-shaped diff from an unauthorised account, and names what defeats it" \
+    'Attack attempts' 'takedown-shaped|looks like a takedown'
+expect_hits_in "P10 the how-to-read section states the precedence convention, so a future exception has a form to follow" \
+    'How to read this document' 'Precedence'
+expect_hits_in_para "P11 I7's 'every rule that applies' is reconciled with the precedence rather than left to a reader" \
+    '\*\*I7 \(MUST\)\*\*' 'Precedence|precedence'
+expect_hits_in "P12 the takedown section still leaves the MERGE gate to MANAGER.md Section 7, unabsorbed and unweakened" \
+    'Takedown PRs' 'R11. decides who may open'
 
 # --------------------------------------------------------------------------------
 section "B1 (round 1) -- the document states the caller-dependent rule, the redirect hazard, and the Actions-token caveat"
