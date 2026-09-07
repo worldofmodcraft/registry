@@ -69,8 +69,16 @@ DOC="contracts/ownership.md"
 TASKLOG="docs/tasks/032-ownership-contract.md"
 CONTRACTS_README="docs/contracts/README.md"
 B1_FIXTURE="docs/tasks/032-b1-fixtures.json"
+# The task file's own header -- everything before the first `---` separator, i.e. the spec, the
+# Context list and the acceptance-criteria evidence, and NOT the review rounds or the round logs.
+# Checks about "what this task's Context list contains" must read this and not the whole file:
+# the round logs paste this script's own output, and that output echoes the paragraphs it matched,
+# so a whole-file check would match its own evidence and report a duplicate. Found by this
+# script's own uniqueness rule during fix round 3, immediately after the round-3 log was appended.
+TASKLOG_HEADER="$(mktemp -t 032-tasklog-header.XXXXXX)"
+trap 'rm -f "$TASKLOG_HEADER"' EXIT
+awk '/^---$/ { exit } { print }' "$TASKLOG" > "$TASKLOG_HEADER"
 PREFIX_BLOB="fcde6d5:contracts/ownership.md"   # the commit fix round 1 started from
-ROUND2_BASE="38600d2"   # the commit fix round 2 started from (manager's F-A/F-B verification)
 FAILURES=0
 ADVISORY_OK=0
 ADVISORY_DRIFT=0
@@ -122,6 +130,104 @@ expect_no_hits() {
         fail "$label -- pattern still present in $file (expected it gone)"
     else
         pass "$label"
+    fi
+}
+
+# --- Scoping helpers (fix round 3, finding B5) -----------------------------------------------
+# Round-2 finding B5: `expect_hits`/`expect_hits_flow` search the WHOLE document, so a check
+# named after one section goes green because some OTHER paragraph happens to contain the two
+# strings the pattern names. That is a check that is green for the wrong reason -- worse than no
+# check, because it manufactures confidence (MANAGER.md Section 2c rule 2). B5 was raised as a
+# CLASS, not an instance, so every pattern-matching check in this file is now bound to the
+# narrowest region that can honestly carry its claim:
+#   expect_hits_in       -- one `## ` section
+#   expect_hits_in_para  -- ONE blank-line-delimited paragraph, identified by a unique anchor
+#                           (if the anchor matches more than one paragraph the check FAILS, so
+#                           the scoping itself cannot silently rot into whole-document scope)
+# Both flatten line wrapping inside the region first: the ~95-column wrapping in these documents
+# is presentational, so a phrase split by the wrapper is not absent from the text.
+# The unscoped expect_hits/expect_hits_flow above are kept ONLY for claims that are genuinely
+# about the whole document (e.g. "this string appears nowhere"), and each remaining use says so.
+
+section_heading_count() {
+    local pat="$1" file="${2:-$DOC}"
+    grep -cE "^## .*$pat" "$file" 2>/dev/null || printf '0'
+}
+
+section_of() {
+    # Body of the `## ` section whose heading matches ERE $1, up to (not including) the next `## `.
+    # Callers must first check section_heading_count: a pattern matching two headings is not a
+    # scope, and silently taking the first one is how a scoped check rots back into an unscoped
+    # one. (Caught by this script on itself during fix round 3: two headings contained the words
+    # "rejection taxonomy", so every check scoped to it was reading the wrong section.)
+    local pat="$1" file="${2:-$DOC}"
+    awk -v pat="$pat" '
+        /^## / { if (inside) exit; if ($0 ~ pat) inside = 1 }
+        inside { print }
+    ' "$file"
+}
+
+expect_hits_in() {
+    # $1 label, $2 section-heading ERE, $3 content ERE, $4 file (default $DOC)
+    local label="$1" secpat="$2" pattern="$3" file="${4:-$DOC}" body hits nsec
+    nsec=$(section_heading_count "$secpat" "$file")
+    if [ "$nsec" -ne 1 ]; then
+        fail "$label -- /$secpat/ matches $nsec '## ' headings in $file; a section pattern that is not unique is not a scope"
+        return
+    fi
+    body=$(section_of "$secpat" "$file")
+    if [ -z "$body" ]; then
+        fail "$label -- no '## ' section matching /$secpat/ in $file (the scope itself is missing, so the claim cannot be checked)"
+        return
+    fi
+    hits=$(printf '%s\n' "$body" | awk 'BEGIN{RS=""} {gsub(/\n/," "); print}' | grep -E "$pattern")
+    if [ -z "$hits" ]; then
+        fail "$label -- pattern /$pattern/ matched nothing inside the section /$secpat/ (that section only, never the whole document)"
+    else
+        pass "$label"
+        printf '%s\n' "$hits" | cut -c1-300 | sed 's/^/        /'
+    fi
+}
+
+expect_no_hits_in() {
+    local label="$1" secpat="$2" pattern="$3" file="${4:-$DOC}" body nsec
+    nsec=$(section_heading_count "$secpat" "$file")
+    if [ "$nsec" -ne 1 ]; then
+        fail "$label -- /$secpat/ matches $nsec '## ' headings in $file; a section pattern that is not unique is not a scope"
+        return
+    fi
+    body=$(section_of "$secpat" "$file")
+    if [ -z "$body" ]; then
+        fail "$label -- no '## ' section matching /$secpat/ in $file"
+        return
+    fi
+    if printf '%s\n' "$body" | awk 'BEGIN{RS=""} {gsub(/\n/," "); print}' | grep -qE "$pattern"; then
+        fail "$label -- pattern /$pattern/ still present inside the section /$secpat/ (expected it gone)"
+    else
+        pass "$label"
+    fi
+}
+
+expect_hits_in_para() {
+    # $1 label, $2 anchor ERE identifying EXACTLY ONE paragraph, $3 content ERE, $4 file.
+    # The uniqueness requirement is the point: an anchor that matches several paragraphs is not a
+    # scope, and the check fails rather than quietly widening to whichever paragraph matched.
+    local label="$1" anchor="$2" pattern="$3" file="${4:-$DOC}" paras n
+    paras=$(awk 'BEGIN{RS=""} {gsub(/\n/," "); print}' "$file" | grep -E "$anchor")
+    n=$(printf '%s' "$paras" | grep -c . || true)
+    if [ "$n" -eq 0 ]; then
+        fail "$label -- anchor /$anchor/ matched no paragraph in $file"
+        return
+    fi
+    if [ "$n" -ne 1 ]; then
+        fail "$label -- anchor /$anchor/ matched $n paragraphs in $file; an anchor that is not unique is not a scope"
+        return
+    fi
+    if printf '%s\n' "$paras" | grep -qE "$pattern"; then
+        pass "$label"
+        printf '%s\n' "$paras" | cut -c1-300 | sed 's/^/        /'
+    else
+        fail "$label -- pattern /$pattern/ absent from the ONE paragraph anchored by /$anchor/ (that paragraph only)"
     fi
 }
 
@@ -386,104 +492,404 @@ else
     fi
 fi
 
-section "B1 -- the document states the caller-dependent rule, the redirect hazard, and the Actions-token caveat"
+# ==============================================================================================
+# FIX ROUND 3 (2026-09-07). Every check below this line is either NEW or a round-2 check
+# re-bound to a narrow scope (finding B5, treated as a class). See the "SCOPE AUDIT" note at the
+# end of this file for the count.
+# ==============================================================================================
 
-expect_hits "B1.10 the document states three GitHub-documented outcomes including 302 for a non-member requester" \
-    'requester is not an organization member'
-expect_hits "B1.11 the document states a checker must NOT follow the redirect and treat the result as the answer" \
-    'MUST NOT follow the .302.'
-expect_hits "B1.12 the document names the redirect-following default of common clients (the hazard)" \
-    'curl -L.*requests.*gh api.*octokit'
-expect_hits_flow "B1.13 the document marks the GITHUB_TOKEN/Actions-caller case as unverified, at the point the claim is made" \
-    'no GitHub Actions runner'
-expect_hits "B1.14 the document names the memberships endpoint as a candidate, not an answer" \
-    'candidate, not an answer'
-expect_no_hits "B1.15 the old, caller-unqualified flat claim ('returns .204. if the named user is a member, .404. otherwise') is gone" \
+section "T -- the rejection taxonomy is DERIVED from the MUSTs, and drift is detectable (round-2 finding B1)"
+# Round-2 finding B1: the document kept a prose list of failure modes BESIDE its MUST rules, and
+# the two drifted -- twice, in two consecutive rounds, each time leaving a MUST with no rejection
+# path. A promise not to let them drift again is worth nothing; this is the check instead.
+# The convention the document now follows (stated in its own "How to read this document" section):
+#   * every rule that can reject a PR is declared as `**Rn (MUST)** -- ...` at the start of a line
+#   * every rule that constrains the checker without rejecting a PR is declared `**In (MUST)**`
+#   * every normative MUST/MUST NOT sits in a paragraph that cites a rule id
+#   * the rejection taxonomy has exactly one row per declared R-rule, and no row without one
+# Any of those four broken -- a MUST added with no id, a rule with no taxonomy row, a taxonomy row
+# for a rule that no longer exists -- turns this section red.
+
+python3 - "$DOC" <<'PY'
+import re, sys
+
+doc_path = sys.argv[1]
+text = open(doc_path).read()
+lines = text.splitlines()
+failures = 0
+
+def pf(label, ok, detail=""):
+    global failures
+    if ok:
+        print("PASS  %s" % label)
+    else:
+        failures += 1
+        print("FAIL  %s%s" % (label, (" -- " + detail) if detail else ""))
+
+DECL = re.compile(r'^\*\*(R|I)(\d+) \(MUST(?: NOT)?\)\*\*')
+decl_r, decl_i, dup = [], [], []
+for ln in lines:
+    m = DECL.match(ln)
+    if not m:
+        continue
+    rid = m.group(1) + m.group(2)
+    (decl_r if m.group(1) == 'R' else decl_i).append(rid)
+for seq in (decl_r, decl_i):
+    seen = set()
+    for rid in seq:
+        if rid in seen:
+            dup.append(rid)
+        seen.add(rid)
+
+pf("T1 the document declares verdict rules in the `**Rn (MUST)**` form (>= 11 expected)",
+   len(set(decl_r)) >= 11, "found %d: %s" % (len(set(decl_r)), sorted(set(decl_r))))
+pf("T2 the document declares checker rules in the `**In (MUST)**` form (>= 8 expected)",
+   len(set(decl_i)) >= 8, "found %d: %s" % (len(set(decl_i)), sorted(set(decl_i))))
+pf("T3 no rule id is declared twice", not dup, "duplicated: %s" % sorted(set(dup)))
+
+# --- the taxonomy table, read ONLY from the section that carries it ---
+tax_heads = [ln for ln in lines if ln.startswith('## ') and 'rejection taxonomy' in ln.lower()]
+tax_section = []
+inside = False
+for ln in lines:
+    if ln.startswith('## '):
+        if inside:
+            break
+        if 'rejection taxonomy' in ln.lower():
+            inside = True
+    if inside:
+        tax_section.append(ln)
+pf("T4 exactly one '## ' section carries the rejection taxonomy (an ambiguous heading is not a scope)",
+   len(tax_heads) == 1 and bool(tax_section), "%d heading(s) matched: %s" % (len(tax_heads), tax_heads))
+
+ROW = re.compile(r'^\|\s*`(R\d+)`\s*\|(.*)\|\s*$')
+rows, thin = {}, []
+for ln in tax_section:
+    m = ROW.match(ln)
+    if not m:
+        continue
+    rid, rest = m.group(1), m.group(2)
+    cells = [c.strip() for c in rest.split('|')]
+    if rid in rows:
+        thin.append(rid + " (duplicate row)")
+    rows[rid] = cells
+    if len([c for c in cells if c]) < 2 or any(len(c) < 12 for c in cells):
+        thin.append(rid + " (empty or stub cell: %r)" % cells)
+
+declared, tabled = set(decl_r), set(rows)
+pf("T5 every declared verdict rule has a taxonomy row (a MUST with no rejection path is the defect)",
+   declared <= tabled, "declared but not in the taxonomy: %s" % sorted(declared - tabled))
+pf("T6 every taxonomy row names a rule the document still declares (no orphan rows)",
+   tabled <= declared, "in the taxonomy but not declared: %s" % sorted(tabled - declared))
+pf("T7 no taxonomy row is a stub -- each names what failed and what the rejection says",
+   not thin, "; ".join(thin))
+
+# --- every normative MUST cites a rule id, so a new MUST cannot be added outside the scheme ---
+paras = re.split(r'\n\s*\n', text)
+orphan = []
+for p in paras:
+    flat = ' '.join(p.split())
+    if re.search(r'\bMUST\b', flat) and not re.search(r'\b[RI]\d+\b', flat):
+        orphan.append(flat[:150])
+pf("T8 every paragraph containing a normative MUST cites a rule id (no MUST outside the scheme)",
+   not orphan, "%d paragraph(s) with a MUST and no rule id: %s" % (len(orphan), orphan))
+
+# --- the taxonomy must actually cover the five cases the last two review rounds found missing ---
+need = {
+    "R5":  "first publish, non-reserved: the declared owner is not the submitter (round-2 B1, mode 1 of 2 missing)",
+    "R8":  "first publish, reserved: the declared owner is not the reserved owner (round-2 B1, mode 2 of 2 missing)",
+    "R2":  "the directory path and `id` disagree about the namespace (round-2 B2)",
+    "R10": "page.json touched where no entry.json exists (round-2 B3)",
+    "R9":  "membership indeterminate -- the 302 arm (round-2 B4)",
+}
+for rid, why in need.items():
+    pf("T9.%s the taxonomy covers: %s" % (rid, why), rid in rows, "no row for %s" % rid)
+
+sys.exit(1 if failures else 0)
+PY
+if [ $? -ne 0 ]; then fail "T0 the rule/taxonomy derivation check reported failures (see FAIL lines above)"; fi
+
+# --------------------------------------------------------------------------------
+section "B1 (round 2) -- the failure taxonomy is exhaustive, and no longer advertises itself as closed at three"
+
+expect_no_hits "B1a.1 the closed-list phrasing 'one of **three** failure modes' is gone (it was the defect: a closed list beside an open set of MUSTs)" \
+    'one of \*\*three\*\* failure modes'
+expect_hits_in "B1a.2 the taxonomy section states the list is derived from the rule declarations, not maintained beside them" \
+    'rejection taxonomy' 'derived from the rule declarations|one row per declared'
+expect_hits_in "B1a.3 the how-to-read section explains the rule-id convention a new MUST must follow" \
+    'How to read this document' 'every normative MUST'
+expect_hits_in "B1a.4 the how-to-read section names the verify check that makes drift detectable rather than promised" \
+    'How to read this document' '032-verify\.sh'
+
+# --------------------------------------------------------------------------------
+section "B2 (round 2) -- one authoritative source for the namespace, and the other must agree"
+
+expect_hits_in "B2a.1 a section states which of the two sources is authoritative" \
+    'directory path is authoritative' 'the directory path.*authoritative|authoritative.*directory path'
+expect_hits_in "B2a.2 the same section states WHY the path wins (page.json carries neither id nor owner)" \
+    'directory path is authoritative' 'page\.json'
+expect_hits_in_para "B2a.3 the agreement requirement is a rule, not a description: entry.json's id must agree with its own directory" \
+    '\*\*R2 \(MUST\)\*\*' 'agree|equal'
+expect_hits_in "B2a.4 the mods/alice.cooltool + id mallory:cooltool disagreement is worked as an attack attempt" \
+    'Attack attempts' 'mods/alice\.cooltool.*id.*mallory:cooltool|id..? .?mallory:cooltool'
+expect_hits_in "B2a.5 the comparison model says the namespace is derived from the path only, never from id" \
+    'directory path is authoritative' '\*\*I2 \(MUST\)\*\*'
+
+# --------------------------------------------------------------------------------
+section "B3 (round 2) -- page.json for a namespace with no entry.json is defined, not merely claimed complete"
+
+expect_hits_in "B3a.1 the page.json section names the no-entry.json case explicitly" \
+    'page\.json. PRs' 'no .entry\.json. exists|does not exist at the merge-base'
+expect_hits_in "B3a.2 the page.json section states page.json carries neither owner nor id, so the first-publish rule cannot apply" \
+    'page\.json. PRs' 'neither .?owner.? nor .?id.?|no .owner. field and no .id. field'
+expect_hits_in_para "B3a.3 the no-entry.json case has a rule with a verdict, not a gap" \
+    '\*\*R10 \(MUST\)\*\*' 'reject'
+expect_hits_in "B3a.4 the page.json section states what happens when the SAME PR also creates the entry.json" \
+    'page\.json. PRs' 'same PR|same diff'
+expect_no_hits_in "B3a.5 the page.json section no longer claims completeness while leaving the case undefined" \
+    'page\.json. PRs' 'This is the entirety of what this document requires'
+
+# --------------------------------------------------------------------------------
+section "B4 (round 2) -- the 302 arm is mandatory, not one of two acceptable designs"
+
+expect_no_hits "B4a.1 the 'either is acceptable' framing of the two designs is gone" \
+    'either is acceptable'
+expect_hits_in "B4a.2 the reserved-namespace section states the 302 arm is mandatory" \
+    'reserved-namespace case' 'mandatory'
+expect_hits_in_para "B4a.3 detecting the 302 without following it is a declared checker rule" \
+    '\*\*I5 \(MUST NOT\)\*\*' '302'
+expect_hits_in_para "B4a.4 an indeterminate membership answer has its own verdict rule, failing closed" \
+    '\*\*R9 \(MUST\)\*\*' '302'
+expect_hits_in "B4a.5 running as a confirmed org member is stated as an ADDITION to the 302 arm, never an alternative to it" \
+    'reserved-namespace case' 'in addition to|never instead of|not a substitute for the'
+expect_hits_in "B4a.6 the redirect-following defaults are stated for each client separately, with what was tested here" \
+    'reserved-namespace case' 'verified in this environment|verified here'
+
+# --------------------------------------------------------------------------------
+section "B5 (round 2) -- B2.2 rewritten to look at the exception itself (a class defect, not an instance)"
+
+# THE ROUND-2 REPRODUCTION, AS A FIXTURE. The old B2.2 matched '324218296.*organisation' against
+# EVERY flattened paragraph, so an unrelated paragraph in the reserved-namespace section kept it
+# green while the number inside the exception was falsified. This check reads the ONE paragraph
+# that declares the exception, and reads the required value from reserved-namespaces.json rather
+# than from a literal in this script, so a falsified value in the document reddens it.
+RESERVED_OWNER_ID=$(python3 -c "import json; d=json.load(open('reserved-namespaces.json')); print(d['namespaces']['mc']['owner']['id'])")
+expect_hits_in_para "B2.2 the reserved first-publish exception names the required owner value ($RESERVED_OWNER_ID, read from reserved-namespaces.json) IN THE EXCEPTION ITSELF" \
+    '\*\*R8 \(MUST\)\*\*' "$RESERVED_OWNER_ID"
+
+# --------------------------------------------------------------------------------
+section "V -- content checks on the identity values themselves (round-2 non-blocking 6)"
+# Round-2 finding 6: the reviewer falsified BOTH central numeric identities in the document and
+# the only red was S4, the scope check -- which it separately showed fires on whitespace. The
+# suite caught a falsified key SET and not a falsified VALUE. These checks read the expected
+# values from the real data file and from the committed fixture, never from a literal here, and
+# assert them at the specific points in the document that carry the claim.
+
+ORG_ID=$(python3 -c "import json; d=json.load(open('reserved-namespaces.json')); print(d['namespaces']['mc']['owner']['id'])")
+TEST_ORG_ID=$(python3 -c "import json; d=json.load(open('reserved-namespaces.json')); print(d['namespaces']['test']['owner']['id'])")
+if [ "$ORG_ID" = "$TEST_ORG_ID" ]; then
+    pass "V1 reserved-namespaces.json records the same owner.id for mc and test ($ORG_ID)"
+else
+    fail "V1 reserved-namespaces.json records different owner.ids (mc=$ORG_ID test=$TEST_ORG_ID)"
+fi
+expect_hits_in "V2 the org id the document pastes from \`gh api orgs/worldofmodcraft\` equals reserved-namespaces.json's recorded owner.id" \
+    'reserved-namespace case' "\"id\":$ORG_ID,\"login\":\"worldofmodcraft\""
+expect_hits_in "V3 the document's 'no individual id can equal the org id' argument still contrasts the two REAL ids" \
+    'reserved-namespace case' "$ORG_ID.*324089373|324089373.*$ORG_ID"
+expect_hits_in "V4 the individual account id the argument uses is the one the PR#3 transcript actually returned" \
+    'What identity is compared' '"id":324089373,"login":"womcraft"'
+
+python3 - "$DOC" "$B1_FIXTURE" "$ORG_ID" <<'PY'
+import json, re, sys
+doc = open(sys.argv[1]).read()
+fx = json.load(open(sys.argv[2]))
+org_id = sys.argv[3]
+failures = 0
+def pf(label, ok, detail=""):
+    global failures
+    if not ok:
+        failures += 1
+        print("FAIL  %s%s" % (label, (" -- " + detail) if detail else ""))
+    else:
+        print("PASS  %s" % label)
+
+# Every 5+-digit integer in the contract is an account id or a documented placeholder. An
+# allow-list makes a falsified value fail even where no section-scoped check names it: the
+# falsified number is simply not one of the numbers this document is allowed to contain.
+found = sorted(set(re.findall(r'\b\d{5,}\b', doc)))
+allowed = {
+    org_id: "the worldofmodcraft organisation's numeric account id (reserved-namespaces.json)",
+    "324089373": "the womcraft individual account's numeric id (live gh api transcripts)",
+    "10137": "GitHub's `ghost` placeholder account, cited as indirect evidence on id reuse",
+    "100200300": "fabricated placeholder id in the task-007 regression fixture, marked as such",
+    "900800700": "fabricated placeholder id in the task-007 regression fixture, marked as such",
+    "15062869": "the jestjs/jest repository id, in the live evidence for I5's redirect-following claims",
+}
+unexpected = [n for n in found if n not in allowed]
+pf("V5 every 5+-digit number in the contract is a known identity or a marked placeholder",
+   not unexpected, "unrecognised number(s) %s -- a falsified identity value, or a new one that must be added to this allow-list with its provenance" % unexpected)
+missing = [n for n in allowed if n not in found]
+pf("V6 every identity the contract's argument depends on is still present in it",
+   not missing, "missing from the document: %s" % [(n, allowed[n]) for n in missing])
+
+# The fixture's redirect target embeds the org id; it must be the same org.
+pf("V7 the recorded fixture's redirect target names the same organisation id as reserved-namespaces.json",
+   ("/organizations/%s/" % org_id) in fx["unauthenticated_members_endpoint"]["redirect_target"],
+   "redirect_target=%r, org id from reserved-namespaces.json=%s" % (fx["unauthenticated_members_endpoint"]["redirect_target"], org_id))
+
+# Round-2 finding 15: the fixture's own how_to_recapture instructions did not match the commands
+# it records, so a reader following the file's instructions produces output that fails B1.8.
+meta_cmds = fx["_meta"]["how_to_recapture"]
+probe_cmds = [fx["unauthenticated_members_endpoint"]["command"],
+              fx["unauthenticated_members_endpoint_redirect_followed"]["command"],
+              fx["unauthenticated_memberships_endpoint"]["command"]]
+mismatch = [(i, a, b) for i, (a, b) in enumerate(zip(meta_cmds, probe_cmds)) if a != b]
+pf("V8 the fixture's how_to_recapture commands are byte-identical to the commands it records (round-2 finding 15)",
+   not mismatch and len(meta_cmds) == len(probe_cmds),
+   "mismatched at index %s" % [m[0] for m in mismatch] if mismatch else "list lengths differ: %d vs %d" % (len(meta_cmds), len(probe_cmds)))
+
+sys.exit(1 if failures else 0)
+PY
+if [ $? -ne 0 ]; then fail "V0 one or more identity-value checks failed (see FAIL lines above)"; fi
+
+# --------------------------------------------------------------------------------
+section "K -- Ludwig's two rulings of 2026-09-07 are written into the contract as rules"
+# Ludwig answered the contract's own Questions 3 and 4 on 2026-09-07. Both had to become stated
+# rules, not implicit behaviour and not open questions -- his reasoning, binding on how this is
+# written: "no ADR states this in those words, so the contract must."
+
+expect_hits_in "K1 the takedown section states who may OPEN a takedown PR, as a ruling with its date" \
+    'Takedown PRs' '2026-09-07'
+expect_hits_in_para "K2 the takedown opener is a verdict rule, so an unauthorised opener has a rejection path" \
+    '\*\*R11 \(MUST\)\*\*' 'takedown'
+expect_hits_in "K3 the takedown section keeps MANAGER.md Section 7's written-approval gate on the MERGE, unsoftened" \
+    'Takedown PRs' 'written approval'
+expect_hits_in_para "K4 passing this gate is stated NOT to be merge authorisation" \
+    '\*\*I8 \(MUST\)\*\*' 'merge'
+expect_hits_in "K5 the takedown carve-out is confined to the takedown mutation itself, not to the whole PR" \
+    'Takedown PRs' 'nothing but|only that mutation|no other change'
+expect_hits_in "K6 case-insensitive namespace comparison is stated in the contract, with the live evidence at the point of the claim" \
+    'namespace string itself' 'case-insensitive|case-insensitively'
+expect_hits_in "K7 the case-folding claim carries its verification inline (three casings, one account id)" \
+    'namespace string itself' 'WOMCRAFT|WomCraft'
+expect_no_hits_in "K8 Questions 3 and 4 are no longer booked as open questions for Ludwig" \
+    '^## Questions$' 'Booked to Ludwig as an FYI|An authority question sitting with Ludwig'
+expect_hits_in "K9 both answers are recorded with Ludwig and the date, so no round re-asks them" \
+    'answered by Ludwig' '2026-09-07'
+
+# --------------------------------------------------------------------------------
+section "B1 (round 1) -- the document states the caller-dependent rule, the redirect hazard, and the Actions-token caveat"
+# All six of these were whole-document searches in round 2 (finding B5's class); each is now
+# bound to the section that must carry the claim.
+
+expect_hits_in "B1.10 the document states three GitHub-documented outcomes including 302 for a non-member requester" \
+    'reserved-namespace case' 'requester is not an organization member'
+expect_hits_in "B1.11 the document states a checker must NOT follow the redirect and treat the result as the answer" \
+    'reserved-namespace case' 'MUST NOT follow the .302.'
+expect_hits_in "B1.12a the redirect-following default is stated for curl, and matches what was run here" \
+    'reserved-namespace case' 'curl'
+expect_hits_in "B1.12b the redirect-following default is stated for Python's requests" \
+    'reserved-namespace case' 'requests'
+expect_hits_in "B1.12c the redirect-following default is stated for gh api" \
+    'reserved-namespace case' 'gh api'
+expect_hits_in "B1.12d octokit's redirect default is marked unverified here rather than asserted" \
+    'reserved-namespace case' 'octokit[^.]*(not established|not verified|unverified)|(not established|not verified|unverified)[^.]*octokit'
+expect_hits_in "B1.13 the document marks the GITHUB_TOKEN/Actions-caller case as unverified, at the point the claim is made" \
+    'reserved-namespace case' 'no GitHub Actions runner'
+expect_hits_in "B1.14 the document names the memberships endpoint as a candidate, not an answer" \
+    'reserved-namespace case' 'candidate, not an answer'
+expect_no_hits "B1.15 the old, caller-unqualified flat claim ('returns .204. if the named user is a member, .404. otherwise') is gone (whole-document scope is correct here: an absence claim)" \
     'returns .204. if the named user is a member, .404. otherwise'
 
 # --------------------------------------------------------------------------------
-section "B2 -- the reserved-namespace first-publish exception is stated where the first-publish rule is made"
+section "B2 (round 1) -- the reserved-namespace first-publish exception is stated where the first-publish rule is made"
 
-expect_hits "B2.1 the first-publish section states an explicit exception for reserved namespaces" \
-    'Exception for a namespace on the reserved list'
-expect_hits_flow "B2.2 the exception names the required owner value (organisation id 324218296) at first publish" \
-    '324218296.*organisation'
-expect_hits "B2.3 the reserved-namespace section states it governs first publish, not only present->present" \
-    'governs a reserved namespace.s first publish exactly as it governs every later'
+expect_hits_in "B2.1 the first-publish section states an explicit exception for reserved namespaces" \
+    'What a first publish binds' 'Exception for a namespace on the reserved list'
+expect_hits_in "B2.3 the reserved-namespace section states it governs first publish, not only present->present" \
+    'reserved-namespace case' 'governs a reserved namespace.s first publish exactly as it governs every later'
 
-# Cross-check the doc's cited org id against the real data file, not just against itself.
-RESERVED_MC_ID=$(python3 -c "import json; print(json.load(open('reserved-namespaces.json'))['namespaces']['mc']['owner']['id'])")
-RESERVED_TEST_ID=$(python3 -c "import json; print(json.load(open('reserved-namespaces.json'))['namespaces']['test']['owner']['id'])")
-printf '  $ python3 -c "...reserved-namespaces.json mc/test owner.id..." -> mc=%s test=%s\n' "$RESERVED_MC_ID" "$RESERVED_TEST_ID"
-if [ "$RESERVED_MC_ID" = "324218296" ] && [ "$RESERVED_TEST_ID" = "324218296" ]; then
+if [ "$ORG_ID" = "324218296" ] && [ "$TEST_ORG_ID" = "324218296" ]; then
     pass "B2.4 reserved-namespaces.json's real mc/test owner.id both equal 324218296, matching what the document cites"
 else
-    fail "B2.5 reserved-namespaces.json's real owner.id (mc=$RESERVED_MC_ID test=$RESERVED_TEST_ID) does not match 324218296"
+    fail "B2.5 reserved-namespaces.json's real owner.id (mc=$ORG_ID test=$TEST_ORG_ID) does not match 324218296"
 fi
 
 # --------------------------------------------------------------------------------
-section "B3 -- the namespace-string check (finding B3)"
+section "B3 (round 1) -- the namespace-string check"
 
-expect_hits "B3.1 the document states the namespace-string MUST rule" \
-    'namespace string .* MUST equal the PR'
-expect_hits "B3.2 the document states case-folding to lowercase" \
-    'folding both sides to lowercase'
-expect_hits "B3.3 reserved namespaces are stated exempt from the namespace-string check" \
-    'Reserved namespaces are exempt from this check'
-expect_hits "B3.4 the failure taxonomy lists three failure modes, not two" \
-    'one of \*\*three\*\* failure modes'
-expect_hits "B3.5 the mallory first-publish-capture attack scenario is present as a worked attack attempt" \
-    'mallory'
-expect_hits "B3.6 the attack attempt names this as finding B3" \
-    'found in review round 1 \(finding B3\)'
+expect_hits_in "B3.1 the document states the namespace-string rule as a rule, not a description" \
+    'namespace string itself' '\*\*R4 \(MUST\)\*\*'
+expect_hits_in "B3.2 the document states case-folding to lowercase" \
+    'namespace string itself' 'folding both sides to lowercase'
+expect_hits_in "B3.3 reserved namespaces are stated exempt from the namespace-string check" \
+    'namespace string itself' 'Reserved namespaces are exempt from this check'
+expect_hits_in "B3.4 the namespace-string section records the residual case it does NOT close (round-2 finding 12)" \
+    'namespace string itself' 'does not close|residual'
+expect_hits_in "B3.5 the mallory/alice first-publish-capture attack is worked in the attack-attempts section" \
+    'Attack attempts' 'mallory'
+expect_hits_in "B3.6 that attack attempt names the review finding it came from" \
+    'Attack attempts' 'found in review round 1 \(finding B3\)'
+expect_hits_in_para "B3.7 name_at_registration at first publish is a rule with a verdict, not a description (round-2 finding 11)" \
+    '\*\*R6 \(MUST\)\*\*' 'name_at_registration'
 
 # --------------------------------------------------------------------------------
-section "B4 -- page.json enumeration (finding B4)"
+section "B4 (round 1) -- page.json enumeration"
 
 PAGE_JSON_HITS=$(grep -c 'page\.json' "$DOC")
 printf '  $ grep -c "page.json" %s -> %s\n' "$DOC" "$PAGE_JSON_HITS"
 if [ "$PAGE_JSON_HITS" -gt 0 ]; then
-    pass "B4.1 contracts/ownership.md now mentions page.json ($PAGE_JSON_HITS hits; the review's own falsifying command returned 0 before this round)"
+    pass "B4.1 contracts/ownership.md mentions page.json ($PAGE_JSON_HITS hits; the review's own falsifying command returned 0 before round 1)"
 else
     fail "B4.2 contracts/ownership.md still has zero page.json hits"
 fi
-expect_hits "B4.3 the enumeration ('Against what') explicitly includes page.json paths" \
-    'and/or .mods/<namespace>\.<name>/page\.json'
-expect_hits "B4.4 ADR-0059 Section 3's exact wording is quoted (same ownership check, numeric id)" \
-    'same ownership check \(numeric id\)'
-expect_hits "B4.5 the asset-scan requirement is named and deferred to task 040" \
-    'deferred to task \*\*040\*\*|deferred to task 040'
-expect_hits_flow "B4.6 ADR-0059 is added to the task file's Context list" \
+expect_hits_in "B4.3 the enumeration section explicitly includes page.json paths" \
+    'Against what' 'page\.json'
+expect_hits_in "B4.4 ADR-0059 Section 3's exact wording is quoted (same ownership check, numeric id)" \
+    'page\.json. PRs' 'same ownership check \(numeric id\)'
+expect_hits_in "B4.5 the asset-scan requirement is named and deferred to task 040" \
+    'page\.json. PRs' 'deferred to task \*\*040\*\*|deferred to task 040'
+if [ -s "$TASKLOG_HEADER" ] && [ "$(wc -c < "$TASKLOG_HEADER")" -lt "$(wc -c < "$TASKLOG")" ]; then
+    pass "B4.5a the task file's header (its Context list) was extracted, and is a real subset of the file"
+else
+    fail "B4.5a the task file's header extraction is empty or is the whole file -- the scope for B4.6/B4.7 is not a scope"
+fi
+expect_hits_flow "B4.6 ADR-0059 is in the task file's own Context list" \
     'Missing from this.*list originally, found in review round 1 \(finding B4\): ADR-0059' \
-    "$TASKLOG"
+    "$TASKLOG_HEADER"
+expect_hits_in_para "B4.7 ADR-0030 is in the task file's own Context list, not merely mentioned where the review named the miss (round-2 finding 18)" \
+    'ADR-0058 \(publishing flow, ownership' 'ADR-0030' "$TASKLOG_HEADER"
 
 # --------------------------------------------------------------------------------
-section "B5 -- the takedown authority gap is declared, not silent (finding B5)"
+section "B5 (round 1) -- the takedown question, now answered rather than declared"
 
 TAKEDOWN_HITS=$(grep -ic 'takedown' "$DOC")
 printf '  $ grep -ic "takedown" %s -> %s\n' "$DOC" "$TAKEDOWN_HITS"
 if [ "$TAKEDOWN_HITS" -gt 0 ]; then
-    pass "B5.1 contracts/ownership.md now mentions 'takedown' ($TAKEDOWN_HITS hits; the review's own falsifying command returned 0 before this round)"
+    pass "B5.1 contracts/ownership.md mentions 'takedown' ($TAKEDOWN_HITS hits; the review's own falsifying command returned 0 before round 1)"
 else
     fail "B5.2 contracts/ownership.md still has zero takedown hits"
 fi
-expect_hits "B5.3 the document names both contracts the delegation falls between" \
-    'contracts the delegation falls between, named explicitly'
-expect_hits "B5.4 the document states the consequence today: rejected by the ordinary rule" \
-    'is rejected by the \*\*ordinary\*\* rule in this document'
-expect_hits_flow "B5.5 the document does not invent an authorisation rule -- states it declines to" \
-    'does not.*invent an answer to a question that belongs to Ludwig'
-expect_hits "B5.6 the gap is booked as a Question in the document itself, not only the task log" \
-    'found in review round 1, finding B5'
+expect_hits_in "B5.3 the takedown section still names both contracts the delegation falls between" \
+    'Takedown PRs' 'append-only\.rules\.md'
+expect_hits_in "B5.4 the takedown section states what happens to a takedown PR from any other account" \
+    'Takedown PRs' 'rejected'
+expect_hits_in "B5.6 the takedown section records which review finding raised it" \
+    'Takedown PRs' 'finding B5'
 
 # --------------------------------------------------------------------------------
-section "Non-blocking items -- all five"
+section "N -- non-blocking items from both review rounds"
 
-expect_hits "N1 reserved-namespaces.json revision rule: old, never new, is stated" \
-    'the check reads: .old., never .new.'
-expect_hits "N2 GITHUB_ACTOR / GITHUB_ACTOR_ID are named as a forbidden identity source" \
-    'GITHUB_ACTOR_ID.*forbidden as an identity source|equally forbidden as an identity source'
-# N3 (case-folding) is covered by B3.2 above -- same fix, not a separate check.
+expect_hits_in "N1 reserved-list revision rule: old, never new, is stated in the reserved-namespace section" \
+    'reserved-namespace case' 'the check reads: .old., never .new.'
+# Round-2 rule-3 split: the round-2 check hid an alternation behind a label naming two variables,
+# and its second branch mentioned neither of them. Three checks now, one claim each.
+expect_hits_in "N2a GITHUB_ACTOR is named in the identity section" \
+    'What identity is compared' 'GITHUB_ACTOR\b'
+expect_hits_in "N2b GITHUB_ACTOR_ID is named in the identity section" \
+    'What identity is compared' 'GITHUB_ACTOR_ID'
+expect_hits_in "N2c the identity section forbids them as an identity source" \
+    'What identity is compared' 'forbidden as an identity source'
 if [ -x "docs/tasks/032-verify.sh" ]; then
     pass "N4 docs/tasks/032-verify.sh exists and is executable (this script)"
 else
@@ -491,8 +897,18 @@ else
 fi
 expect_hits "N5 docs/contracts/README.md's worked-examples count names eight prose documents" \
     'eight prose' "$CONTRACTS_README"
-expect_hits "N5b docs/contracts/README.md's checking-logic paragraph is corrected to name three tasks" \
+expect_hits "N5b docs/contracts/README.md's checking-logic paragraph names three tasks" \
     'in any of the three tasks' "$CONTRACTS_README"
+expect_hits_in "N9 the two-namespace example names a concrete PR author instead of restating the owner (round-2 finding 9)" \
+    'Against what' 'opened by|the PR author is'
+expect_hits_in_para "N10 the first-publish classification paragraph says merge-base, matching append-only.rules.md, not 'target branch' (round-2 finding 10)" \
+    'this is a first publish' 'merge-base'
+expect_hits_in_para "N13 a PR touching ONLY reserved-namespaces.json is named as enumerating no namespace, with ADR-0119's human review as its guard (round-2 finding 13)" \
+    'touching only .reserved-namespaces\.json' 'ADR-0119'
+expect_hits_in "N14 the case-folding premise (usernames are unique case-insensitively) is stated with its live evidence (round-2 finding 14)" \
+    'namespace string itself' '324089373'
+expect_no_hits "N16 the garbled 'authenticates as is itself' sentence is repaired (round-2 finding 16)" \
+    'authenticates as is itself'
 
 # --------------------------------------------------------------------------------
 section "Scope and suite -- unchanged elsewhere, existing tests still pass"
@@ -507,24 +923,55 @@ else
     fail "S2 tests/contracts suite failed (exit $SUITE_RC)"
 fi
 
-# Baseline note (fix round 2): this used to compare against fcde6d5 (fix round 1's start
-# commit). That baseline broke on its own terms after round 1: v.html was committed (out of
-# scope) and later removed by the manager (commit 90a3940) -- both AFTER fcde6d5 -- so a diff
-# against fcde6d5 shows v.html's deletion as a permanent, unavoidable "changed file" forever,
-# even though v.html exists nowhere in the working tree or in HEAD. Found by actually running
-# this check (guardrail 6c), not assumed: `git show fcde6d5:v.html` succeeds (292 lines) and
-# `git diff --stat fcde6d5 -- v.html` shows "292 deletions" against a clean, current working
-# tree. The fix: pin the scope check to THIS round's own start commit (the manager's F-A/F-B
-# verification, 38600d2 -- v.html was already gone by then) rather than the whole task's.
-CHANGED=$( { git diff --name-only "$ROUND2_BASE" -- .; git ls-files --others --exclude-standard; } \
-    | grep -v '__pycache__' | sort -u )
-printf '  $ { git diff --name-only %s -- . ; git ls-files --others --exclude-standard ; } | grep -v __pycache__ | sort -u\n' "$ROUND2_BASE"
-printf '%s\n' "$CHANGED" | sed 's/^/  /'
-EXPECTED=$(printf 'docs/tasks/032-b1-fixtures.json\ndocs/tasks/032-ownership-contract.md\ndocs/tasks/032-verify.sh\n')
-if [ "$CHANGED" = "$EXPECTED" ]; then
-    pass "S3 exactly the three files this round declared (the new B1 fixture, the task log, and this script) changed since $ROUND2_BASE"
+# SCOPE CHECK -- merge-base-relative, and a SUBSET test (fix round 3, round-2 finding 7).
+#
+# Two defects in the round-2 version, both real, both demonstrated before this rewrite:
+#   1. It pinned a hash (ROUND2_BASE=38600d2). A pinned base is a base that goes stale: this task
+#      had already had to move the pin once (fcde6d5 -> 38600d2, because v.html's later deletion
+#      showed forever in a diff against the older base). The moment this branch merges and main
+#      moves on, a diff against a hash on the branch is a diff against a commit that is no longer
+#      anyone's baseline, and the check goes permanently red. That is not hypothetical:
+#      docs/tasks/006-verify.sh is red on registry main today for exactly this reason.
+#   2. It required the changed set to EQUAL a fixed list. Equality means the check fails whenever
+#      the round legitimately changes a different number of files -- and it fails after the merge,
+#      when the diff is correctly empty. The guardrail this check exists to enforce (MANAGER.md
+#      Section 3.3: a task does not touch files outside its declared scope; task 032's own finding
+#      F-A) is a SUBSET property: nothing changed outside the declared scope. Subset is the
+#      assertion; equality was an over-claim that could only rot.
+#
+# The base is now computed, never pinned: the merge-base of HEAD and the integration branch. On
+# this branch it is the fork point, so the changed set is exactly this task's own work. After the
+# merge, on main, the merge-base is HEAD itself, the changed set is empty, and the subset test is
+# trivially true -- green, correctly, forever, without anyone re-pinning anything.
+MERGE_BASE=""
+for ref in origin/main main origin/master master; do
+    if git rev-parse --verify --quiet "$ref" > /dev/null 2>&1; then
+        MERGE_BASE=$(git merge-base HEAD "$ref" 2>/dev/null) && [ -n "$MERGE_BASE" ] && { SCOPE_REF="$ref"; break; }
+    fi
+done
+if [ -z "$MERGE_BASE" ]; then
+    # No skip, no silent green: an unresolvable base is a failed check (Section 2c rule 1 --
+    # a check that does not evaluate is not a clean result).
+    fail "S3a no integration branch (origin/main, main, origin/master, master) resolved, so the scope check has no base to compute against"
 else
-    fail "S4 changed-file set does not match the declared scope for this round (expected: $(printf '%s' "$EXPECTED" | tr '\n' ' '))"
+    CHANGED=$( { git diff --name-only "$MERGE_BASE" -- .; git ls-files --others --exclude-standard; } \
+        | grep -v '__pycache__' | sort -u )
+    printf '  $ git merge-base HEAD %s -> %s\n' "$SCOPE_REF" "$MERGE_BASE"
+    printf '  $ { git diff --name-only %s -- . ; git ls-files --others --exclude-standard ; } | grep -v __pycache__ | sort -u\n' "$MERGE_BASE"
+    printf '%s\n' "$CHANGED" | sed 's/^/  /'
+    # Task 032's declared file scope, from the task file's own "What I wrote" plus the two
+    # artefacts later rounds added (the verify script and its B1 fixture).
+    DECLARED_SCOPE="contracts/ownership.md
+docs/contracts/README.md
+docs/tasks/032-ownership-contract.md
+docs/tasks/032-verify.sh
+docs/tasks/032-b1-fixtures.json"
+    OUT_OF_SCOPE=$(printf '%s\n' "$CHANGED" | grep -v '^$' | grep -vxF "$DECLARED_SCOPE" || true)
+    if [ -z "$OUT_OF_SCOPE" ]; then
+        pass "S3 every path changed since the merge-base with $SCOPE_REF is inside task 032's declared file scope (subset test, survives the merge)"
+    else
+        fail "S4 file(s) outside task 032's declared scope changed since the merge-base with $SCOPE_REF: $(printf '%s' "$OUT_OF_SCOPE" | tr '\n' ' ')"
+    fi
 fi
 
 # Lexical convention check (matches 006-verify.sh's own): this script must contain no ownership-
@@ -534,6 +981,17 @@ if grep -nE '^[^#]*\bold\.owner\.id\s*==|^[^#]*\bnew\.owner\.id\s*==' "docs/task
 else
     pass "S5 (lexical convention check, not a structural guarantee) this script contains no old.owner.id/new.owner.id equality logic (no ownership-gate implementation)"
 fi
+
+# SCOPE AUDIT (fix round 3, round-2 finding B5 treated as a class).
+# Every pattern-matching check in this file was re-read and asked one question: can this pattern
+# match somewhere other than the place whose claim the label makes? The counts are in the task
+# log under "Fix round 3". Three unscoped forms remain, deliberately:
+#   * expect_no_hits x4 -- absence claims, where whole-document scope IS the claim ("this string
+#     appears nowhere in the document").
+#   * expect_hits x2 (N5, N5b) -- against docs/contracts/README.md, a 30-line index with no
+#     internal sections to scope to; the pattern is unique in that file.
+#   * expect_hits_flow x2 (B4.6, B4.7) -- against the task log, where the claim genuinely is
+#     "this appears somewhere in the file".
 
 # --------------------------------------------------------------------------------
 printf '\n== RESULT ==\n'

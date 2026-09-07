@@ -7,10 +7,11 @@
     "how_to_recapture": [
       "curl -s -m 10 -o /dev/null -w 'status=%{http_code} redirect=%{redirect_url}\\n' https://api.github.com/orgs/worldofmodcraft/members/womcraft",
       "curl -s -m 10 -L -o /dev/null -w 'final_status=%{http_code}\\n' https://api.github.com/orgs/worldofmodcraft/members/womcraft",
-      "curl -s -m 10 -o /dev/null -w 'status=%{http_code} redirect=%{redirect_url}\\n' https://api.github.com/orgs/worldofmodcraft/memberships/womcraft"
+      "curl -s -m 10 -o /dev/null -w 'status=%{http_code}\\n' https://api.github.com/orgs/worldofmodcraft/memberships/womcraft"
     ],
     "caveat_guardrail_6b": "This is GitHub's live, real behaviour at the moment of capture, not a contractual guarantee from GitHub -- it could change. Re-running the three commands above and diffing the result against this file's recorded values is exactly what docs/tasks/032-verify.sh's ADVISORY live section does when network is reachable; that section is informational only and never gates the verdict or the exit code (fix round 2, finding F-B). If GitHub's behaviour ever changes, re-capture this file (update 'captured_at' and the three recorded blocks below) as its own reviewed change -- do not silently edit only the numbers.",
-    "why_unauthenticated_and_not_member_caller": "The member-caller branch (a caller that is itself an org member, e.g. the 'gh' identity active in this environment) is already exercised live, advisory-only, by docs/tasks/032-verify.sh's B6 section (which diffs it against contracts/ownership.md's own pasted 'gh api ... -i' transcript). This fixture covers only the non-member/unauthenticated branch, which is the one whose live-network dependency caused finding F-B (GitHub's 60-request/hour unauthenticated quota is shared per source IP and is exhausted easily, including by this project's own mutation-testing rounds)."
+    "why_unauthenticated_and_not_member_caller": "The member-caller branch (a caller that is itself an org member, e.g. the 'gh' identity active in this environment) is already exercised live, advisory-only, by docs/tasks/032-verify.sh's B6 section (which diffs it against contracts/ownership.md's own pasted 'gh api ... -i' transcript). This fixture covers only the non-member/unauthenticated branch, which is the one whose live-network dependency caused finding F-B (GitHub's 60-request/hour unauthenticated quota is shared per source IP and is exhausted easily, including by this project's own mutation-testing rounds).",
+    "fix_round_3_note": "Round-2 finding 15: this file was self-inconsistent -- _meta.how_to_recapture[2] and unauthenticated_memberships_endpoint.command specified different -w formats, so a reader following this file's own instructions produced 'status=401 redirect=' and failed docs/tasks/032-verify.sh's check B1.8, which requires recorded_output to appear verbatim in contracts/ownership.md. Both are now the single command below, re-run live on 2026-09-07 to confirm recorded_output is unchanged (it printed 'status=401'). docs/tasks/032-verify.sh's check V8 now asserts how_to_recapture[i] is byte-identical to each probe's own command field, so the two cannot drift apart again. Previously: command=\"curl -s -o /dev/null -w 'status=%{http_code}\\\\n' https://api.github.com/orgs/worldofmodcraft/memberships/womcraft\" how_to_recapture[2]=\"curl -s -m 10 -o /dev/null -w 'status=%{http_code} redirect=%{redirect_url}\\\\n' https://api.github.com/orgs/worldofmodcraft/memberships/womcraft\""
   },
   "unauthenticated_members_endpoint": {
     "command": "curl -s -m 10 -o /dev/null -w 'status=%{http_code} redirect=%{redirect_url}\\n' https://api.github.com/orgs/worldofmodcraft/members/womcraft",
@@ -24,7 +25,7 @@
     "final_status": 404
   },
   "unauthenticated_memberships_endpoint": {
-    "command": "curl -s -o /dev/null -w 'status=%{http_code}\\n' https://api.github.com/orgs/worldofmodcraft/memberships/womcraft",
+    "command": "curl -s -m 10 -o /dev/null -w 'status=%{http_code}\\n' https://api.github.com/orgs/worldofmodcraft/memberships/womcraft",
     "recorded_output": "status=401",
     "status": 401,
     "redirect_target": ""

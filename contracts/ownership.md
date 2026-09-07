@@ -27,6 +27,31 @@ This document does **not** govern:
   that is ADR-0119 and `reserved-namespaces.json`. This document only states how the identity
   check behaves once a namespace is known to be on that list.
 
+## How to read this document: rule ids, and where the failure list comes from
+
+Every requirement below is declared as a numbered rule at the start of its own paragraph, in one
+of two classes:
+
+- **Verdict rules, `R1`-`R11`.** Each one can reject a PR. Each has exactly one row in "Where the
+  check runs and what it does on failure" below, naming what the rejection message says.
+- **Checker rules, `I1`-`I8`.** These constrain how the check is built and what its verdict means.
+  Breaking one is a defect in the checker, or in the process around it, rather than a reason to
+  reject a particular PR, so they have no taxonomy row.
+
+**The taxonomy is derived from the rules, not maintained beside them.** Two consecutive review
+rounds of this document found the same defect: a prose list of "the failure modes" sitting next to
+a growing set of requirements and drifting from them, each time leaving a requirement that could
+reject nothing. The rule declarations are therefore the authority; the table is the per-rule
+rejection message, keyed by rule id, and it is exactly as long as the set of verdict rules is.
+
+Because a promise not to let the two drift again is worth nothing, `docs/tasks/032-verify.sh`
+enforces the convention mechanically: its `T1`-`T9` checks fail the verification run if a rule id
+is declared twice, if a declared verdict rule such as `R1` has no taxonomy row, if a taxonomy row
+names a rule that no longer exists, or if any normative MUST is stated without a rule id beside
+it. The convention that last check enforces is that **every normative MUST in this document cites
+its rule id, such as `I1`, in the same paragraph**; it is what stops a future round from adding a
+requirement outside the scheme, which is how the drift happened both times.
+
 ## The comparison model: `old.owner`, never `new.owner`
 
 This document adopts `append-only.rules.md`'s own `old`/`new` vocabulary: `old` is the parsed
@@ -39,9 +64,25 @@ everything else below, because getting it backwards produces a checker that look
 every well-behaved input and silently authorises the one attack this document exists to prevent
 (Attack attempt 1, below).
 
-For a namespace that does not yet exist on the target branch (no `old` value — this is a first
-publish), there is nothing in `old` to compare against; "What a first publish binds" below states
-the rule that applies instead.
+**R3 (MUST)** — for a namespace that already exists at the PR's merge-base and is not on the
+reserved list, the PR author's real `(provider, id)` pair MUST equal `old.owner.provider` and
+`old.owner.id`. This is the ordinary case and the most common rejection; it is stated as a rule
+here, beside the comparison model it depends on, so that the model and the requirement cannot
+drift apart.
+
+For a namespace that does not yet exist at the PR's merge-base with the target branch (no `old`
+value — this is a first publish), there is nothing in `old` to compare against; "What a first
+publish binds" below states the rules that apply instead. The classification is made against the
+**merge-base**, deliberately and not loosely: ADR-0058 §5 makes every publish PR fork-based, so a
+branch forked before someone else's merge is the normal case rather than the exception, and
+`contracts/append-only.rules.md` already classifies changes against the merge-base. A checker that
+classified against the target branch's current tip instead would call the same PR a first publish
+or not depending on what merged while it sat open.
+
+**I3 (MUST)** — the check reads `owner` from `old`, never from `new`, wherever an `old` value
+exists. The only rules that read `new.owner` at all are `R5`, `R6` and `R8`, and only at a first
+publish, where no `old` value exists to read: at that moment the PR's own proposed `owner` is
+being checked *against the forge*, never trusted.
 
 ## What identity is compared: the forge's numeric account id, never the username string
 
@@ -105,6 +146,11 @@ workflow re-run or a `workflow_dispatch` trigger. The only field this document e
 `pulls.user.id`, read from the PR object itself via the API, never from the environment of the job
 evaluating it, `GITHUB_ACTOR`/`GITHUB_ACTOR_ID` included.
 
+**I1 (MUST)** — the check reads the submitting identity from the PR object's `pulls.user.id` and
+`pulls.user.login` and from nothing else: never from a commit's author or committer fields, never
+from a `Co-Authored-By` trailer, never from any other text inside the diff, and never from
+`GITHUB_ACTOR` or `GITHUB_ACTOR_ID` in the job's environment.
+
 ## Provider is part of the comparison, not just id
 
 `owner` is `{ provider, id, name_at_registration }` (ADR-0058 §2, `contracts/entry.schema.json`).
@@ -116,6 +162,10 @@ checker hard-coded to assume that (comparing bare integers with no provider chec
 be wrong the day a second provider is accepted, and "already wrong the day X happens" is exactly
 the failure shape `contracts/artifact-naming.md`'s `:`-in-a-git-ref attack describes for a
 different document. Stated once, here, so task 007 never has to rediscover it.
+
+**I6 (MUST)** — every identity comparison in this document is on the `(provider, id)` pair as a
+whole, never on `id` alone. This binds `R3`, `R5` and `R8`, each of which names a `(provider, id)`
+comparison for that reason.
 
 ## Against what: `owner.id` for every namespace the PR touches
 
@@ -131,16 +181,63 @@ path, identically for either file), and
 evaluates that namespace's rule (this document's ordinary rule, or the reserved-namespace rule
 below, whichever applies) independently for each.
 
-**The two-namespace case, stated explicitly:** a single PR touching `alice:toolkit` and
-`bob:widget` in the same diff must pass **both** namespaces' checks before either is accepted —
-`alice`'s numeric id must equal `alice:toolkit`'s `old.owner.id`, **and separately**, `bob`'s
-namespace requires the PR author's id to equal `bob:widget`'s `old.owner.id`. Since a PR has
-exactly one author (`pulls.user`, a single account), this means a PR can only ever legitimately
-touch multiple *existing* namespaces if the same single account owns every one of them; a PR
-touching two namespaces owned by two different people must be rejected outright, in full, not
-merged with only the touches to the author's own namespace applied. There is no partial-merge
-path in this model — `contracts/append-only.rules.md`'s own gate operates on the PR as a whole,
-and this check is a further whole-PR precondition, not a per-file filter.
+**The two-namespace case, stated explicitly, with a named author rather than a restatement of
+ownership.** A PR has exactly one author (`pulls.user`, a single account), so take a concrete one:
+the PR is **opened by** `alice`, and the id the check compares is `alice`'s own real
+`pulls.user.id` — the same single number for both namespaces, because there is only one author.
+That id must equal `alice:toolkit`'s `old.owner.id` **and, separately,** `bob:widget`'s
+`old.owner.id`. `bob:widget` is owned by `bob`, a different account with a different id, so the
+second comparison fails and the entire PR is rejected — not merged with the `alice:toolkit` half
+applied. A PR can therefore only legitimately touch several *existing* namespaces when the one
+account that opened it owns every one of them.
+
+**I7 (MUST)** — every namespace the PR touches is evaluated independently, and the PR is accepted
+only if *every* namespace passes every rule that applies to it. There is no partial-merge path in
+this model: `contracts/append-only.rules.md`'s own gate operates on the PR as a whole, and this
+check is a further whole-PR precondition, not a per-file filter.
+
+## The namespace of a touched path: the directory path is authoritative, and `id` must agree
+
+A registry PR names a namespace in two places, and until this section they were free to disagree:
+the directory a file sits in (`mods/<namespace>.<name>/`) and, for `entry.json` only, the `id`
+field inside the file (`<namespace>:<name>`). Nothing in `contracts/append-only.rules.md` or
+`contracts/entry.schema.json` ties the two together, so three faithful checkers — one reading the
+path, one reading `id`, one reading each for a different purpose — reach three different verdicts
+on the same PR. Review round 2 (finding B2) demonstrated the capture that follows; this section
+removes the choice.
+
+**I2 (MUST)** — the namespace a rule is evaluated against is derived from the **directory path**
+and from nothing else. The path is authoritative. Three reasons, all structural rather than
+stylistic. First, `contracts/page.schema.json` has no `id` and no `owner`, so a `page.json` path
+has no in-file namespace to read at all — verified in this environment rather than assumed
+(guardrail 6c):
+
+```
+$ python3 -c "import json;print(sorted(json.load(open('contracts/page.schema.json'))['properties']))"
+['deprecated', 'description', 'links', 'screenshots', 'tags']
+```
+
+Second, two entries cannot occupy one directory, so the path is unique by construction, while `id`
+is only a string the PR proposes about itself. Third, `append-only.rules.md` already classifies a
+PR's changes by path, and a second, disagreeing derivation would put two contracts at odds over
+the same PR.
+
+**R1 (MUST)** — every path the PR touches under `mods/` MUST be of the form
+`mods/<namespace>.<name>/entry.json` or `mods/<namespace>.<name>/page.json`, where `<namespace>`
+and `<name>` each match `[a-z0-9][a-z0-9_-]*` — the character class
+`contracts/entry.schema.json`'s `id` pattern already requires, and in which neither part may
+contain a `.`, so the directory name contains exactly one. A touched path under `mods/` that does
+not parse this way yields no namespace, and is **rejected rather than skipped**: a path the check
+cannot attribute to a namespace is precisely the input that must never fall through it. Today
+those two filenames are the only ones the registry defines under `mods/<namespace>.<name>/`; if a
+future ADR adds a third, it must amend `R1` in the same change, because until it does `R1` rejects
+it — deliberately, since the alternative is a path this check silently ignores.
+
+**R2 (MUST)** — for every `entry.json` the PR touches, `new.id` MUST equal the `<namespace>:<name>`
+derived from that file's own directory, and where an `old` entry exists `old.id` MUST agree as
+well. The two sources naming different namespaces is not a stylistic complaint to fold into schema
+validation; it is the exact condition under which a checker's verdict depends on which source it
+happened to read, so it is rejected here, with both namespaces named in the message.
 
 ## What a first publish binds
 
@@ -150,93 +247,122 @@ first publish proceeds:
 > "This creates the namespace `X:` permanently bound to your GitHub account (id N). Namespaces
 > are never reassigned."
 
-**At the moment a namespace is created** (no `old` entry exists for it yet — this is the first
-publish PR for that namespace, ADR-0058 §1), the fields that become authoritative, forever, are:
+At the moment a namespace is created — no `old` entry exists for it at the PR's merge-base, so
+this PR is that namespace's first publish (ADR-0058 §1) — five things become authoritative
+forever: `id`, `owner.provider`, `owner.id`, `owner.name_at_registration`, and the namespace
+string itself (the part of `id` before `:`, which ADR-0039 derives from the account's username).
+`id` and every field of `owner` are frozen from this PR onward by `contracts/append-only.rules.md`'s
+existing frozen-field rule, which this document relies on and never restates.
 
-- **`id`** (the `namespace:name` string) — frozen from this PR onward
-  (`contracts/append-only.rules.md`).
-- **`owner.provider`** and **`owner.id`** — must equal the PR author's real `(provider, id)` pair
-  as read from the PR object (`pulls.user.id`, GitHub in phase 1), **never a value taken from the
-  PR's own proposed `entry.json` content without independently cross-checking it against the
-  live PR object.** A checker that trusts the JSON's self-declared `owner.id` at first publish
-  would let a PR create an entry claiming any numeric id at all — including someone else's —
-  with nothing to stop it, since there is no `old` value yet to compare against. The check at
-  first publish is therefore not "does `new.owner.id` equal `old.owner.id`" (there is no `old`)
-  but "does `new.owner.id` equal the real, forge-verified id of whoever is submitting this PR
-  right now."
-  **Exception for a namespace on the reserved list (ADR-0119 §2) — stated here, at the point this
-  rule is made, so the two rules never need to be reconciled by a reader:** the paragraph above is
-  the **ordinary** case only, and it can never be satisfied for a reserved namespace — no
-  individual account's numeric id can ever equal the organisation's ("The reserved-namespace case"
-  below proves this from this project's own data). If the namespace being created is on the
-  reserved list, `owner.provider`/`owner.id` MUST instead equal the value `reserved-namespaces.json`
-  records for it (in phase 1, `provider: "github"`, `id: 324218296`, the `worldofmodcraft`
-  organisation), never the PR author's own id — and authorisation for the PR is, from this first
-  publish onward, **organisation membership**, not id-equality, exactly as "The reserved-namespace
-  case" below states for every later version. There is no separate first-publish rule for `mc` or
-  `test`: that section is the *entire* rule for a reserved namespace, first publish included, and
-  the ordinary first-publish rule in this paragraph never applies to them at all.
-- **`owner.name_at_registration`** — the account's username *at the moment of this publish*,
-  recorded once, for humans reading history (ADR-0058 §3's confirmation text names the account by
-  it). It is informational only and is never itself compared for authorisation, at first publish
-  or ever after — only `owner.id` is (see "What identity is compared" above).
-- **The namespace string itself** (the part of `id` before `:`) is derived from the account's
-  username at that moment (ADR-0039), except for the reserved set (next section).
+Four rules decide who may cause that first write. `R4`, in "The namespace string itself" below,
+governs the namespace string; `R5` and `R6` here govern `owner`; and a namespace on the reserved
+list is governed by `R8` and `R7` instead of all three, as the exception at the end of this
+section states.
+
+**R5 (MUST)** — at a first publish of a namespace **not** on the reserved list,
+`new.owner.provider` and `new.owner.id` MUST equal the PR author's real `(provider, id)` pair as
+read from the PR object (`pulls.user.id`, GitHub in phase 1), never a value taken from the PR's own
+proposed `entry.json` without that cross-check against the live PR object. A checker that trusts
+the JSON's self-declared `owner.id` at a first publish lets a PR create an entry claiming any
+numeric id at all — including someone else's — with nothing to stop it, because there is no `old`
+value yet to contradict it. The check at a first publish is therefore not "does `new.owner.id`
+equal `old.owner.id`" but "does `new.owner.id` equal the real, forge-verified id of whoever is
+submitting this PR right now."
+
+**R6 (MUST)** — at that same first publish, `new.owner.name_at_registration` MUST equal the PR
+author's username as the PR object reports it (`pulls.user.login`), compared case-insensitively
+per `R4`'s folding rule. ADR-0058 §2 defines this field as the account's username at registration,
+so requiring the recorded value to actually be that username enforces the field's own definition
+rather than adding a policy to it. The value is frozen forever and is what ADR-0058 §3's
+confirmation text names the account by, so a false one is permanent misinformation in the
+registry's own history. It stays informational *for authorisation*: no rule ever compares it to
+decide who may touch an existing namespace — `R3` compares `owner.id`, and only `owner.id`.
+
+**R8 (MUST)** — **Exception for a namespace on the reserved list (ADR-0119 §2), stated here at the
+point the ordinary rule is made, so the two never have to be reconciled by a reader:** at a first
+publish of a namespace on the reserved list, `new.owner` MUST equal the owner
+`reserved-namespaces.json` records for that namespace at the PR's merge-base — in phase 1
+`{"provider": "github", "id": 324218296, "name_at_registration": "worldofmodcraft"}`, the
+`worldofmodcraft` organisation — and never the PR author's own id. `R4`, `R5` and `R6` do not
+apply to these namespaces and could never be satisfied for them anyway: no individual account's
+numeric id can equal the organisation's, which "The reserved-namespace case" below proves from
+this project's own data. Authorisation for such a PR is `R7`, organisation membership, from the
+first publish onward. There is no separate reserved-first-publish rule anywhere else in this
+document.
 
 **What may never change afterwards:** `id` and every field of `owner`, per
-`contracts/append-only.rules.md`'s existing frozen-field rule — this document does not repeat
-that rule's mechanics, only relies on it. Consistent with "namespaces are never reassigned,"
-nothing in this document, or in `append-only.rules.md`, admits any path by which `owner` changes
-after the namespace's first publish, short of a future ADR that amends both documents together
+`contracts/append-only.rules.md`'s existing frozen-field rule — this document does not repeat that
+rule's mechanics, only relies on it. Consistent with "namespaces are never reassigned," nothing in
+this document, or in `append-only.rules.md`, admits any path by which `owner` changes after the
+namespace's first publish, short of a future ADR that amends both documents together
 (`append-only.rules.md` already states this precondition explicitly).
 
-## The namespace string itself: MUST equal the author's username at first publish (ADR-0039)
+## The namespace string itself: it equals the author's username at first publish (ADR-0039)
 
-**At first publish only, the namespace string (the part of `id` before `:`) MUST equal the PR
-author's current GitHub username (`pulls.user.login`), compared case-insensitively.** Without this
-check, nothing in this document's id-based rule stops a fresh account from first-publishing into a
-namespace named after someone else's existing username entirely: the id-equality rule only ever
-asks whether the PR author's id equals `new.owner.id`, and at first publish the PR itself supplies
-`new.owner.id` — nothing yet requires that value, or the namespace string next to it, to bear any
-relationship to any *other* person's account at all. Concretely: an account whose real id is `999`
-and whose username is `mallory` opens a first-publish PR creating `mods/alice.cooltool/entry.json`
-with `owner: {provider: "github", id: 999, name_at_registration: "mallory"}`. The first-publish
-id-equality rule alone asks only "does `999` (the submitter's real id) equal `999` (`new.owner.id`,
-which the same PR supplies)?" — trivially yes, and `alice` is not reserved, so a checker built from
-the id rule alone accepts it. That is namespace capture, unrelated-account first publish into a
-namespace named after someone else's identity — the exact attack ADR-0058 §2 exists to close, and
-the reason edge E16 (this document) was added to the graph at all. **The namespace-string check
-above is what closes it**: `mallory`'s username, `mallory`, does not equal `alice`, the namespace
-this PR proposes, so the PR is rejected regardless of what the PR's own proposed `owner` says.
+**R4 (MUST)** — at a first publish of a namespace **not** on the reserved list, the namespace
+string (derived from the directory path per `I2`) MUST equal the PR author's current GitHub
+username (`pulls.user.login`), compared case-insensitively.
 
-**Case-folding: compare after folding both sides to lowercase.** `contracts/entry.schema.json`'s
-`id` pattern (`^[a-z0-9][a-z0-9_-]*:[a-z0-9][a-z0-9_-]*$`) is lowercase-only, while GitHub
-usernames may contain uppercase letters; a literal, case-sensitive comparison would reject every
-first publish from a user whose username contains a capital letter, which is not this rule's
-purpose. *Booked to Ludwig as an FYI, not a blocking question: this normalisation rule follows
-mechanically from ADR-0039's naming rule plus `entry.schema.json`'s existing lowercase-only
-pattern, but no ADR states the case-folding step in these words — see this document's own
-`## Questions`.*
+Without this rule, nothing in the id-based rules stops a fresh account from first-publishing into
+a namespace named after someone else's username entirely: `R5` only ever asks whether the PR
+author's id equals `new.owner.id`, and at a first publish the PR itself supplies `new.owner.id` —
+nothing yet requires that value, or the namespace string beside it, to bear any relationship to
+any *other* person's account. Concretely: an account whose real id is `999` and whose username is
+`mallory` opens a first-publish PR creating `mods/alice.cooltool/entry.json` with
+`owner: {provider: "github", id: 999, name_at_registration: "mallory"}`. `R5` alone asks only
+"does `999` (the submitter's real id) equal `999` (`new.owner.id`, which the same PR supplies)?" —
+trivially yes; `alice` is not reserved; so a checker built from the id rules alone accepts it. That
+is namespace capture, the exact attack ADR-0058 §2 exists to close and the reason edge E16 was
+added to the graph at all. **`R4` is what closes it:** `mallory` does not equal `alice`, so the PR
+is rejected regardless of what `owner` it proposes for itself.
+
+**Case-folding: compare after folding both sides to lowercase — Ludwig's ruling, 2026-09-07.**
+`contracts/entry.schema.json`'s `id` pattern (`^[a-z0-9][a-z0-9_-]*:[a-z0-9][a-z0-9_-]*$`) is
+lowercase-only, while GitHub usernames may contain uppercase letters, so a literal, case-sensitive
+comparison would reject every first publish from a user whose username contains a capital. No ADR
+states this normalisation in those words, and that is exactly why it is stated here: a behaviour
+that exists only inside a checker's implementation is what this contract exists to prevent.
+
+The premise `R4`'s folding rests on — that a GitHub username identifies one account
+case-insensitively, so folding can never merge two different people — is **verified in this
+environment** rather than assumed (guardrail 6c):
+
+```
+$ for u in womcraft WOMCRAFT WomCraft; do printf '%s -> ' "$u"; gh api users/$u --jq '{login,id}'; done
+womcraft -> {"id":324089373,"login":"womcraft"}
+WOMCRAFT -> {"id":324089373,"login":"womcraft"}
+WomCraft -> {"id":324089373,"login":"womcraft"}
+```
+
+Three casings, one account id. **The caveat that travels with the claim** (guardrail 6b): that is
+GitHub's live behaviour for a real account today, observed here, not a guarantee located in
+GitHub's own reference documentation. The rule is required as written; if GitHub ever permitted
+two accounts differing only in case, `R4`'s folding would need re-examination before it could
+merge them.
 
 **Scope: first publish only, and never re-checked after.** There is no `old` value for a
 namespace-derivation rule to compare against on a later PR to an existing namespace — a PR adding
 a version never re-derives the namespace string, and `id` is frozen forever once created
 (`append-only.rules.md`, and "What may never change afterwards" above). A later account rename
 does not retroactively invalidate an existing binding: `owner.id` is what is bound, and
-`name_at_registration` is explicitly informational, exactly as stated above for the ordinary
-ownership check.
+`name_at_registration` is informational for authorisation, exactly as stated above.
+
+**What `R4` does not close — the residual, recorded rather than left to be discovered.** `R4`
+compares against the author's username *at the moment of the first publish*, which is the only
+moment a namespace string is ever derived, so the rename-and-claim sequence survives it: `alice`
+renames her account away, her old username becomes claimable ("After changing your username, your
+old username becomes available for anyone else to claim" — GitHub's own documentation, quoted with
+its source under "Attack attempts" below), `mallory` registers `alice`, and `mallory` then
+first-publishes `alice:cooltool`. At that moment `mallory`'s current username genuinely *is*
+`alice`; `R4` passes; the binding is permanent. This is the same residual Attempt 4 records for
+*existing* namespaces, arriving at the other end of a namespace's life: the identity this document
+trusts is the forge's, and the forge itself hands the name over. Closing it would need a rule no
+ADR has decided — a reservation window on released usernames, or a decision that a recycled
+username may never found a namespace — so it is recorded here, not invented.
 
 **Reserved namespaces are exempt from this check.** `mc` and `test` do not derive their namespace
-string from any account's username at all (ADR-0119 §1–2); "The reserved-namespace case" below is
-the entire rule for those namespaces' first publish, replacing both this section and the ordinary
-`owner.id`-equality rule above.
-
-This adds a **third** failure mode to "Where the check runs and what it does on failure" below,
-distinct from id-mismatch and non-membership: a first-publish PR whose namespace string does not
-equal (case-insensitively) the PR author's username, and whose namespace is not on the reserved
-list, is rejected on that basis alone — independently of whether `new.owner.id` happens to equal
-the PR author's own real id, which it trivially always can at a first publish since there is no
-`old` value to contradict it.
+string from any account's username at all (ADR-0119 §1-2); `R8` and `R7` are the entire rule for
+those namespaces' first publish, replacing `R4`, `R5` and `R6` together.
 
 ## The reserved-namespace case (ADR-0119): a reservation, not an ownership exemption
 
@@ -316,23 +442,51 @@ Verified live, in this environment, both branches:
   /orgs/{org}/public_members/{username}` — a different, public-only endpoint — and following that
   redirect lands on `404` regardless of the target's real (private) membership.
 
-**The redirect-following hazard, stated as a rule a checker must follow, not left for the reader
-to infer:** a checker MUST NOT follow the `302` and treat the followed request's final status as
-the answer. `curl -L`, Python's `requests`, `gh api`, and `octokit.js` all follow redirects by
-default, so this is the behaviour an implementer gets unless they deliberately turn it off. Two
-correct designs, either is acceptable:
-1. Run the check as a caller that is itself confirmed to be an organisation member, so the `204`/
-   `404` branch answers directly and `302` is never reached; **or**
-2. Detect a `302` response explicitly (do not follow it) and treat it as "the calling identity
-   cannot see this membership," failing the check closed with an actionable error — never
-   silently reinterpreting a followed redirect's `404` as "not a member."
-Under the flat, caller-unqualified rule this document stated before this round, a checker built
-faithfully from that text follows the redirect (every default HTTP client does) and rejects every
-genuine private-member PR — including the first publish of `test:hello-world`, mission acceptance
-criterion 2.
+**I5 (MUST NOT)** — a checker MUST NOT follow the `302` and treat the followed request's final
+status as the answer; the request that asks the membership question is made with redirect-following
+turned off. This is the **mandatory** arm of the check, not one of two designs a reader may choose
+between, because every default HTTP client disagrees with it and the failure is silent.
 
-**What this means for the actual CI caller — established here, not assumed.** Which branch CI
-hits depends entirely on whether the identity registry CI authenticates as is itself an
+What was actually run here rather than reasoned about (guardrail 6c), against a GitHub endpoint
+that genuinely redirects — the renamed repository `facebook/jest`, which the API answers with a
+`301` — because the membership `302` itself is only reachable from a non-member caller:
+
+```
+$ curl -s -o /dev/null -w 'status=%{http_code} redirect=%{redirect_url}\n' https://api.github.com/repos/facebook/jest
+status=301 redirect=https://api.github.com/repositories/15062869
+$ python3 -c "import requests; r=requests.get('https://api.github.com/repos/facebook/jest'); print(r.status_code, [h.status_code for h in r.history])"
+200 [301]
+$ gh api repos/facebook/jest --jq '{full_name,id}'
+{"full_name":"jestjs/jest","id":15062869}
+```
+
+So, **verified in this environment**, client by client rather than as one sweeping claim: plain
+`curl` does **not** follow a redirect — `-L` is opt-in, and an earlier revision of this document
+had this backwards; Python's `requests` **does** (`allow_redirects=True` is its default, shown by
+the `[301]` in its redirect history); and `gh api` **does** — it was asked for `facebook/jest` and
+answered with `jestjs/jest`. **`octokit.js`'s default was not established here** — no octokit
+installation exists on this machine — and is marked unverified rather than asserted (guardrail
+6b); an implementer using it must check its redirect behaviour before relying on `I5`.
+
+**R9 (MUST)** — if the membership question returns anything other than the two answers GitHub
+documents for a member requester — `204` (is a member) or `404` (is not) — the check MUST reject
+the PR, closed, with an error naming the status it received. The `302` is the case this rule exists
+for: it means the calling identity cannot see this organisation's private membership, which is not
+evidence about the PR author at all, and reinterpreting it as "not a member" is what rejects every
+legitimate `mc:`/`test:` PR — including the first publish of `test:hello-world`, mission acceptance
+criterion 2. Every other status (`401`, `403`, `5xx`, a timeout) takes the same path: an
+indeterminate answer is never read as "no", and never as "yes" either.
+
+Running the check as a caller that is itself a confirmed organisation member is worth doing **in
+addition to** `I5` and `R9`, because it makes the direct `204`/`404` branch the one normally taken.
+It is **never instead of** them. It is a precondition this document cannot verify (see the next
+paragraph), and a precondition that stops holding silently — a rotated token, a membership change —
+degrades into exactly the `302` that `R9` must still be there to catch. An earlier revision of this document offered
+the two as interchangeable designs, which left a checker built from the first one with no `302` arm
+at all: review round 2's finding B4.
+
+**What this means for the actual CI caller — marked here, not assumed.** Which branch CI hits
+depends entirely on whether the identity that registry CI uses to authenticate is itself an
 organisation member. **This could not be established in this environment: this machine has no
 GitHub Actions runner, and settling it by reading a stored credential is forbidden (CLAUDE.md
 rule 11, MANAGER.md guardrail 10).** GitHub Actions' default `GITHUB_TOKEN` is a per-run,
@@ -365,8 +519,9 @@ redirect ambiguity, but it does not remove the "is CI's own identity an org memb
 — GitHub's documented `403` for an authenticated-but-non-member caller was not independently
 reproduced here, since doing so would require a second identity, which this round does not use.
 
-**Which revision of `reserved-namespaces.json` the check reads: `old`, never `new` — the same
-discipline "The comparison model" above applies to `owner`, applied here to list membership.** The
+**I4 (MUST)** — which revision of `reserved-namespaces.json` the check reads: `old`, never `new` —
+the same discipline "The comparison model" above applies to `owner`, applied here to list
+membership. The
 check evaluates a PR against the reserved list as it stood at the PR's merge-base with the target
 branch, never the version the PR itself proposes. A PR that, in the same diff, removes `mc` from
 `reserved-namespaces.json` **and** first-publishes `mc:core` must still be evaluated as if `mc`
@@ -374,36 +529,77 @@ were reserved — reading `new` here would let a single PR strip a namespace's r
 capture it in the same breath, the identical attack shape Attempt 1 below closes for `owner`
 itself, applied to list membership instead of the ownership field.
 
-**This is a reservation, not an ownership exemption:** a PR touching `mc:` or `test:` is
-authorised **only** when the PR author is currently a member of `worldofmodcraft`; every other
-account is rejected, exactly as an ordinary namespace rejects a non-owner, citing ADR-0119 by
-name in the rejection message (ADR-0119 §3: "rejects it otherwise with a message naming this
-ADR").
+**R7 (MUST)** — a PR touching a namespace on the reserved list is authorised only if the PR author
+is a **current member** of the organisation `reserved-namespaces.json` records as that namespace's
+owner. This is a reservation, not an ownership exemption: every other account is rejected, exactly
+as an ordinary namespace rejects a non-owner, citing ADR-0119 by name in the rejection message
+(ADR-0119 §3: "rejects it otherwise with a message naming this ADR"). It applies to a first publish
+and to every later version alike — see "governs a reserved namespace's first publish" above — and
+it is an active check re-run on each CI evaluation, never an early exit taken because a namespace
+is special.
 
-## Where the check runs and what it does on failure
+## Where the check runs and what it does on failure: the rejection taxonomy
 
 The check runs in registry CI (**N3**, `docs/architecture/depgraph.md`), on every PR against
 `worldofmodcraft/registry`, before the append-only diff check and schema validation are treated as
 sufficient to merge — `append-only.rules.md` explicitly assumes this check exists elsewhere and
-does not perform it. On failure, the PR is rejected with a message that states, per namespace that
-failed: which namespace, the PR author's real numeric id (and provider) as read from the PR
-object, and one of **three** failure modes:
-1. the existing `owner.id` it did not match (ordinary, existing-namespace case);
-2. the fact that the author is not a current member of `worldofmodcraft` (reserved-namespace
-   case, naming ADR-0119, first publish or later, per "The reserved-namespace case" above); or
-3. at first publish for a non-reserved namespace, the namespace string not equalling
-   (case-insensitively) the PR author's username ("The namespace string itself" above).
+does not perform it.
 
-This is the same actionable-rejection standard `append-only.rules.md` and the asset scanner already meet — no
-generic "ownership check failed," always the specific mismatch a reader can act on.
+On failure the PR is rejected with a message that states, per namespace that failed: which
+namespace, the PR author's real numeric id and provider as read from the PR object, and the row
+below for the rule that failed. **The table is derived from the rule declarations above — one row
+per declared verdict rule, no more and no fewer** — rather than being a separate list maintained
+beside them; `docs/tasks/032-verify.sh`'s `T5` and `T6` fail the verification run if the two ever
+diverge in either direction. It is not a closed list of "the" failure modes and must not be read as
+one: it is exactly as long as the set of verdict rules is, and it grows when they do.
 
-## `page.json` PRs: same ownership check, narrower scope (ADR-0059 §3)
+| Rule | When it rejects | What the rejection message says |
+|---|---|---|
+| `R1` | a touched path under `mods/` does not parse as `mods/<namespace>.<name>/entry.json` or `.../page.json` | the offending path, and that no namespace could be attributed to it |
+| `R2` | an `entry.json`'s `id` names a different namespace than its own directory does | the path's namespace, the `id`'s namespace, and that the path is authoritative (`I2`) |
+| `R3` | an existing, non-reserved namespace's `old.owner` `(provider, id)` is not the PR author's | the namespace, the author's real `(provider, id)`, and the `owner.id` it did not match |
+| `R4` | at a first publish, the namespace string is not the author's username, folded to lowercase | the namespace, the author's username, and that a first publish binds the namespace to the name it derives from (ADR-0039) |
+| `R5` | at a first publish, the proposed `new.owner` `(provider, id)` is not the submitter's own | the namespace, the author's real `(provider, id)`, and the `owner` the PR proposed instead |
+| `R6` | at a first publish, `new.owner.name_at_registration` is not the author's username | the namespace, the author's username, and the value the PR proposed instead |
+| `R7` | the PR author is not a current member of the organisation owning a reserved namespace | the namespace, the organisation, and ADR-0119 by name, per ADR-0119 §3 |
+| `R8` | at a reserved namespace's first publish, `new.owner` is not what `reserved-namespaces.json` records | the namespace, the recorded owner, and the `owner` the PR proposed instead |
+| `R9` | the membership question answered neither `204` nor `404` — a `302`, or anything else | the status received, that membership could not be determined, and that the check fails closed rather than guessing |
+| `R10` | a `page.json` is touched where no `entry.json` exists at the merge-base and none is created in the same PR | the path, and that no entry exists for that namespace to own it |
+| `R11` | a takedown PR is opened by an account other than the platform's own identity | the namespace, the author's real `(provider, id)`, and that only the platform's own account may open a takedown (Ludwig, 2026-09-07) |
 
-A PR touching only `page.json` (no `entry.json` change in the diff at all) is checked under
-"Against what" above exactly as an `entry.json` PR is: the namespace of every touched `page.json`
-path is extracted and evaluated against `old.owner.id` (ordinary case) or the reserved-namespace
-membership rule, identically. **This is the entirety of what this document requires for
-`page.json`.**
+This is the same actionable-rejection standard `append-only.rules.md` and the asset scanner already
+meet — no generic "ownership check failed," always the specific mismatch a reader can act on.
+
+## `page.json` PRs: same ownership check, and the case where no `entry.json` exists
+
+A PR touching `page.json` is enumerated exactly as an `entry.json` PR is (`I2`, `I7`): the
+namespace comes from the directory path, and ADR-0059 §3 requires such a PR to pass "the same
+ownership check (numeric id)" as one touching `entry.json`. Which rule then applies depends on what
+exists at the merge-base, and there are exactly three cases — the third, where no `entry.json`
+exists at all, is the one review round 2 (finding B3) found undefined while this section claimed to
+be complete.
+
+1. **An `entry.json` for that namespace exists at the merge-base.** `R3` applies against that
+   entry's `old.owner` — or `R7`, if the namespace is on the reserved list. Nothing is special
+   about the touched file being `page.json`.
+2. **No `entry.json` exists at the merge-base, but the same PR creates one.** That namespace's
+   first publish is happening in this same diff, so the first-publish rules decide the whole PR —
+   `R4`, `R5` and `R6`, or `R8` and `R7` for a reserved namespace — and the `page.json` raises no
+   separate authorisation question: it belongs to the same namespace and rides on the same verdict.
+3. **No `entry.json` exists at the merge-base and the PR does not create one.** `R10`.
+
+**R10 (MUST)** — a PR that touches `mods/<namespace>.<name>/page.json` where no `entry.json` for
+that namespace exists at the merge-base, and none is created in the same diff, MUST be rejected.
+There is no owner anywhere for the check to read: `old` does not exist, and `page.json` carries
+neither `owner` nor `id` — `contracts/page.schema.json`'s properties are exactly `deprecated`,
+`description`, `links`, `screenshots` and `tags`, verified in this environment with the command and
+output shown under "The namespace of a touched path" above. The first-publish rules cannot be
+applied to a file that has no `owner` to check and nothing to bind to an author, so a checker told
+only that "the first-publish rule applies when there is no `old`" would crash, pass the PR
+vacuously, or reject every legitimate page PR, depending purely on how it was written. The
+rejection is not a limitation to work around: a mod page describes a mod, and the mod's `entry.json`
+is what records who owns it, so a page with no entry has no owner by construction rather than by
+oversight.
 
 **What this document does not additionally require for `page.json` — a declared boundary, not a
 silent one.** ADR-0059 §3 also requires an "asset scan on new screenshots" for a page-content PR.
@@ -412,7 +608,7 @@ not this document — and it is **deferred to task 040**, because no archived so
 new screenshots against until task 008 (the build pipeline) has run at least once; task 040 depends
 on that archive existing. A `page.json` PR that changes screenshots must therefore pass **two**
 independent gates before it is accepted: this document's ownership check, and task 040's asset
-scan — this document only ever speaks to the first, and passing this check alone is not sufficient
+scan. This document only ever speaks to the first, and passing this check alone is not sufficient
 to accept such a PR.
 
 ## The required regression case for task 007 (acceptance criterion 3)
@@ -545,6 +741,33 @@ rule as any other PR touching that namespace. Found in review round 1 (finding B
 this document's enumeration named only `entry.json`, and `grep -c "page.json"
 contracts/ownership.md` returned `0`.
 
+**Attempt 7 — put the namespace in two places and let the checker pick.** `mallory` (real id
+`999`, username `mallory`) opens a first-publish PR creating `mods/alice.cooltool/entry.json` whose
+`id` is `mallory:cooltool` and whose `owner` is `{provider: "github", id: 999,
+name_at_registration: "mallory"}`. The bet is that the checker reads the namespace from one source
+for one rule and the other source for another. **Under a checker that enumerates by path but
+evaluates `R4` against `id`**, it works exactly as designed to: the enumeration finds namespace
+`alice`, sees no `old` entry and classifies a first publish; `R4` then reads `mallory` out of `id`,
+compares it to the author's username `mallory`, and passes; `R5` compares `999` to `999` and
+passes. The PR is accepted and `mods/alice.cooltool/` is squatted permanently, with the directory
+and the entry inside it disagreeing about which namespace they even are. **What the contract does
+about it:** `I2` makes the directory path the single source — so `R4` compares `alice` against
+`mallory` and rejects — and `R2` rejects the disagreement itself, on its own, before any question
+of ownership arises. Two independent rules, because the defect was that a checker had a *choice*.
+Found in review round 2 (finding B2).
+
+**Attempt 8 — wrap something else in a takedown.** The platform's own account (the only account
+`R11` authorises to open a takedown against a namespace it does not own) opens a PR that sets a
+version's `status` to `"removed"` with a reason **and**, in the same diff, adds a new version to
+that entry, or edits its `owner`, or rewrites its `page.json`. The bet is that a checker
+implementing `R11` classifies the PR as "a takedown" from the presence of the status change and
+then exempts the *whole PR* from the ordinary rules. **What the contract does about it:** `R11`'s
+authorisation covers nothing but the takedown mutation itself, in the shape
+`append-only.rules.md` defines; a PR that makes any other change is not a takedown for `R11`'s
+purposes and is judged in full by `R3`/`R7`, which reject it because the platform account does not
+own that namespace. `append-only.rules.md`'s own frozen-field rule is the second, independent
+barrier against the `owner`-editing variant, exactly as it is for Attempt 1.
+
 **On GitHub's documented username-recycling behaviour, quoted verbatim, underpinning attempts 1
 and 4 above:**
 > "After changing your username, your old username becomes available for anyone else to claim."
@@ -598,38 +821,59 @@ claim is load-bearing for the entire ownership model, not a peripheral detail.
   this one, deferred to task 040 for the reasons "`page.json` PRs" above states (no archive to scan
   against before task 008 runs). This document's check and that scan are two independent gates a
   screenshot-changing `page.json` PR must both pass.
-- **Who may open a PR performing a legally-mandated takedown against a namespace they do not
-  own.** An explicit, unresolved gap — see "Takedown PRs" below, not silently assumed away here.
+- **Whether a takedown PR, once authorised to be opened by `R11`, may be merged.** That is
+  MANAGER.md §7's written-approval gate, not this document's — `I8` and "Takedown PRs" below.
 
-## Takedown PRs: an authority question this document does not resolve (explicit exclusion)
+**A PR touching only `reserved-namespaces.json`, and nothing under `mods/`, passes this check
+vacuously** — it touches no path this document enumerates, so there is no namespace for any rule to
+be evaluated against, and a green ownership check on such a PR means only "nothing here was mine to
+judge." Stated so no reader mistakes the green for an endorsement. The guard is not this document:
+ADR-0119 §4 makes the reserved list a human-reviewed surface, and `I4` independently ensures that a
+PR editing the list cannot benefit from its own edit in the same diff, because the check reads the
+merge-base revision of that file.
 
-A legally-mandated takedown (ADR-0041) sets an existing version's `status` to `"removed"`.
-`contracts/append-only.rules.md` defines the *shape* of that one permitted in-place mutation and
-explicitly declines to say who may perform it: *"This document defines the shape of a legal
-takedown, not who may perform one."* The ownership gate — this document — is the only other place
-that identity question could land, since it is the document that decides who may touch a
-namespace at all.
+## Takedown PRs: who may open one (Ludwig's ruling, 2026-09-07)
 
-**This document does not resolve it either, and states that as a deliberate, named gap rather than
-leaving it silent.** Who may open a PR performing a legally-mandated takedown against a namespace
-they do not own is an **authority** question, not a mechanical one: ADR-0041 mandates that
-takedowns happen, and `MANAGER.md` §7 already makes *merging* one Ludwig's own written decision,
-account by account — but nobody has yet decided the *opening* side, and this document does not
-invent an answer to a question that belongs to Ludwig.
+A legally-mandated takedown (ADR-0041) sets an existing version's `status` to `"removed"` with a
+reason. `contracts/append-only.rules.md` defines the *shape* of that one permitted in-place
+mutation and explicitly declines to say who may perform it: *"This document defines the shape of a
+legal takedown, not who may perform one."* Review round 1's finding B5 found that the delegation
+landed nowhere — the ownership gate is the only other place the identity question could go, and it
+did not mention takedowns at all, so the ordinary rule rejected every takedown PR, including one
+opened by the platform to remove someone else's infringing entry, which is the entire premise of
+ADR-0041's legal-grounds clause. Fix round 1 declared the gap rather than inventing an answer,
+and booked it for Ludwig.
 
-**The consequence, today, stated plainly:** a takedown PR opened by any account other than the
-namespace's own recorded `owner.id` (or, for a reserved namespace, a current member of
-`worldofmodcraft`) is rejected by the **ordinary** rule in this document, exactly as any other
-unauthorised PR would be — including one opened by the platform itself to remove a namespace
-owner's own infringing entry, which is the entire premise ADR-0041's legal-grounds clause exists
-for. There is no carve-out here for a "legally-privileged opener," because none has been decided.
+**Ludwig ruled on 2026-09-07: the platform's own organisation account may open a takedown PR, and
+the human gate sits on the merge, not on the opening.**
 
-**The two contracts the delegation falls between, named explicitly:** `append-only.rules.md`
-defines the mutation's shape and declines the identity question; this document defines identity
-for the ordinary and reserved-namespace cases and says nothing about a takedown opener. The
-delegation `append-only.rules.md` makes lands nowhere until Ludwig rules on it — booked in this
-document's own `## Questions` below, so an implementer reading only this file (not the task log)
-still sees the gap.
+**R11 (MUST)** — a PR performing a takedown against a namespace its author does not own is
+authorised only when its author is the platform's own identity: the account
+`reserved-namespaces.json` records as the reserved namespaces' owner — `provider: "github"`,
+`id: 324218296`, the `worldofmodcraft` organisation. Every other author is rejected by `R3` or
+`R7` exactly as any other unauthorised PR is, with no takedown carve-out at all. The authorisation
+covers **nothing but** the takedown mutation itself, in the shape `append-only.rules.md` defines: a
+PR that sets `status` to `"removed"` with its reason *and* makes any other change — a new version,
+an edited `owner`, a `page.json` rewrite — is not a takedown for this rule's purposes and is judged
+in full by the ordinary rules (Attempt 8 above).
+
+**The mechanism, marked rather than assumed (guardrail 6b).** A GitHub Organization does not itself
+authenticate, so which concrete `pulls.user.id` a PR opened on the organisation's behalf actually
+carries — a machine account the organisation owns, a GitHub App installation, or a member acting
+for it — **was not established in this environment**: no such PR exists here to read, and settling
+it by reading a stored credential is forbidden (CLAUDE.md rule 11, MANAGER.md guardrail 10). The
+rule above names the *identity*; task 007's implementer must establish which id the platform's own
+takedown PRs present and configure `R11` against it. The rule is required as written — that belief
+about the mechanism is what is untested, not the rule. **Until it is configured, `R11` authorises
+nobody:** the check fails closed and every takedown PR is rejected by `R3`/`R7`, which is exactly
+today's state. It never fails the other way, into "accept any PR that says it is a takedown."
+
+**I8 (MUST)** — passing this gate is not authorisation to merge. MANAGER.md §7 requires Ludwig's
+explicit **written approval**, given in session and referenced in the PR, before a takedown PR is
+merged, and this check neither represents nor replaces it: registry CI cannot verify that a human
+decided anything. `R11` decides who may open; §7 decides who may merge. A green ownership check on
+a takedown PR means only that the opener was the platform's own account — never that the takedown
+was approved.
 
 ## Questions
 
@@ -653,19 +897,19 @@ still sees the gap.
    new namespace). **What rests on this:** nothing yet — this is a known, accepted consequence of
    two already-accepted ADRs, not a defect in this document, and is booked only so it is visible
    next to the attack attempt that demonstrates it rather than left to be rediscovered.
-3. **The case-folding rule in "The namespace string itself" above is not stated by any ADR read
-   for this task, in these words.** It follows mechanically from ADR-0039 (namespace = username)
-   plus `entry.schema.json`'s existing lowercase-only `id` pattern — a literal, case-sensitive
-   comparison would reject every first publish from a username containing a capital letter, which
-   nothing suggests is intended — but it is this document introducing the normalisation step, not
-   an ADR. **Assumed meanwhile:** case-insensitive comparison, folding both sides to lowercase.
-   **What rests on this:** task 007's checker, built from this rule as written; an FYI to Ludwig,
-   not a blocking question, since no other reading of ADR-0039 plus the schema pattern was found.
-4. **Who may open a PR performing a legally-mandated takedown against a namespace they do not
-   own** (found in review round 1, finding B5). An authority question sitting with Ludwig, not
-   settled by any ADR read for this task; see "Takedown PRs" above for the full statement of the
-   gap and its consequence today. **Assumed meanwhile:** no such PR is authorised; the ordinary
-   rule in this document rejects it, exactly as it rejects any other unauthorised PR. **What rests
-   on this:** ADR-0041's legal-grounds takedown clause has no PR that can currently open it on a
-   namespace's owner's behalf without their own cooperation — a real, currently-unclosed gap
-   between what ADR-0041 mandates and what this registry's own ownership rule permits.
+
+Both of the other questions this document booked — the case-folding rule and who may open a
+takedown PR — were answered by Ludwig on 2026-09-07 and are recorded in the next section, so no
+future round re-asks them.
+
+## Questions answered by Ludwig, recorded here so no round re-asks them
+
+- **Case-folding the namespace/username comparison** (booked by fix round 1 as this document's
+  Question 3). **Answered by Ludwig, 2026-09-07:** approved, and required to be written into this
+  contract explicitly rather than left to a checker's implementation — no ADR states the
+  normalisation in those words, so the contract must. Written above as `R4`'s case-insensitive
+  comparison, with the live verification of its premise beside it.
+- **Who may open a legally-mandated takedown PR against a namespace they do not own** (booked by
+  fix round 1 as Question 4, raised by review round 1's finding B5). **Answered by Ludwig,
+  2026-09-07:** the platform's own organisation account may open one, and MANAGER.md §7's
+  written-approval gate governs the merge rather than the opening. Written above as `R11` and `I8`.
