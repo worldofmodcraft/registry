@@ -643,6 +643,20 @@ pf("T5 every declared verdict rule has a taxonomy row (a MUST with no rejection 
    declared <= tabled, "declared but not in the taxonomy: %s" % sorted(declared - tabled))
 pf("T6 every taxonomy row names a rule the document still declares (no orphan rows)",
    tabled <= declared, "in the taxonomy but not declared: %s" % sorted(tabled - declared))
+# T14 (fix round 4, round-3 non-blocking 7): a row the ROW regex does not match is not an orphan
+# row and not a stub -- it is simply not seen, so `| `R99x` | ... |` could be added silently. Every
+# line of the table that is not the header or the separator must parse as a row.
+malformed = []
+for ln in tax_section:
+    if not ln.startswith('|'):
+        continue
+    if re.match(r'^\|\s*(Rule|-+|:?-+:?)\s*\|', ln) or set(ln) <= set('|- :'):
+        continue                      # header row / separator row
+    if not ROW.match(ln):
+        malformed.append(ln.strip()[:120])
+pf("T14 every line of the taxonomy table parses as a row keyed by a declared rule id (a row the parser cannot see is neither an orphan nor a stub -- it is invisible)",
+   not malformed, "%d unparseable row(s): %s" % (len(malformed), malformed))
+
 pf("T7 no taxonomy row is a stub -- each names what failed and what the rejection says",
    not thin, "; ".join(thin))
 
@@ -653,8 +667,49 @@ for p in paras:
     flat = ' '.join(p.split())
     if re.search(r'\bMUST\b', flat) and not re.search(r'\b[RI]\d+\b', flat):
         orphan.append(flat[:150])
-pf("T8 every paragraph containing a normative MUST cites a rule id (no MUST outside the scheme)",
+pf("T8 every paragraph containing an uppercase MUST cites a rule id (no uppercase MUST outside the scheme)",
    not orphan, "%d paragraph(s) with a MUST and no rule id: %s" % (len(orphan), orphan))
+
+# T8b -- THE RATCHET, and the honest statement of what T8 is (fix round 4, round-3 non-blocking 1).
+# T8 enforces a paragraph-level TYPOGRAPHIC convention over the uppercase token MUST. It is not a
+# fence around normativity, and round 3's log claimed it was. Three walk-arounds are real and were
+# demonstrated green by the reviewer: an uppercase MUST added INSIDE an existing rule's paragraph,
+# the same as a list item beside rule ids, and a bolded lowercase `must` as its own paragraph.
+# The first two are inherent to any paragraph-granularity convention -- closing them needs a
+# per-sentence attribution convention, which no round has decided and which this round will not
+# invent on its own authority. The third is closed here as a RATCHET rather than a widening: the
+# document already carries 14 paragraphs with a normative-sounding lowercase `must` and no rule id,
+# and most of them should not have one (a section heading, a booked question, a requirement
+# addressed to task 007 rather than to the checker). Widening T8 to lowercase would force rule ids
+# onto all fourteen and invent verdict rules where none belong. So the fourteen are PINNED by their
+# opening text, in the same allow-list shape V5 already uses for identity values: a fifteenth
+# cannot land silently, and changing the set is a deliberate edit here with a reason in the diff.
+LOWERCASE_MUST_ALLOWED = [
+    "This document adopts `append-only.rules.md`'s own `old`/`new",
+    "**The check compares the PR author's numeric account id agai",
+    "**Why the check must read this from the PR object's `user.id",
+    '**The two-namespace case, stated explicitly, with a named au',
+    '## The namespace of a touched path: the directory path is au',
+    '**What differs is *how a PR is authorised*, and it must diff',
+    '**What this means for the actual CI caller — marked here, no',
+    '**A second candidate, with its own caller requirement — not ',
+    'On failure the PR is rejected with a message that states, pe',
+    '**What this document does not additionally require for `page',
+    '**A PR whose author id differs from `owner.id` while the use',
+    '- On the target branch, `mods/alice.cooltool/entry.json` alr',
+    'Task 007 must include this exact fixture shape — matching us',
+    '1. **Whether the reserved-namespace membership check (ADR-01',
+]
+lower = []
+for _p in paras:
+    _flat = ' '.join(_p.split())
+    if re.search(r'\bmust\b', _flat) and not re.search(r'\b[RI]\d+\b', _flat):
+        lower.append(_flat[:60])
+new_ones = [x for x in lower if x not in LOWERCASE_MUST_ALLOWED]
+gone = [x for x in LOWERCASE_MUST_ALLOWED if x not in lower]
+pf("T8b the paragraphs carrying a normative-sounding lowercase `must` with no rule id are exactly the %d audited in fix round 4 -- T8 fences the uppercase token only, so a new lowercase one is a deliberate edit to this list, never a silent one" % len(LOWERCASE_MUST_ALLOWED),
+   not new_ones and not gone,
+   "new since the audit: %s; in the audit but no longer present: %s" % (new_ones, gone))
 
 # --- PRECEDENCE: an exception may not live in one rule's prose while the rule it overrides
 #     carries no trace of it. Round-3 finding 2: Ludwig's takedown ruling was written into the
@@ -750,8 +805,8 @@ expect_no_hits "B1a.1 the closed-list phrasing 'one of **three** failure modes' 
     'one of \*\*three\*\* failure modes'
 expect_hits_in "B1a.2 the taxonomy section states the list is derived from the rule declarations, not maintained beside them" \
     'rejection taxonomy' 'derived from the rule declarations|one row per declared'
-expect_hits_in "B1a.3 the how-to-read section explains the rule-id convention a new MUST must follow" \
-    'How to read this document' 'every normative MUST'
+expect_hits_in "B1a.3 the how-to-read section explains the rule-id convention a new uppercase MUST has to follow, in the precise terms T8 actually enforces (round-3 non-blocking 1: the old wording claimed a fence around normativity)" \
+    'How to read this document' 'every paragraph of this document containing an uppercase .MUST. cites a rule id'
 expect_hits_in "B1a.4 the how-to-read section names the verify check that makes drift detectable rather than promised" \
     'How to read this document' '032-verify\.sh'
 
@@ -1335,10 +1390,17 @@ if [ -z "$MERGE_BASE" ]; then
     # a check that does not evaluate is not a clean result).
     fail "S3a no integration branch (origin/main, main, origin/master, master) resolved, so the scope check has no base to compute against"
 else
-    CHANGED=$( { git diff --name-only "$MERGE_BASE" -- .; git ls-files --others --exclude-standard; } \
+    # Rooted at the repository top level, never at the caller's cwd (fix round 4, round-3
+    # non-blocking 3): `git diff -- .` and `git ls-files --others` are both cwd-relative, so
+    # running this script from docs/ reported a clean scope while an out-of-scope file sat at the
+    # repository root. Usage says "run from the worktree root"; a check that is only correct when
+    # its usage note is obeyed is a footgun, and the toplevel is already computed above.
+    REPO_ROOT=$(git rev-parse --show-toplevel)
+    CHANGED=$( { git diff --name-only "$MERGE_BASE" -- "$REPO_ROOT"; \
+                 git -C "$REPO_ROOT" ls-files --others --exclude-standard; } \
         | grep -v '__pycache__' | sort -u )
     printf '  $ git merge-base HEAD %s -> %s\n' "$SCOPE_REF" "$MERGE_BASE"
-    printf '  $ { git diff --name-only %s -- . ; git ls-files --others --exclude-standard ; } | grep -v __pycache__ | sort -u\n' "$MERGE_BASE"
+    printf '  $ { git diff --name-only %s -- %s ; git -C %s ls-files --others --exclude-standard ; } | grep -v __pycache__ | sort -u\n' "$MERGE_BASE" "$REPO_ROOT" "$REPO_ROOT"
     printf '%s\n' "$CHANGED" | sed 's/^/  /'
     # Task 032's declared file scope, from the task file's own "What I wrote" plus the two
     # artefacts later rounds added (the verify script and its B1 fixture).
@@ -1363,16 +1425,28 @@ else
     pass "S5 (lexical convention check, not a structural guarantee) this script contains no old.owner.id/new.owner.id equality logic (no ownership-gate implementation)"
 fi
 
-# SCOPE AUDIT (fix round 3, round-2 finding B5 treated as a class).
+# SCOPE AUDIT (fix round 3, round-2 finding B5 treated as a class; recounted in fix round 4,
+# round-3 non-blocking 2 -- the round-3 log's "70 pattern-matching checks, 63 scoped" was three
+# low, and it filed B4.7 under expect_hits_flow when B4.7 is an expect_hits_in_para).
 # Every pattern-matching check in this file was re-read and asked one question: can this pattern
-# match somewhere other than the place whose claim the label makes? The counts are in the task
-# log under "Fix round 3". Three unscoped forms remain, deliberately:
+# match somewhere other than the place whose claim the label makes?
+# COUNTED AT THIS COMMIT, by call site:
+#     expect_hits_in      44  |  expect_no_hits_in   3  |  expect_hits_in_para 33   -> 80 scoped
+#     expect_hits          2  |  expect_hits_flow    1  |  expect_no_hits       4   ->  7 unscoped
+#   = 87 pattern-matching call sites, 80 of them scoped to a section or a single paragraph.
+#   (Recount with: for h in expect_hits expect_hits_flow expect_no_hits expect_hits_in \
+#      expect_no_hits_in expect_hits_in_para; do printf '%s %s\n' "$h" \
+#      "$(grep -cE "^${h} " docs/tasks/032-verify.sh)"; done)
+# Plus 2 `guard_fires` call sites inside the G/W loop, which run to 8 checks -- they are positive
+# controls over `expect_no_hits` itself, not scope claims.
+# Three unscoped forms remain, deliberately:
 #   * expect_no_hits x4 -- absence claims, where whole-document scope IS the claim ("this string
-#     appears nowhere in the document").
+#     appears nowhere in the document"). Since fix round 4 each one is proven able to fire, by
+#     G1-G4 and W1-W4 above.
 #   * expect_hits x2 (N5, N5b) -- against docs/contracts/README.md, a 30-line index with no
 #     internal sections to scope to; the pattern is unique in that file.
-#   * expect_hits_flow x2 (B4.6, B4.7) -- against the task log, where the claim genuinely is
-#     "this appears somewhere in the file".
+#   * expect_hits_flow x1 (B4.6) -- against the task log, where the claim genuinely is "this
+#     appears somewhere in the file".
 
 # --------------------------------------------------------------------------------
 section "E -- this suite's own stderr (fix round 4, finding 5)"
@@ -1414,4 +1488,7 @@ if [ "$FAILURES" -eq 0 ]; then
     exit 0
 fi
 printf '%d CHECK(S) FAILED\n' "$FAILURES"
+# `exit` truncates modulo 256, so a run with exactly 256 failures would exit 0. Unreachable at this
+# suite's size and left as an exact count deliberately -- the number is useful to a reader -- but
+# named here rather than left to be rediscovered (round-3 non-blocking 6).
 exit "$FAILURES"

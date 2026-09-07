@@ -59,12 +59,27 @@ reject nothing. The rule declarations are therefore the authority; the table is 
 rejection message, keyed by rule id, and it is exactly as long as the set of verdict rules is.
 
 Because a promise not to let the two drift again is worth nothing, `docs/tasks/032-verify.sh`
-enforces the convention mechanically: its `T1`-`T9` checks fail the verification run if a rule id
+enforces the convention mechanically: its `T1`-`T14` checks fail the verification run if a rule id
 is declared twice, if a declared verdict rule such as `R1` has no taxonomy row, if a taxonomy row
-names a rule that no longer exists, or if any normative MUST is stated without a rule id beside
-it. The convention that last check enforces is that **every normative MUST in this document cites
-its rule id, such as `I1`, in the same paragraph**; it is what stops a future round from adding a
-requirement outside the scheme, which is how the drift happened both times.
+names a rule that no longer exists or is malformed, or if a paragraph containing the uppercase
+token `MUST` cites no rule id. The convention that last check enforces is that **every paragraph
+of this document containing an uppercase `MUST` cites a rule id, such as `I1`, in that same
+paragraph**; it is what stops a future round from adding a requirement outside the scheme, which
+is how the drift happened both times.
+
+**What that fence is, stated precisely rather than generously** (review round 3, non-blocking
+finding 1). `T8` is a paragraph-level convention over one uppercase token; it is not a detector of
+normativity, and this document does not claim it is one. A requirement written in that token
+*inside* an existing rule's paragraph, or as a list item beside items that cite rule ids, satisfies
+`T8` — the paragraph does cite an id — and so does a requirement written in the lowercase spelling
+of the same word. Fourteen paragraphs here use that lowercase spelling with no rule id, and most of
+them should not carry one: a section heading, a booked question, requirements addressed to task
+007's implementer rather than to the checker. Rather than invent rule ids for them,
+`docs/tasks/032-verify.sh`'s `T8b` pins that set of fourteen, so a fifteenth cannot appear without
+a deliberate edit to the check itself. The **derivation** between rule declarations and taxonomy
+rows is mechanical and bidirectional; the **fence** around new requirements is a typographic
+convention plus a ratchet, and knowing which of the two you have is the difference between a
+guarantee and a habit.
 
 ## The comparison model: `old.owner`, never `new.owner`
 
