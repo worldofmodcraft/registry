@@ -2317,3 +2317,442 @@ advisory (live, network/gh-auth dependent, informational only -- NEVER affects t
 ALL CHECKS PASSED (deterministic verdict -- 0 network calls required to reach it)
 EXIT=0
 ```
+
+---
+
+## Review round 3 (adversarial) — fix round 3 and the R6 addendum
+
+**verdict: BLOCKING.** Six findings, five of them reproducible with a single command each. The
+headline claim — *the failure taxonomy is now derived from the MUSTs rather than maintained beside
+them* — is **substantially true and mechanically enforced** (see "Verified correct", D1-D4): that
+part is not a promise with extra steps. What blocks the merge is a different thing: **three of the
+suite's regression guards can be walked past by the exact defects they name**, one of them the
+verbatim text of a previous blocking finding; a pasted command output in the contract still cannot
+be produced by the command above it (finding B6's own class, third round running); and `R11` — the
+newest normative rule, written from Ludwig's ruling — never lifts `R3`, so a faithful checker still
+rejects the platform's own takedown, which is round-1 finding B5's outcome unchanged.
+
+Reviewed at `6a517bc` in `/home/ludwig/wt/registry-task-032`. Nothing in that worktree was
+modified: every mutation below was run in a throwaway clone
+(`git clone /home/ludwig/registry`, branch `task/032-ownership-contract`), verified
+`diff -r` byte-identical to the worktree before and after, and the suite re-run green afterwards
+(108 PASS / 0 FAIL / exit 0). Not pushed. PR #4 not touched. No credential was read, printed or
+passed; the only network calls were `gh api` under the already-active identity and unauthenticated
+`curl`. No call was denied, so no retry-after-denial occurred.
+
+### The re-run that is this review's verification
+
+| Where | Result |
+|---|---|
+| `/home/ludwig/wt/registry-task-032` (authoring worktree) | **108 PASS, 0 FAIL, exit 0** — matches the round-3 claim exactly |
+| fresh `git clone`, branch checked out, `diff -r` identical to the worktree | **108 PASS, 0 FAIL, exit 0** (§2c rule 4 satisfied) |
+| merged `--no-ff` into `main`, `origin/main` still at the fork point | `PASS S3`, exit 0; `merge-base -> e449e26…`, reproducing the round-3 log's quoted value |
+| `main` moved on **and** `origin/main` advanced past the merge | `PASS S3`, exit 0 |
+| same state + untracked `v.html` | `FAIL S4 … : v.html`, exit 1 |
+| same state + uncommitted edit to tracked `README.md` | `FAIL S4 … : README.md` |
+| same state + out-of-scope file committed on a later branch | `FAIL S4 … : outofscope.txt`, exit 1 |
+
+**Non-blocking finding 7 is genuinely fixed, both halves.** The scope check survives the merge and
+still catches an out-of-scope file afterwards, through all three routes a file can arrive by.
+
+---
+
+## Blocking findings
+
+### 1. A pasted command output in `contracts/ownership.md` cannot be produced by the command above it — finding B6's exact class, still shipping
+
+`contracts/ownership.md:522-523`:
+
+```
+$ gh api orgs/worldofmodcraft/memberships/womcraft --jq '{state,role}'
+{"state":"active","role":"admin"}
+```
+
+Re-run this session, same machine, same active `gh` identity:
+
+```
+$ gh api orgs/worldofmodcraft/memberships/womcraft --jq '{state,role}'
+{"role":"admin","state":"active"}
+```
+
+`gh api --jq` uses gojq, which sorts constructed-object keys alphabetically — a fact
+**this same document states 113 lines earlier**, at line 409, in the note correcting the identical
+mistake in the `repos/worldofmodcraft/registry` transcript: *"an earlier revision of this document
+pasted the filter's literal order instead of the real output."* The correction was applied to one
+transcript and not to the other. `role` sorts before `state`; the pasted line is the filter's
+literal order and is unproducible.
+
+I re-ran **every** transcript in the contract (all eleven `$ ` blocks, lines 100, 118-125, 216,
+340, 382, 404, 464-469, 516, 522, 802). Ten reproduce byte-for-byte, including the git
+commit-author demonstration and the three-casing username probe. This one does not.
+
+**No check covers it.** The deterministic `B6.1`-`B6.4` python parses only the `pulls/3` transcript;
+the advisory `B6.5`-`B6.15` block diffs five commands, not this one; `B1.14` only asserts the words
+"candidate, not an answer" appear in the section. The verify artefact exists, in its own header's
+words, to make this kind of fabrication "detectable by construction" — and the one instance still in
+the tree is invisible to it.
+
+### 2. `R11` never lifts `R3`/`R7`, so Ludwig's ruling is unimplementable as written — round-1 finding B5's outcome, unchanged
+
+`R3` (line 67) is unconditional for its case: *"for a namespace that already exists at the PR's
+merge-base and is not on the reserved list, the PR author's real `(provider, id)` pair MUST equal
+`old.owner.provider` and `old.owner.id`."* It carries no takedown exception. `I7` states *"the PR is
+accepted only if **every** namespace passes every rule that applies to it."*
+
+`R11` is phrased as a **necessary** condition — *"a PR performing a takedown against a namespace its
+author does not own **is authorised only when** its author is the platform's own identity"* — which
+narrows who may open a takedown but never disapplies `R3`. `grep -n takedown contracts/ownership.md`
+(22 hits, all inspected) shows no sentence anywhere stating that `R3` or `R7` is waived,
+superseded or replaced for an authorised takedown.
+
+Both readings are faithful, and that is the defect:
+
+- **Reading A (R3 still applies):** the platform account's id `324218296` ≠ `alice:cooltool`'s
+  `old.owner.id`, so `R3` rejects. The legitimate takedown is refused — exactly what review round 1
+  finding B5 reported and what `R11` was written to fix.
+- **Reading B (R11 overrides R3):** the takedown merges — but nothing in the document says so, and
+  the document's own line 863 says every non-platform author *"is rejected by `R3` or `R7` exactly
+  as any other unauthorised PR is"*, which under Reading A would make `R11`'s taxonomy row
+  unreachable, since `R3` already rejects those authors.
+
+This is the same shape as round-2 finding B2 — *"the defect was that a checker had a **choice**"* —
+and the document elsewhere states the cure explicitly: `R8` is introduced as *"Exception for a
+namespace on the reserved list …, stated here at the point the ordinary rule is made, so the two
+never have to be reconciled by a reader,"* and `R4`/`R5`/`R6` each carry "not on the reserved list"
+in their own text. `R3` got no equivalent treatment for takedowns, and `R11` sits 792 lines later.
+
+`K2`, `K5` and `B5.4` cannot see this: they assert only that `R11`'s paragraph contains "takedown",
+that the section contains "nothing but", and that the section contains "rejected".
+
+### 3. Round-1 finding B1's and round-2 finding B4's defect text can both be reintroduced verbatim, and the suite stays at 108 PASS / exit 0
+
+The four whole-document absence guards use `expect_no_hits`, which is the **only** pattern helper in
+the file that does not flatten wrapped lines — `expect_hits_flow`, `expect_hits_in`,
+`expect_no_hits_in` and `expect_hits_in_para` all run `awk 'BEGIN{RS=""} {gsub(/\n/," ")}'` first.
+The contract wraps at ~95 columns. A line break therefore walks past every one of them.
+
+**Reproduction E1** — round-1 finding B1's caller-unqualified claim, restored *verbatim in the
+wrapping it had at `fcde6d5`*, inserted before `I5`:
+
+```
+`GET /orgs/{org}/members/{username}` returns `204` if the named user is a member, `404`
+otherwise.
+```
+```
+$ ./docs/tasks/032-verify.sh | grep -E '^(FAIL|PASS  B1\.15)'
+PASS  B1.15 the old, caller-unqualified flat claim ('returns .204. if the named user is a member, .404. otherwise') is gone …
+$ echo $?   # 0 — 108 PASS, 0 FAIL
+```
+
+**`B1.15` has never been able to fire.** Against the real pre-fix blob it names:
+`grep -cE 'returns .204. if the named user is a member, .404. otherwise' <(git show fcde6d5:contracts/ownership.md)`
+→ **0**, while the same pattern against the flattened text → **1**. The string was there; the check
+could not see it. It has been a free pass since round 1, and the round-3 audit put it in the
+"kept unscoped, deliberately" bucket without asking whether it could ever match.
+
+**Reproduction E2** — round-2 finding B4's framing, restored with one line break:
+
+```
+Two designs are possible here and either is
+acceptable: detect the `302`, or run as a confirmed member.
+```
+```
+$ ./docs/tasks/032-verify.sh | grep -E '^(FAIL|PASS  B4a\.1)'
+PASS  B4a.1 the 'either is acceptable' framing of the two designs is gone
+$ echo $?   # 0 — 108 PASS, 0 FAIL
+```
+
+MANAGER.md §2c's own founding example is *"a quoted hit for a string spanning a line break."* It is
+inside this artefact.
+
+### 4. Round-2 finding 17 can be reintroduced verbatim, and the suite stays green — `B1.12a`/`B1.12c` are green for the wrong reason
+
+`B1.12a`-`B1.12d` were created by round 3's §2c-rule-3 split of the old `B1.12` alternation. Two of
+the four resulting patterns are the bare strings `curl` and `gh api`, scoped to a **174-line**
+section that contains three unrelated `curl` transcripts and three unrelated `gh api` transcripts.
+
+**Reproduction C2** — round-2 finding 17 (the `curl -L` claim stated backwards) put back as a
+falsification, not a deletion:
+
+```
+-plain `curl` does **not** follow a redirect — `-L` is opt-in, and an earlier revision …
++plain `curl` **does** follow a redirect by default — `-L` merely makes it explicit;
+```
+```
+$ ./docs/tasks/032-verify.sh | grep -E '^(FAIL|PASS  B1\.12)'
+PASS  B1.12a the redirect-following default is stated for curl, and matches what was run here
+PASS  B1.12b … PASS  B1.12c … PASS  B1.12d …
+$ echo $?   # 0 — 108 PASS, 0 FAIL
+```
+
+The label says *"and matches what was run here"* while the document states the opposite of what was
+run here. **Reproduction C3**: deleting the `gh api` redirect sentence outright also leaves
+`B1.12c` green, exit 0. The suite's own printed evidence gives it away — `B1.12a` reports four
+matching paragraphs and `B1.12c` six, most of them the org-id and member-caller transcripts.
+
+(Deleting the *entire* evidence block does redden the suite, via `B4a.6`, `V6`, `B1.12b` and
+`B1.12d` — so the class is not wide open. But `B1.12a` and `B1.12c` cannot fail for the claims
+their labels make, which is §2c rule 2 exactly.)
+
+### 5. The scoping helpers' uniqueness guard fails open, and says so on stderr of every real run
+
+```bash
+section_heading_count() { grep -cE "^## .*$pat" "$file" 2>/dev/null || printf '0'; }
+```
+When `grep -c` matches nothing it prints `0` **and** exits 1, so `||` fires and appends a second
+`0`. `nsec` becomes `"0\n0"`, `[ "$nsec" -ne 1 ]` is a bash syntax error returning status 2, the
+`if` takes the **false** branch, and the guard is skipped. The shipped run proves it:
+
+```
+$ ./docs/tasks/032-verify.sh 2>&1 >/dev/null | tail -1
+./docs/tasks/032-verify.sh: line 195: [: 0
+```
+
+(This line is present in the round-3 log's own pasted output, twice, unremarked.) `K8` is the check
+that triggers it, via `'^## Questions$'`; `section_of` matches with `$0 ~ pat`, which the anchored
+pattern satisfies even though `^## .*^## Questions$` can never match.
+
+Demonstrated consequence, with the two helpers copied verbatim into a probe:
+
+| pattern | `section_heading_count` | guard | headings `section_of` matches | picked |
+|---|---|---|---|---|
+| `reserved-namespace case` | `1` | passes | 1 | correct |
+| `^## Questions$` | `$'0\n0'` | **bypassed** | 1 | correct today |
+| `^## Questions` | `$'0\n0'` | **bypassed** | **2** | silently the first |
+| `Questions` | `2` | fails correctly | 2 | — |
+
+No wrong result ships at `6a517bc`, because `K8`'s `$` anchor happens to be unique. But the guard
+the round advertises as *"not decoration … a scope that can quietly widen is not a scope"* is
+inoperative for exactly the pattern form it is written in, and the one-line fix is available.
+
+### 6. `B3.10` — the check guarding Ludwig's "keep `R6` a MUST" ruling is defeated by capitalisation
+
+`B3.10` is `expect_no_hits_in … '`new\.owner\.name_at_registration` should equal'`.
+
+```
+$ sed: **R6 (MUST)** — … `new.owner.name_at_registration` MUST equal …
+      →  **R6 (MUST)** — … `new.owner.name_at_registration` SHOULD equal …
+$ ./docs/tasks/032-verify.sh ; echo $?
+108 PASS, 0 FAIL
+0
+```
+
+The rule is now internally contradictory — declared `(MUST)`, bodied `SHOULD` — and the suite is
+green. Lowercase `should` reddens it (confirmed, mutation D6), so the check is not dead, but it
+guards a one-character change away from the state Ludwig explicitly ruled against, and `T8` cannot
+help because `R6`'s paragraph still cites a rule id.
+
+---
+
+## Non-blocking findings
+
+1. **`T8`'s fence is porous, and the round-3 log over-claims it.** The log states `T1`-`T9` fail
+   "on any normative MUST that does not cite a rule id". Three walk-arounds, each verified green at
+   108 PASS / exit 0:
+   - **A2** — `A checker MUST also reject any PR opened on a Tuesday.` inserted **into `I6`'s own
+     paragraph**: green (the paragraph cites `I6`).
+   - **A3** — the same requirement added as a **fourth list item** in the `page.json` three-case
+     list, whose other items cite `R3`/`R7`/`R10`: green.
+   - **A4** — `**A checker must also reject any PR opened on a Tuesday.**` as its own paragraph,
+     lowercase `must`: green (`T8` matches `\bMUST\b` only).
+   The contract already contains **14 paragraphs** with a normative-sounding lowercase `must` and no
+   rule id, including *"Task 007 **must** include this exact fixture shape … as a regression test
+   before its ownership gate ships"* and *"**A PR whose author id differs from `owner.id` while the
+   username matches must be rejected.**"* The honest statement is: the **derivation** (rule
+   declaration ↔ taxonomy row) is mechanical and bidirectional; the **fence** around it enforces a
+   typographic convention, not normativity. The log should say that.
+
+2. **The check-count claim does not reproduce.** The log says "70 pattern-matching checks, 63 of
+   them scoped". Actual, counted at `6a517bc`: **73** helper calls (`expect_hits` 2,
+   `expect_hits_flow` 1, `expect_no_hits` 4, `expect_hits_in` 50, `expect_no_hits_in` 3,
+   `expect_hits_in_para` 13), **66** scoped, 7 unscoped. The 7-unscoped figure is right; the totals
+   are 3 low. The script's own `SCOPE AUDIT` comment also lists `B4.7` under `expect_hits_flow x2`;
+   `B4.7` is an `expect_hits_in_para`.
+
+3. **`S3`/`S4` pass green from a subdirectory.** `git diff --name-only "$MERGE_BASE" -- .` and
+   `git ls-files --others` are both cwd-relative. With `v.html` at the repo root:
+   from the root → `FAIL S4 … v.html`; from `docs/` → `PASS S3`. The script already computes and
+   prints `git rev-parse --show-toplevel`; using it in the two commands is a one-line fix. Usage is
+   documented as "run from the worktree root", so this is a footgun rather than a false claim.
+
+4. **The weak-pattern class is wider than findings 4 and 6.** Same shape, lower stakes:
+   `B2a.2` (`'page\.json'` — satisfied by `R1`'s paragraph, not by the `page.schema.json`
+   justification it names), `B3a.4` (`'same PR|same diff'` — satisfied by `R10`), `B5.4`
+   (`'rejected'` — 3 matching paragraphs), `K1`/`K9` (`'2026-09-07'` — a bare date),
+   `N9` (`'opened by'`).
+
+5. **stderr noise hides real errors.** Every run emits 12 `awk: warning: escape sequence \. treated
+   as plain .` lines (from `\.` inside anchors passed to `awk -v pat=`) plus the finding-5 bash
+   error. The one signal was buried in the noise for a whole round.
+
+6. **`exit "$FAILURES"`** truncates mod 256; unreachable at 108 checks, worth a comment.
+
+7. **A malformed taxonomy row is invisible.** `| \`R99x\` | … |` is not matched by
+   `^\|\s*\`(R\d+)\`\s*\|`, so it is neither an orphan row (`T6`) nor a stub (`T7`); it is simply
+   not seen. The fail-safe direction is fine — a row that stops matching makes `T5` red — but a
+   junk row can be added silently. Verified green (A5).
+
+---
+
+## What I verified as correct, recorded so coverage is visible
+
+**The derived taxonomy — all four arms mutation-tested, restored byte-identically each time:**
+
+| # | Break put back | Reddened | exit |
+|---|---|---|---|
+| D1 | rule id declared twice (`R7` → a second `R3`) | `T1`, `T3`, `T6`, `T0` | 1 |
+| D2 | new verdict rule `R12` declared, no taxonomy row | `T5`, `T0` | 1 |
+| D3 | `R11`'s taxonomy row deleted, rule kept | `T5`, `T0` | 1 |
+| D4 | `R11`'s declaration removed, row kept (orphan) | `T1`, `T6`, `T0`, `K2` | 2 |
+| A1 | normative `MUST` in its own paragraph, no rule id | `T8`, `T0` | 1 |
+| D5 | org id falsified **inside** `R8`'s paragraph (round-3 M1) | `B2.2`, `V5`, `V0` | 2 |
+| D6 | `R6` softened to lowercase `should` (round-3 M12) | `B3.10` | 1 |
+| D7 | `R6`'s derivation attribution stripped (round-3 M10) | `B3.8`, `B3.9` | 2 |
+| C1 | whole per-client redirect evidence block deleted | `B4a.6`, `V6`, `V0`, `B1.12b`, `B1.12d` | 4 |
+
+Six of round 3's own reported mutations were re-run independently (M1, M3, M4, M5, M10, M12
+equivalents) and every one reproduced the reported red lines. The taxonomy derivation is real:
+**a declared verdict rule cannot exist without a row, and a row cannot exist without a declared
+rule, in both directions, mechanically.** That is not a promise with extra steps.
+
+**Counts, counted myself, not taken from the log:** 11 verdict rules (`R1`-`R11`, all declared at
+line start), 8 checker rules (`I1`-`I8`), 11 taxonomy rows. The claim holds. No rule declaration
+sits anywhere but at the start of a line.
+
+**The advisory/deterministic split — proven structurally, not by observing a run.** `FAILURES` is
+assigned at line 82 and mutated at exactly one place, line 88, inside `fail()`. `advise_pass`/
+`advise_drift`/`advise_skip` touch only `ADVISORY_OK`/`ADVISORY_DRIFT`/`ADVISORY_SKIP`. The only two
+exits are `exit 0` (guarded by `FAILURES -eq 0`) and `exit "$FAILURES"`. Every `fail`/`pass`
+invocation in the file sits at lines 102-992, and **none** falls inside either advisory-gated region
+(318-365, the `gh auth status` branch; 450-495, the rate-limit branch) — checked by extracting both
+ranges. No advisory outcome can reach the exit code by any path.
+
+**The `401` non-recapture decision was correct.** With the quota exhausted this session
+(`core.remaining=0`), *every* unauthenticated endpoint answers `403`, including the always-public
+`repos/facebook/jest`. `403` is therefore a throttle artefact, not the memberships endpoint's
+semantic answer; the fixture's `401` is the real unauthenticated response. Re-capturing `403` would
+have recorded a rate-limit artefact as GitHub's documented behaviour and broken `R9`'s reasoning
+about which statuses mean "indeterminate". Keeping `401` was right, and the fixture's
+`caveat_guardrail_6b` already says re-capture is its own reviewed change.
+
+**Ludwig's two rulings, on the parts that are not finding 2:**
+- **`I8` does not absorb or weaken the merge gate.** MANAGER.md §7 requires *"Ludwig's explicit
+  written approval, given in session, referenced in the PR, before merge"*; `I8` restates all three
+  elements verbatim and adds *"this check neither represents nor replaces it … `R11` decides who may
+  open; §7 decides who may merge."* The "What this document does not cover" list names it again.
+  Nothing softens it.
+- **The case-insensitivity citation is real and at the point of claim** (guardrail 6b). The
+  three-casing `gh api users/…` transcript sits in the same section, immediately under `R4`'s
+  folding paragraph, with the 6b caveat beside it. Re-run this session: all three casings return
+  `{"id":324089373,"login":"womcraft"}`. Not a footnote.
+
+**Attempt 8 — I tried to smuggle things past `R11` and could not, except via finding 2.** A
+multi-namespace all-takedown PR, a takedown bundled with a change to a namespace the platform *does*
+own, a takedown plus a `page.json` rewrite, and a takedown plus an `owner` edit are all handled: the
+"nothing but the takedown mutation itself" clause drops the PR back to `R3`/`R7`, and
+`append-only.rules.md`'s frozen-field rule is a second barrier for the `owner` variant. The
+exception surface itself is tight. What is not tight is the interface between it and `R3`.
+
+**`R6`'s attribution (added at `6a517bc`) is correct.** It reads *"it is **this document's
+derivation from ADR-0058 §2**"* and *"**ADR-0058 §2 does not state the check in those words**, and
+no ADR read for this task does"*, then *"The rule is required as written — that is the point of
+stating the basis rather than softening the rule."* It does not read as though the ADR says this;
+the MUST is intact (subject to finding 6's walk-around); guardrail 6b's shape — basis marked,
+strength untouched — is met.
+
+**Every quoted command re-run and diffed** (§2c: "the reviewer and the manager re-run the same
+script and diff"):
+
+| Command | Reproduced? |
+|---|---|
+| `python3 -c "…page.schema.json…['properties']"` | ✅ `['deprecated','description','links','screenshots','tags']` |
+| `gh api repos/facebook/jest --jq '{full_name,id}'` | ✅ `{"full_name":"jestjs/jest","id":15062869}` |
+| `for u in womcraft WOMCRAFT WomCraft; …` | ✅ all three `{"id":324089373,"login":"womcraft"}` |
+| `gh api orgs/worldofmodcraft/members/womcraft -i` | ✅ `HTTP/2.0 204 No Content` |
+| `gh api repos/worldofmodcraft/registry/pulls/3 --jq …` | ✅ (advisory `B6.6` PASS) |
+| `gh api orgs/worldofmodcraft --jq '{login,id,type}'` | ✅ (advisory `B6.8` PASS) |
+| `gh api repos/worldofmodcraft/registry --jq …` | ✅ (advisory `B6.10` PASS) |
+| `gh api users/ghost --jq '{login,id,type}'` | ✅ (advisory `B6.14` PASS) |
+| the `git log`/`--author`/`git reset --hard` demonstration | ✅ re-run in the throwaway clone; `womcraft <womcraft@snabbpost.com>` → `Totally Fake Name <fake@example.com>` → restored |
+| `node -e "require.resolve('@octokit/core')"` | ✅ `node` is present at `~/.local/node/bin/node`; the require throws — octokit genuinely absent, so "unverified" is honest under 6c, not a caveat wearing caution's clothes |
+| `python3 -c "import requests; …"` (redirect default) | ⚠️ GitHub unreachable under throttle; confirmed instead from the library: `inspect.signature(requests.Session.request).parameters['allow_redirects'].default` → `True` |
+| `gh api orgs/…/memberships/womcraft --jq '{state,role}'` | ❌ **finding 1** |
+
+**§2c rule 5, checked on the absence guards rather than assumed:** against the real pre-fix blob
+`f660c11`, the patterns for `B1a.1` ("one of **three** failure modes"), `B4a.1` ("either is
+acceptable"), `N16` ("authenticates as is itself") and `B3a.5` ("This is the entirety of what this
+document requires") each match exactly once — they were real breaks, and they were written as
+fixtures that could see them. `B1.15` is the exception (finding 3).
+
+**Positive controls sit beside the hostile fixtures**, as claimed: `B6.1` (pinned pre-fix blob,
+must be red) and `B6.2` (current tree, must be green) are a matched pair, and the python block
+`sys.exit(1)`s if the pre-fix blob ever *passes* — the suite cannot score by rejecting everything.
+`V6` is the other positive control: it fails if an identity the argument depends on **disappears**,
+which is what caught mutation C1 alongside the negative checks.
+
+**The three unresolvable items stay marked, not settled.** `octokit.js`'s redirect default,
+whether Actions' `GITHUB_TOKEN` is an org member, and GitHub's `403` for an authenticated
+non-member are each caveated in `contracts/ownership.md` at the point of the claim (lines 476,
+499-501 and 528 respectively), not only in this log. Numeric-id reuse and the takedown PR's concrete
+`pulls.user.id` likewise. All five would need a second identity or a runner; producing either is
+forbidden here. Correctly left open.
+
+---
+
+## What I could not verify, marked rather than dropped
+
+1. **The three unauthenticated `curl` probes the B1 fixture records** (`302` + redirect target,
+   `404` after `-L`, `401` on `/memberships/`). GitHub's 60/hour unauthenticated quota is exhausted
+   from source IP: `core.remaining=0`, and all three probes plus the public
+   `repos/facebook/jest` return `403`. Per the credential rule this is **a skip, not a finding** —
+   the advisory section is designed to skip and did (`ADVISORY-SKIP B1-live`), and the verdict was
+   unaffected, which is round-2 finding F-B's fix working. I did not authenticate around it.
+2. **Round-3 mutations M2, M6, M7, M8, M9, M11** were not re-run; I re-ran a representative sample
+   of six plus nine of my own. All six re-runs reproduced.
+3. **PR #4's server-side state** — not touched, as instructed.
+4. **Whether `append-only.rules.md`'s definition of "the takedown mutation shape"** is precise
+   enough to carry `R11`'s "nothing but" clause. `R11` delegates to it; I read `ownership.md`'s side
+   of the boundary only. Worth one pass in the fix round, since finding 2 puts weight on it.
+
+---
+
+## FIX BRIEF — round 4 (dispatchable as written; finder is never fixer, so not by me)
+
+1. **Correct the transcript at `contracts/ownership.md:522-523`** to the real output
+   `{"role":"admin","state":"active"}`, re-run to confirm, and add a note in the same shape as the
+   line-409 note. **Then close the class:** extend the deterministic `B6` python so it parses
+   **every** `$ gh api … --jq '{…}'` block in the document, derives the key set the filter can emit,
+   and asserts gojq's alphabetical ordering — rather than hard-coding one transcript. Show it red
+   against the current text first.
+2. **Give `R3` (and `R7`) an explicit takedown exception at the point the ordinary rule is made**,
+   in the same form `R8`'s reserved-list exception already takes, stating which rule wins and why;
+   or, if the intent is that `R11` only narrows and never authorises, say that plainly and record
+   that the platform takedown remains rejected. Either is acceptable; silence is not. Add a `T`-class
+   check that every verdict rule which another rule overrides names its override, so a future
+   exception cannot land unreconciled again.
+3. **Make `expect_no_hits` flatten wrapped lines**, exactly as the other five helpers do
+   (`awk 'BEGIN{RS=""} {gsub(/\n/," ")}'` before the grep). Then **re-verify `B1.15` against
+   `fcde6d5` with the fixed helper and show it red** — it has never been demonstrated red, and until
+   it is, it is not a fixture. Reproductions E1 and E2 above are the two cases to add.
+4. **Replace `B1.12a` and `B1.12c`'s patterns** with ones that carry their labels — the claim is
+   "does **not** follow" for `curl` and "**does** follow" for `gh api`, so match those, in the one
+   paragraph that states them (`expect_hits_in_para`, anchored on
+   `verified in this environment.*client by client`). Show reproduction C2 red before the change.
+   Apply the same test to the checks in non-blocking finding 4.
+5. **Fix `section_heading_count`** so a zero count is a clean `0`
+   (`n=$(grep -cE … || true); printf '%s' "${n:-0}"`), and make the guard use the **same** matching
+   rule as `section_of` (`$0 ~ pat` over `^## ` lines) so the two cannot disagree. Add a check that
+   the suite's own stderr is empty — the bash error sat in two pasted logs unnoticed. Clean up the
+   12 awk escape warnings while there.
+6. **Make `B3.10` case-insensitive** (`grep -iE`, or match `(should|SHOULD|Should) equal`), and
+   consider asserting positively that `R6`'s body still contains `MUST equal` rather than only that
+   it lacks `should`.
+7. **Non-blocking:** correct the log's "70 / 63" to the counted 73 / 66 and the `SCOPE AUDIT`
+   comment's classification of `B4.7`; soften the log's `T8` claim to what `T8` actually enforces
+   (a paragraph-level typographic convention over uppercase `MUST`), and decide whether to widen
+   `T8` to lowercase `must` — 14 existing paragraphs would need rule ids if you do, so this is a
+   deliberate choice, not an obvious yes; root the scope check at
+   `git rev-parse --show-toplevel`.
+
+**Do not weaken any check to make the suite green.** Every finding above is a check that needs to
+become able to fail, not a claim that needs to become smaller.
