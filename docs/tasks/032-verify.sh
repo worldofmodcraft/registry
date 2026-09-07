@@ -76,7 +76,21 @@ B1_FIXTURE="docs/tasks/032-b1-fixtures.json"
 # so a whole-file check would match its own evidence and report a duplicate. Found by this
 # script's own uniqueness rule during fix round 3, immediately after the round-3 log was appended.
 TASKLOG_HEADER="$(mktemp -t 032-tasklog-header.XXXXXX)"
-trap 'rm -f "$TASKLOG_HEADER"' EXIT
+# --- stderr is evidence (fix round 4, finding 5) ---------------------------------------------
+# A suite that prints errors nobody reads is how a fail-open guard survived a whole round: the
+# bash error `[: 0` raised by section_heading_count was on stderr of EVERY run, and was pasted
+# twice into the round-3 log without anyone reading it. So stderr is captured and checked here.
+# Everything the DETERMINISTIC part of this script writes to fd 2 goes to $STDERR_DET, is
+# re-printed on the real stderr at the end (so `2>&1` still shows it), and a non-empty capture
+# is check E1, a FAILURE. The two ADVISORY sections write to $STDERR_ADV instead: they make live
+# network/`gh` calls whose stderr depends on the environment, and nothing environment-dependent
+# may decide this script's verdict (fix round 2, finding F-B). Their stderr is reported as
+# advisory drift, never as a failure.
+STDERR_DET="$(mktemp -t 032-stderr-det.XXXXXX)"
+STDERR_ADV="$(mktemp -t 032-stderr-adv.XXXXXX)"
+BLOBDIR="$(mktemp -d -t 032-blobs.XXXXXX)"
+trap 'rm -f "$TASKLOG_HEADER" "$STDERR_DET" "$STDERR_ADV"; rm -rf "$BLOBDIR"' EXIT
+exec 3>&2 2>"$STDERR_DET"
 awk '/^---$/ { exit } { print }' "$TASKLOG" > "$TASKLOG_HEADER"
 PREFIX_BLOB="fcde6d5:contracts/ownership.md"   # the commit fix round 1 started from
 FAILURES=0
@@ -125,11 +139,44 @@ expect_hits_flow() {
 }
 
 expect_no_hits() {
-    local label="$1" pattern="$2" file="${3:-$DOC}"
-    if grep -nE "$pattern" "$file" > /dev/null; then
-        fail "$label -- pattern still present in $file (expected it gone)"
+    # Whole-document absence claim. FIX ROUND 4, finding 3: this was the ONLY pattern helper in
+    # this file that did not flatten wrapped lines first, so a line break walked past all four
+    # guards built on it -- round-1 finding B1's and round-2 finding B4's defect text could both
+    # be reintroduced verbatim with the suite at 108 PASS / exit 0, and `B1.15` had never once
+    # been able to fire against the blob its own label names. The documents wrap at ~95 columns
+    # and that wrapping is presentational, so "the string is absent" is a claim about the text,
+    # never about the line breaks in it. The G/W checks below are the fixture that keeps this
+    # flattening here: they run this very function against files that DO contain each forbidden
+    # string, and redden the moment it stops seeing them.
+    local label="$1" pattern="$2" file="${3:-$DOC}" hits
+    hits=$(awk 'BEGIN{RS=""} {gsub(/\n/," "); print}' "$file" | grep -E "$pattern")
+    if [ -n "$hits" ]; then
+        fail "$label -- pattern still present in $file, after joining wrapped lines within each paragraph (expected it gone)"
+        printf '%s\n' "$hits" | cut -c1-300 | sed 's/^/        /'
     else
         pass "$label"
+    fi
+}
+
+# --- Positive control for the absence guards (fix round 4, finding 3) ------------------------
+# Round-3 finding 3: `B1.15` had NEVER been able to fire. Its pattern names the pre-fix blob
+# fcde6d5, and against that blob the line-based helper found 0 hits, because the string it
+# forbids spans a line break there. An absence guard that cannot see its own subject is a free
+# pass wearing a check's label -- MANAGER.md Section 2c rule 2 exactly.
+#
+# This helper is the fixture for the CLASS, not for the instance. It runs the REAL
+# `expect_no_hits` -- the same function the guards use, not a copy -- against a file that DOES
+# contain the forbidden text, and requires it to report FAIL. If a future edit removes the line
+# flattening from `expect_no_hits`, every W check below reddens immediately.
+# (`expect_no_hits` runs inside a command substitution, i.e. a subshell, so its own `fail` call
+# cannot reach this script's $FAILURES; only this function's verdict does.)
+guard_fires() {
+    local label="$1" pattern="$2" file="$3" out
+    out=$(expect_no_hits "inverted probe -- must report the text PRESENT" "$pattern" "$file")
+    if printf '%s' "$out" | grep -q '^FAIL'; then
+        pass "$label"
+    else
+        fail "$label -- the guard reported the forbidden text ABSENT from a file that demonstrably contains it, so it is a free pass, not a fixture (finding 3's defect)"
     fi
 }
 
@@ -150,8 +197,23 @@ expect_no_hits() {
 # about the whole document (e.g. "this string appears nowhere"), and each remaining use says so.
 
 section_heading_count() {
+    # FIX ROUND 4, finding 5. Two defects, both real, both now closed:
+    #  1. FAILS OPEN. `grep -c` prints `0` AND exits 1 when nothing matches, so `|| printf '0'`
+    #     appended a SECOND zero; $nsec became "0\n0", `[ "$nsec" -ne 1 ]` was a bash syntax
+    #     error (status 2), the `if` took the FALSE branch, and the uniqueness guard was skipped
+    #     entirely -- while printing `[: 0` on stderr of every run for a whole round (see E1).
+    #  2. IT DID NOT MATCH WHAT IT GUARDS. It counted with `^## .*$pat` while `section_of`
+    #     selects with `$0 ~ pat`, so for an anchored pattern such as `^## Questions$` the guard
+    #     counted a pattern (`^## .*^## Questions$`) that can never match anything, while
+    #     `section_of` matched fine. A guard that asks a different question than the thing it
+    #     guards is not a guard.
+    # The counting rule below is now literally `section_of`'s own: `$0 ~ pat` over `^## ` lines.
+    # `n+0` always prints exactly one integer, so the caller's `-ne` test can never error.
+    # The pattern travels in the environment, never through `awk -v`, because `awk -v` processes
+    # backslash escapes in the value and turned every `\.` in these patterns into a warning on
+    # stderr (12 of them per run in round 3, which is the noise finding 5 hid inside).
     local pat="$1" file="${2:-$DOC}"
-    grep -cE "^## .*$pat" "$file" 2>/dev/null || printf '0'
+    _032pat="$pat" awk '/^## / { if ($0 ~ ENVIRON["_032pat"]) n++ } END { print n+0 }' "$file"
 }
 
 section_of() {
@@ -161,8 +223,8 @@ section_of() {
     # one. (Caught by this script on itself during fix round 3: two headings contained the words
     # "rejection taxonomy", so every check scoped to it was reading the wrong section.)
     local pat="$1" file="${2:-$DOC}"
-    awk -v pat="$pat" '
-        /^## / { if (inside) exit; if ($0 ~ pat) inside = 1 }
+    _032pat="$pat" awk '
+        /^## / { if (inside) exit; if ($0 ~ ENVIRON["_032pat"]) inside = 1 }
         inside { print }
     ' "$file"
 }
@@ -317,7 +379,7 @@ section "B6 -- ADVISORY: live re-run of every command pasted in the document, di
 # depends on an active `gh` identity, which is not guaranteed on every machine, so -- per the
 # same fix-round-2 design applied to B1 below -- none of its outcomes touch $FAILURES.
 
-if ! gh auth status > /dev/null 2>&1; then
+{ if ! gh auth status > /dev/null 2>&1; then
     advise_skip "B6.5 gh auth status -- no active gh identity, live gh api checks skipped"
 else
     LIVE_PR3=$(gh api repos/worldofmodcraft/registry/pulls/3 --jq '{merged, user:{login:.user.login,id:.user.id}}' 2>/dev/null)
@@ -362,7 +424,7 @@ else
     else
         advise_drift "B6.15 live ghost-account shape ($LIVE_GHOST) does not match the document's paste ($DOC_GHOST)"
     fi
-fi
+fi ; } 2>>"$STDERR_ADV"
 
 # --------------------------------------------------------------------------------
 section "B1 -- the org-membership endpoint: recorded fixture, deterministic, no network required (fix round 2, finding F-B)"
@@ -448,7 +510,7 @@ section "B1 -- ADVISORY: live re-run of the same three probes against real GitHu
 # fix (finding F-B). To re-capture the fixture itself (not just check for drift), see
 # docs/tasks/032-b1-fixtures.json's own "how_to_recapture" field.
 
-RATE_REMAINING=$(curl -s -m 10 https://api.github.com/rate_limit 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('resources',{}).get('core',{}).get('remaining','?'))" 2>/dev/null || echo "?")
+{ RATE_REMAINING=$(curl -s -m 10 https://api.github.com/rate_limit 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('resources',{}).get('core',{}).get('remaining','?'))" 2>/dev/null || echo "?")
 if ! curl -s -m 10 -o /dev/null https://api.github.com 2>/dev/null; then
     advise_skip "B1-live reachability to api.github.com"
 elif [ "$RATE_REMAINING" = "0" ]; then
@@ -490,7 +552,7 @@ else
     else
         advise_drift "B1-live.3 live memberships-endpoint probe (status=$MEMBERSHIPS_UNAUTH) drifted from the fixture (status=$FX_STATUS3) -- consider re-capturing"
     fi
-fi
+fi ; } 2>>"$STDERR_ADV"
 
 # ==============================================================================================
 # FIX ROUND 3 (2026-09-07). Every check below this line is either NEW or a round-2 check
@@ -921,6 +983,185 @@ expect_no_hits "N16 the garbled 'authenticates as is itself' sentence is repaire
     'authenticates as is itself'
 
 # --------------------------------------------------------------------------------
+section "G/W -- every whole-document absence guard is proven able to fire, against the blob it names AND against a re-wrap (fix round 4, finding 3)"
+# Section 2c rule 5: "a fixture that would have passed against the broken code proves nothing."
+# G: the guard's pattern must report a hit against the real historical blob whose defect it was
+#    written to forbid. G3 is round-3 finding 3 itself -- it is RED against the line-based
+#    helper and green only once `expect_no_hits` flattens wrapped lines like the other helpers.
+# W: the same blob, re-wrapped at 20 columns (trailing whitespace stripped, exactly as a text
+#    wrapper produces), must still be caught. A line break must never walk past an absence
+#    guard -- MANAGER.md Section 2c's own founding example is "a quoted hit for a string
+#    spanning a line break", and it was inside this artefact.
+# The blob for each guard is the commit whose text the guard forbids; both are pinned by hash,
+# so these fixtures stay true forever and need no network.
+ABSENCE_IDS=(B1a.1 B4a.1 B1.15 N16)
+ABSENCE_PATS=(
+    'one of \*\*three\*\* failure modes'
+    'either is acceptable'
+    'returns .204. if the named user is a member, .404. otherwise'
+    'authenticates as is itself'
+)
+ABSENCE_BLOBS=(f660c11 f660c11 fcde6d5 f660c11)
+ABSENCE_WHY=(
+    "round-2 finding B1's closed-list phrasing"
+    "round-2 finding B4's 'either design is fine' framing"
+    "round-1 finding B1's caller-unqualified membership claim"
+    "round-2 finding 16's garbled sentence"
+)
+for i in 0 1 2 3; do
+    _id="${ABSENCE_IDS[$i]}"; _pat="${ABSENCE_PATS[$i]}"; _blob="${ABSENCE_BLOBS[$i]}"
+    git show "$_blob:$DOC" > "$BLOBDIR/$_id.blob"
+    fold -s -w 20 < "$BLOBDIR/$_id.blob" | sed 's/[ \t]*$//' > "$BLOBDIR/$_id.rewrap"
+    guard_fires "G$((i+1)) $_id's pattern fires against $_blob:$DOC -- ${ABSENCE_WHY[$i]}, the text this guard exists to forbid" \
+        "$_pat" "$BLOBDIR/$_id.blob"
+    guard_fires "W$((i+1)) $_id's pattern still fires when that same blob is re-wrapped at 20 columns (a line break must not walk past an absence guard)" \
+        "$_pat" "$BLOBDIR/$_id.rewrap"
+done
+
+# --------------------------------------------------------------------------------
+section "J -- every \`gh api --jq\` transcript in the contract is one gojq could actually emit (fix round 4, finding 1)"
+# Round-1 finding B6 and round-3 finding 1 are the same defect twice: a pasted `--jq` output the
+# command cannot produce. B6's fixture hard-codes ONE transcript (the pulls/3 object), so the
+# second instance -- a key ORDER gojq never emits -- was invisible to it for three rounds while
+# the same document stated the sorting fact 113 lines earlier. This check is the class instead of
+# the instance: it finds every `gh api ... --jq '{...}'` command in the document, derives from the
+# filter itself which keys the output may contain, and asserts both the key SET and gojq's
+# alphabetical key ORDER, at every nesting level, for every output line pasted under it.
+python3 - "$DOC" <<'PY'
+import json, re, sys
+
+doc_path = sys.argv[1]
+lines = open(doc_path).read().splitlines()
+failures = 0
+
+def pf(label, ok, detail=""):
+    global failures
+    if ok:
+        print("PASS  %s" % label)
+    else:
+        failures += 1
+        print("FAIL  %s%s" % (label, (" -- " + detail) if detail else ""))
+
+def parse_filter(s, i=0):
+    """Parse a gojq object-construction filter `{a, b:{c,d}}` into an ordered [(key, sub|None)].
+    Returns (spec, next_index); raises ValueError on anything it does not understand, so an
+    unparseable filter is a FAIL rather than a silently skipped transcript."""
+    if s[i] != '{':
+        raise ValueError("not an object construction at %d" % i)
+    i += 1
+    spec = []
+    while True:
+        while i < len(s) and s[i] in ' \t':
+            i += 1
+        if i < len(s) and s[i] == '}':
+            return spec, i + 1
+        m = re.match(r'[A-Za-z_][A-Za-z0-9_]*', s[i:])
+        if not m:
+            raise ValueError("no key name at %d in %r" % (i, s))
+        key = m.group(0)
+        i += len(key)
+        while i < len(s) and s[i] in ' \t':
+            i += 1
+        sub = None
+        if i < len(s) and s[i] == ':':
+            i += 1
+            while i < len(s) and s[i] in ' \t':
+                i += 1
+            if s[i] == '{':
+                sub, i = parse_filter(s, i)
+            else:
+                depth = 0
+                while i < len(s) and not (depth == 0 and s[i] in ',}'):
+                    if s[i] == '(':
+                        depth += 1
+                    elif s[i] == ')':
+                        depth -= 1
+                    i += 1
+        spec.append((key, sub))
+        while i < len(s) and s[i] in ' \t':
+            i += 1
+        if i < len(s) and s[i] == ',':
+            i += 1
+            continue
+        if i < len(s) and s[i] == '}':
+            return spec, i + 1
+        raise ValueError("unexpected %r at %d in %r" % (s[i:i+1], i, s))
+
+def check_order(pairs, path, problems):
+    keys = [k for k, _ in pairs]
+    if keys != sorted(keys):
+        problems.append("%s: pasted key order %s is not the alphabetical order %s gojq emits"
+                        % (path or "<top>", keys, sorted(keys)))
+    for k, v in pairs:
+        if isinstance(v, list):
+            check_order(v, (path + "." if path else "") + k, problems)
+
+def check_keyset(pairs, spec, path, problems):
+    got = sorted(k for k, _ in pairs)
+    want = sorted(k for k, _ in spec)
+    if got != want:
+        problems.append("%s: pasted key set %s is not the set %s this filter can emit" % (path or "<top>", got, want))
+        return
+    subs = dict(spec)
+    for k, v in pairs:
+        if isinstance(v, list) and isinstance(subs.get(k), list):
+            check_keyset(v, subs[k], (path + "." if path else "") + k, problems)
+
+CMD = re.compile(r"gh api\b.*?--jq\s+'(\{.*?\})'")
+JSON_TAIL = re.compile(r'(\{.*\})\s*$')
+
+blocks = []
+for i, line in enumerate(lines):
+    if not line.lstrip().startswith('$ '):
+        continue          # command lines only: prose that mentions the command is not a transcript
+    m = CMD.search(line)
+    if not m:
+        continue
+    outs = []
+    for j in range(i + 1, len(lines)):
+        t = lines[j].strip()
+        if t == '' or t.startswith('```') or t.startswith('$ ') or t.startswith('('):
+            break
+        jm = JSON_TAIL.search(t)
+        if not jm:
+            break
+        outs.append((j + 1, jm.group(1)))
+    blocks.append((i + 1, m.group(1), outs))
+
+pf("J1 the contract contains `gh api ... --jq '{...}'` transcripts for this check to read (a search that finds nothing is a broken search)",
+   len(blocks) > 0, "found %d" % len(blocks))
+
+for lineno, filt, outs in blocks:
+    where = "line %d, filter %s" % (lineno, filt)
+    try:
+        spec, _ = parse_filter(filt)
+    except ValueError as e:
+        pf("J2 the object-construction filter at %s is parseable, so its transcript is actually checked" % where, False, str(e))
+        continue
+    if not outs:
+        pf("J3 the transcript at %s pastes an output line under the command" % where, False,
+           "no JSON output line follows it; a command with no pasted output cannot be cross-checked")
+        continue
+    for outno, raw in outs:
+        try:
+            pairs = json.loads(raw, object_pairs_hook=lambda p: p)
+        except json.JSONDecodeError as e:
+            pf("J4 the output pasted at line %d is valid JSON" % outno, False, "%s: %r" % (e, raw))
+            continue
+        problems = []
+        if not isinstance(pairs, list):
+            problems.append("<top>: the pasted output is not a JSON object")
+        else:
+            check_keyset(pairs, spec, "", problems)
+            check_order(pairs, "", problems)
+        pf("J5 line %d: %s is output the filter %s could really produce" % (outno, raw, filt),
+           not problems, "; ".join(problems))
+
+sys.exit(1 if failures else 0)
+PY
+if [ $? -ne 0 ]; then fail "J0 one or more pasted \`gh api --jq\` transcripts cannot be produced by the command above them (see FAIL lines above)"; fi
+
+# --------------------------------------------------------------------------------
 section "Scope and suite -- unchanged elsewhere, existing tests still pass"
 
 SUITE_OUT=$(python3 -m unittest discover -s tests/contracts 2>&1 | sed -E 's/in [0-9]+\.[0-9]+s/in <elapsed>s/')
@@ -1002,6 +1243,30 @@ fi
 #     internal sections to scope to; the pattern is unique in that file.
 #   * expect_hits_flow x2 (B4.6, B4.7) -- against the task log, where the claim genuinely is
 #     "this appears somewhere in the file".
+
+# --------------------------------------------------------------------------------
+section "E -- this suite's own stderr (fix round 4, finding 5)"
+# Finding 5: `section_heading_count` failed open and said so on stderr of every single run --
+# `[: 0` -- and that line sat, twice, inside the round-3 log's own pasted output, unread. A
+# check nobody reads is not a check, and stderr is where a shell script says a guard did not
+# evaluate. So the deterministic part of this run is now required to be silent on fd 2.
+# The advisory sections are excluded ON PURPOSE and reported separately: their stderr depends on
+# the network and on whether a `gh` identity exists, and nothing environment-dependent may move
+# this script's exit code (fix round 2, finding F-B).
+if [ -s "$STDERR_DET" ]; then
+    fail "E1 the deterministic part of this suite wrote $(wc -l < "$STDERR_DET" | tr -d ' ') line(s) to stderr; a guard that errors is a guard that did not evaluate"
+    printf '  --- captured stderr, verbatim ---\n'
+    sed 's/^/  /' "$STDERR_DET"
+else
+    pass "E1 the deterministic part of this suite ran with completely clean stderr (0 bytes on fd 2)"
+fi
+if [ -s "$STDERR_ADV" ]; then
+    advise_drift "E2 the advisory (live network/gh) sections wrote to stderr -- informational, never part of the verdict: $(tr '\n' ' ' < "$STDERR_ADV" | cut -c1-200)"
+else
+    advise_pass "E2 the advisory (live network/gh) sections wrote nothing to stderr"
+fi
+# Re-emit whatever was captured on the REAL stderr, so a caller running `2>&1` still sees it.
+cat "$STDERR_DET" "$STDERR_ADV" >&3
 
 # --------------------------------------------------------------------------------
 printf '\n== RESULT ==\n'

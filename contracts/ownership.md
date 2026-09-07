@@ -519,9 +519,18 @@ status=401
 ```
 — and as a member-caller (the `womcraft` token) it answers directly, no redirect:
 ```
-$ gh api orgs/worldofmodcraft/memberships/womcraft --jq '{state,role}'
-{"state":"active","role":"admin"}
+$ gh api orgs/worldofmodcraft/memberships/womcraft --jq '{role,state}'
+{"role":"admin","state":"active"}
 ```
+(Re-run in fix round 4: the real output's key order is `role, state` — alphabetical — not the
+`state, role` order an earlier revision of this document pasted here. `gh api --jq` uses `gojq`,
+which sorts constructed-object keys alphabetically regardless of the order the filter names them,
+exactly as the note under `gh api repos/worldofmodcraft/registry` above already recorded for that
+transcript; the correction was applied there and not here. The filter above is now written in the
+same order it emits. The values were always correct; only the key order was unproducible.
+`docs/tasks/032-verify.sh`'s `J` checks now assert this for **every** `gh api ... --jq '{…}'`
+transcript in this document, deriving the permitted key set from each filter, so the next instance
+cannot hide behind a per-transcript check again.)
 `state == "active"` is the success condition when this endpoint answers at all. **This endpoint is
 a candidate, not an answer**, exactly as the round-1 fix brief named it: it removes the `302`/
 redirect ambiguity, but it does not remove the "is CI's own identity an org member" question above
