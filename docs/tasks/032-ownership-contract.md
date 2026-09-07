@@ -3505,3 +3505,12 @@ ALL CHECKS PASSED (deterministic verdict -- 0 network calls required to reach it
 ```
 
 (stderr from that run: 0 bytes. Exit code: 0.)
+
+**One thing a re-runner will see differ from that paste, and it is not drift.** The advisory tally
+above reads `9 matched fixture/paste, 0 drifted, 0 not evaluated`. A later re-run in this same
+session, from a fresh clone at `5ee2f6b`, read `6 matched, 0 drifted, 1 not evaluated`: this
+round's own repeated runs exhausted GitHub's 60/hour unauthenticated quota from this source IP, so
+the `B1-live` section skipped. The deterministic verdict was identical both times — **147 PASS / 0
+FAIL / exit 0 / 0 bytes on stderr** — which is fix round 2's finding F-B fix doing exactly its job:
+an advisory section that skips changes the wording of one printed line and nothing else. Per the
+credential rule this is a skip, not a finding, and nothing was authenticated around it.
