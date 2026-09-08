@@ -4039,3 +4039,796 @@ need no change.
 
 **F5 — close round 4's booked item 2 in the log** with the evidence in this review's "booked item"
 paragraph, rather than carrying it forward: the file is in this repository and has now been read.
+
+---
+
+## Fix round 5 (escalation tier, implementer-strong) — review round 4's three blocking findings
+
+**Branch** `task/032-ownership-contract`, worktree `/home/ludwig/wt/registry-task-032`, starting
+at `60c7b66`. Nothing pushed; PR #4 untouched; `/home/ludwig/registry` cloned read-only for the
+§2c rule-4 proof and never written to. Files changed: `contracts/ownership.md`,
+`docs/tasks/032-verify.sh`, `docs/contracts/README.md`, this log. Staged by path, three commits.
+
+**Headline:** **171 PASS / 0 FAIL / exit 0 / 0 bytes on stderr**, up from round 4's 147, with
+**23 checks added** and **none weakened or deleted**. Every one of the three blocking findings has
+a fixture that was **shown red before the fix**, and the round's own 18-mutation battery caught a
+defect in one of this round's own new checks (`P16`) before it shipped — see "P16 was green for
+the wrong reason" below, which is the honest part of this round.
+
+### Order of work (§2c rule 5 dictates it)
+
+Fixtures first, red, then the fix. Concretely: the new `T`/`P`/`J6` checks were written and run
+against the **round-4 contract text** before a single word of `contracts/ownership.md` changed,
+and the three attacks review round 4 demonstrated green were re-landed and re-run against the
+round-4 **script** first, so the "before" is this round's own measurement and not a quotation.
+
+---
+
+### Finding 1 (BLOCKING) — CLOSED. A false sentence that disabled a real capability
+
+**The false claim, deleted rather than caveated** (guardrail 6c: it was checkable here in under a
+minute, and it was checked). `contracts/ownership.md` asserted, inside `R7`'s paragraph:
+
+> the platform's own identity is the organisation that owns every reserved namespace today, so
+> such a PR normally satisfies this rule outright
+
+**Verified false in this environment, under the already-active `gh` identity** (no credential was
+read; `gh api` only):
+
+```
+$ gh api orgs/worldofmodcraft/members/womcraft -i | head -1
+HTTP/2.0 204 No Content
+$ gh api orgs/worldofmodcraft/members/worldofmodcraft -i | head -1
+HTTP/2.0 404 Not Found
+$ gh api orgs/worldofmodcraft/members --jq '{login: .[0].login, id: .[0].id, count: length}'
+{"count":1,"id":324089373,"login":"womcraft"}
+```
+
+A GitHub organisation is not a member of itself. `204` is the status this document defines as
+"is a member" and `404` as "is not a member"; the `204` line is the **positive control** — without
+it, `404` proves nothing about the endpoint. That exact three-command transcript is now pasted in
+the contract, in a paragraph immediately below `R7`, so the verification travels with the claim
+(guardrail 6b) rather than living only here.
+
+**The manager's `R11` scope decision, implemented as instructed and marked as such.**
+
+- **Ludwig's ruling (2026-09-07):** the platform's own organisation account may open a takedown
+  PR; MANAGER.md §7's written-approval gate governs the merge. He phrased it "against a namespace
+  it does not own" because the case in front of him was the unowned one.
+- **The manager's decision (2026-09-08), which this round implements:** that phrasing
+  under-reaches rather than carving anything out, so **`R11` authorises the platform's own
+  identity to open a takedown regardless of whether it owns the namespace**, and both the `R3`
+  and the `R7` half of `Precedence: R11 over R3, R7` now fire on real PRs. **Recorded in the
+  contract itself as the manager's reading of Ludwig's ruling and pending his confirmation**, in
+  a "Scope note" paragraph directly under the ruling — `P23` fails if that marking leaves.
+- **Reasoning, as the contract now states it:** `R8` binds every reserved namespace's owner to the
+  organisation; the organisation is not a member of itself; so under the narrow scope `R11` never
+  applied to `mc:`/`test:`, `R7` rejected the platform outright, the platform could not take down
+  a version in its own namespaces (review round 1's finding B5 outcome, alive), and the `R7` half
+  of the precedence fired on nothing.
+
+**Binding constraints, each honoured and each checkable:**
+
+- **The exception surface did not widen.** `R11`'s "nothing but the takedown mutation itself"
+  clause is byte-identical to round 4's. `P6` still pins it; `git diff 60c7b66 -- contracts/ownership.md`
+  shows no change to that sentence. What changed is *who and where* `R11` reaches, never *what* it
+  permits.
+- **The merge gate is untouched.** `I8` and `P12`/`K3` are unchanged: `R11` decides who may open,
+  MANAGER.md §7 decides who may merge, referenced and neither absorbed nor weakened.
+- **The missing check exists.** Round 4's `P4` asserted only that the string `unless R11
+  authorises` was present in `R7`'s paragraph, which is exactly how a false factual claim shipped
+  beside it. `P13`-`P23` assert the **content and its direction** (the `B1.12a` pattern), and
+  `P16a`/`P16b`/`P16c` bind each pasted status to the command that produced it.
+
+**Red before the fix.** The round-5 checks, run against the **round-4 contract text**
+(`git checkout contracts/ownership.md` at `60c7b66`, round-5 script):
+
+```
+PRE-FIX CONTRACT + round-5 checks: exit=11  152 PASS  13 FAIL  0 bytes stderr
+FAIL  T13   (R7's false sentence names R3 with no pair relating them)
+FAIL  T15   (same sentence, phrase-free net)
+FAIL  T0
+FAIL  P13   R7's paragraph states ... a GitHub organisation is NOT a member of itself
+FAIL  P14   R7's paragraph states the CONSEQUENCE: R11 is what authorises ... inside mc:/test:
+FAIL  P15   the false reconciliation claim is GONE ... not caveated in place
+FAIL  P16   the claim carries its verification at the point it is made
+FAIL  P17   R11's scope is EVERY namespace, owned or not
+FAIL  P18   R11 is no longer scoped away from namespaces its author owns
+FAIL  P20   R11 says which revision of reserved-namespaces.json it reads from
+FAIL  P21   R11 states the SUFFICIENT condition in its own paragraph
+FAIL  P22   R11 says how many takedown mutations one authorised PR may carry
+FAIL  P23   the widening is marked as the MANAGER's reading, pending Ludwig's confirmation
+```
+
+`P19` (R11 names the org id `reserved-namespaces.json` records) passed against the pre-fix text
+and is recorded honestly as **added coverage, not a fixture** — the id was already correct; what
+was missing was any check on it inside `R11`'s own paragraph.
+
+---
+
+### Finding 2 (BLOCKING) — CLOSED. `T13` could not fire for 7 of 11 verdict rules
+
+**Reproduced first, against the round-4 script**, all three attacks the review described:
+
+```
+$ git checkout docs/tasks/032-verify.sh          # round 4's script, at 60c7b66
+A9 (Attempt 9 re-landed ADDITIVELY in R3's paragraph): exit=0 147 PASS 0 FAIL 0 bytes stderr
+X1 ("This rule is overridden by `R3` ..." added to R10):  exit=0 147 PASS 0 FAIL 0 bytes stderr
+X2 (R5's declaration gains "unless `R9` has already rejected the PR"): exit=0 147 PASS 0 FAIL 0 bytes stderr
+```
+
+**Then red, against the round-5 checks, with the contract otherwise unchanged:**
+
+```
+A9 -> exit=1  149 PASS  2 FAIL   T16 T0
+X1 -> exit=1  148 PASS  3 FAIL   T13 T15 T0
+X2 -> exit=1  148 PASS  3 FAIL   T13 T15 T0
+```
+
+**What was built, and why it is not another phrase list.** The fix brief's preferred mechanism was
+taken: *an exception-shaped sentence must carry its `Precedence:` declaration to be legal at all*.
+
+- **`T13`** (kept, never weakened) is now **pair-aware and sentence-scoped**. Round 4 built
+  `in_a_pair` from both ends of every pair and used it as a per-**rule** exemption, so a rule in
+  one pair was exempt for every other rule. It now asks whether a declared pair relates **those two
+  specific rules**, in either direction. Its widened phrase list survives only so a failure
+  message can say "this reads as an exception".
+- **`T15`** is the inversion and **consults no vocabulary at all**: every sentence in a verdict
+  rule's paragraph that names another declared verdict rule must be covered by a declared pair
+  relating the two, **or** be pinned in `CROSSREF_ALLOWED` — five entries today, the same ratchet
+  shape `T8b` and `V5` already use, auditable in a diff. "Overridden by", "notwithstanding",
+  "takes precedence over" and every phrasing nobody has thought of yet are caught identically,
+  because the check never looks at the words.
+- **`T15b`** fails if a pin stops matching, so the allow-list cannot silently widen — and it is
+  what forced the deleted false sentence's pin to be removed by hand, with its reason in the diff.
+- **`T16`** closes the additive attack, which names no other rule and which `T13`/`T15` therefore
+  cannot see: inside `R3`'s and `R7`'s own paragraphs — the two rules whose only exception is the
+  takedown — **every sentence that mentions a takedown must name `R11`.** A diff-shape sentence
+  cannot name `R11` and still say what Attempt 9 needs it to say.
+
+`T13` now fires for **all 11 verdict rules**. There is no per-rule exemption left in the code: the
+only exemptions are (a) a declared pair relating the two specific rules named, and (b) five pinned
+sentences. `T15` covers the same 11 with no vocabulary at all.
+
+**The contract's claim was corrected to what the checks deliver.** "How to read this document" no
+longer says `T10`-`T13` catch "an exception against another verdict rule with no declared pair at
+all"; it states `T15`'s actual rule, `T15b`'s ratchet and `T16`'s scope, and the `T1`-`T14` range
+elsewhere is now `T1`-`T16`.
+
+---
+
+### Finding 3 (BLOCKING) — CLOSED. `J` missed backslash continuations
+
+**Reproduced first, against the round-4 script** — the fabricated transcript the review named:
+
+```
+$ gh api users/ghost \
+    --jq '{type,login,id}'
+{"type":"User","login":"ghost","id":10137}
+
+round-4 script: exit=0  147 PASS  0 FAIL  0 bytes stderr      <- ships
+round-5 script: exit=1  153 PASS  2 FAIL
+  FAIL  J5 line 890: {"type":"User","login":"ghost","id":10137} is output the filter
+        {type,login,id} could really produce -- <top>: pasted key order ['type','login','id']
+        is not the alphabetical order ['id','login','type'] gojq emits
+  FAIL  J0
+```
+
+**The fix** is the boring one: the scanner is now `scan_blocks()`, which folds any line ending in
+`\` into its successor **before** scanning — the same "wrapping is presentational, never semantic"
+principle `expect_no_hits` already applies to prose. **`J6a`/`J6b`/`J6c` are the positive control
+for the scanner itself**, and they are the answer to "a check that cannot fail manufactures
+confidence": the round-4 `J` checks could not have detected this, because a skipped transcript
+produces no block, no check and no FAIL. `J6` runs the **real** `scan_blocks` and the **real**
+keyset/order checks over a synthetic continued transcript carrying an output gojq cannot emit, and
+requires them to reject it. Removing the folding reddens all three (mutation M5 below).
+
+The contract's "**every** `gh api ... --jq '{…}'` transcript" sentence is now true, and says when
+it became true and why, rather than shipping ahead of the parser.
+
+---
+
+### P16 was green for the wrong reason, and this round's own mutation battery caught it
+
+Recorded prominently because it is the finding-B5 shape appearing **inside a check written to
+close review round 4's finding 1**, and because a round that only reported its final green would
+have destroyed the evidence.
+
+The first `P16` searched the reserved-namespace **section** for the string
+`members/worldofmodcraft -i`. Mutation **M14** deleted the entire 404 transcript from the contract
+and the suite stayed at **168 PASS / exit 0**: `R7`'s prose names the same command one paragraph
+above the transcript, so the check was matching the claim instead of the evidence. It was replaced
+by `P16a`/`P16b`/`P16c`, each anchored to the **one paragraph** that carries the transcript and
+each pinning a status to the command that produced it. M14, M15 and M16 now redden `P16b`, `P16a`
+and `P16c` respectively.
+
+---
+
+### The nine non-blocking findings — every one closed or booked with a reason
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | `B4a.5`'s label named two things behind one alternation | **Closed.** Split into `B4a.5a` (ADDITION) and `B4a.5b` (never an alternative). M8 deletes "It is **never instead of** them." and reddens `B4a.5b` alone. |
+| 2 | Round 3's "What that fence is" correction was itself unguarded | **Closed.** `B1a.5a` and `B1a.5b`, anchored to that paragraph, one per correction it makes. M9 reddens `B1a.5a`. |
+| 3 | `T8b` pins 60-character prefixes, so an allowed paragraph can grow | **Booked, unchanged.** The reviewer recorded it rather than charging it, and closing it needs the per-sentence attribution convention no round has decided. `T15`'s sentence-level ratchet is the first half of that machinery, and is now on disk for whoever decides it. |
+| 4 | `T10`'s label said "at least one"; the code tests `>= 2` | **Closed.** The label now states the threshold the code tests. The threshold was not weakened. |
+| 5 | The `R11` taxonomy row was broader than `R11` | **Closed.** Widening `R11` reconciles them, and `T17` is what keeps them reconciled (M18 reddens it). `T5`/`T6` still only check that a row exists — a general row-vs-rule equivalence check is not something a text comparison can honestly claim, and is **booked** as such. |
+| 6 | How many takedown mutations may one authorised PR carry? | **Closed, and marked.** `R11` now states: any number, provided the diff contains nothing else — "the takedown mutation" names a *kind*, matching `append-only.rules.md`'s own heading. **Marked in the contract as the manager's decision of 2026-09-08 pending Ludwig's confirmation**, because the strict reading is equally faithful and the choice is his. `P22` fails if the marking leaves. |
+| 7 | `R11` stated a necessary condition only | **Closed.** `R11` now states the two conditions are "not merely necessary but jointly **sufficient**", with no third condition held back elsewhere. `P21`; M13 reddens it. |
+| 8 | `I4` binds only reserved-list *membership* to `old` | **Closed.** `R11` now names the revision it reads the platform identity from — the PR's merge-base, never the revision the PR proposes, "exactly as `I4` requires". `P20`; M12 reddens it. |
+| 9 | A whitespace-only reformat rides through "nothing but" | **Booked, unchanged.** The parsed `old`/`new` model is the stated one and the reading is harmless either way; recorded as a checker choice the text leaves open, exactly as the reviewer framed it. |
+
+**Round 4's booked item 2 (fix-brief F5)** is closed with the review's own evidence: the file is in
+this repository and has been read.
+
+**Round 3's five unresolvable items remain marked, not settled**: `octokit.js`'s redirect default,
+whether Actions' `GITHUB_TOKEN` is an org member, GitHub's `403` for an authenticated non-member,
+numeric-id reuse, and which concrete `pulls.user.id` an org-opened takedown PR carries. The first
+three need a second identity, which is forbidden; none was produced or attempted. The last is
+marked at `R11` in the contract and is explicitly **not** load-bearing for finding 1: the
+membership test answers `404` for the organisation's own id whatever mechanism produces it.
+
+### New checks, by name
+
+**Finding 1 (13):** `P13`, `P14`, `P15`, `P16a`, `P16b`, `P16c`, `P17`, `P18`, `P19`, `P20`,
+`P21`, `P22`, `P23`.
+**Finding 2 (3 new, 1 rewritten):** `T15`, `T15b`, `T16`; `T13` rewritten pair-aware and
+sentence-scoped.
+**Finding 3 (3):** `J6a`, `J6b`, `J6c`; the scanner refactored into `scan_blocks()`.
+**Non-blocking (5):** `B4a.5a`, `B4a.5b` (replacing `B4a.5`), `B1a.5a`, `B1a.5b`, `T17`.
+**New helper:** `expect_no_hits_in_para`, the absence twin of `expect_hits_in_para`, with the same
+uniqueness discipline (an anchor matching zero or several paragraphs FAILS rather than widening).
+
+No check was weakened or deleted. `B4a.5` and `P16` were each **replaced by strictly stronger
+successors**, and `T10`'s label was corrected upward to the threshold its code already tested.
+
+### Mutation test (§2c rule 2) — 18 breaks put back, each reddening a named check
+
+Every mutation was applied to the working tree, the suite run, and the file restored with
+`git checkout`; `sha256sum -c` against a baseline taken before the first mutation passed for all
+five files at the end (`contracts/ownership.md`, `docs/tasks/032-verify.sh`,
+`docs/contracts/README.md`, `docs/tasks/032-b1-fixtures.json`, `contracts/append-only.rules.md`).
+
+```
+MUTATION                         VERDICT                    CHECKS THAT REDDENED
+M1  Attempt 9 re-landed additively in R3   exit=1 170/2     T16 T0
+M2  "overridden by R3" added to R10        exit=1 169/3     T13 T15 T0
+M3  "unless R9" added to R5                exit=1 169/3     T13 T15 T0
+M4  fabricated continued gh api transcript exit=1 171/2     J5 J0
+M5  scan_blocks' continuation folding off  exit=1 168/4     J6a J6b J6c J0
+M6  R7's false sentence restored           exit=2 169/2     P13 P15
+M7  R11's narrow scope restored            exit=2 169/2     P17 P18
+M8  "It is never instead of them." deleted exit=1 170/1     B4a.5b
+M9  the "What that fence is" claim flipped exit=1 170/1     B1a.5a
+M10 a CROSSREF_ALLOWED-pinned sentence edited exit=1 169/3  T15 T15b T0
+M11 R11's org id falsified                 exit=2 169/3     V5 V0 P19
+M12 R11's merge-base revision clause gone  exit=1 170/1     P20
+M13 R11's "jointly sufficient" gone        exit=1 170/1     P21
+M14 the 404 transcript deleted             exit=1 170/1     P16b
+M15 the 204 positive control deleted       exit=1 170/1     P16a
+M16 the member list falsified              exit=1 170/1     P16c
+M17 T15's pair-awareness reverted to round 4's blanket exemption
+                                           exit=1 170/2     T15b T0
+M18 the R11 taxonomy row re-scoped         exit=1 170/2     T17 T0
+
+$ sha256sum -c pre-mut.sha
+contracts/ownership.md: OK
+docs/tasks/032-verify.sh: OK
+docs/contracts/README.md: OK
+docs/tasks/032-b1-fixtures.json: OK
+contracts/append-only.rules.md: OK
+$ git status --short
+(clean)
+```
+
+**M17 read honestly.** Reverting `T15` to round 4's blanket per-rule exemption reddens `T15b`, not
+`T15`, because the clean document contains no violation for `T15` to find — the pins simply stop
+being consulted. The proof that pair-awareness is load-bearing is **M2 and M3**, which are exactly
+the two cases the blanket exemption let through and which now redden `T13` **and** `T15`.
+
+### §2c rule 4 — proven off the authoring worktree, and across the merge
+
+**Fresh clone** of `/home/ludwig/registry` (`git clone --no-hardlinks`, read-only; nothing written
+to it), branch checked out at `8924b40`:
+
+```
+$ diff -r --exclude=.git --exclude=__pycache__ <clone> /home/ludwig/wt/registry-task-032
+(no output)
+$ ./docs/tasks/032-verify.sh
+exit=0  170 PASS  0 FAIL  0 bytes stderr
+```
+
+**Simulated merge with main moved on**, entirely inside the scratch clone:
+
+```
+1. main gains an unrelated commit while the task sits in review;
+   on the task branch, merge-base = e449e26d (recomputed, never pinned):
+   PASS  S3 every path changed since the merge-base with origin/main is inside task 032's
+            declared file scope (subset test, survives the merge)
+
+2. git merge task/032-ownership-contract into main, origin/main updated to the merge commit
+   (the push that follows a merge):
+   exit=0  170 PASS  0 FAIL  0 bytes stderr
+   PASS  S3   (changed set is empty; the subset test is trivially true, green forever)
+
+3. an out-of-scope file added post-merge, by BOTH invocation routes:
+   from the repo root:      FAIL  S4 file(s) outside task 032's declared scope changed
+                                  since the merge-base with origin/main: OUT-OF-SCOPE.txt
+   from docs/ (subdir):     FAIL  S4 file(s) outside task 032's declared scope changed
+                                  since the merge-base with origin/main: OUT-OF-SCOPE.txt
+```
+
+The scope check is green post-merge **and** still catches an out-of-scope file, by every route.
+(Between steps 2 and 3, before `origin/main` was updated, `S4` correctly named the simulation's
+own `README.md` commit — an artefact of a stale remote ref, not a defect, and it is what step 2
+exists to distinguish.)
+
+### `E1` stays green
+
+**0 bytes on stderr** from the deterministic half on every run in this round, including all 18
+mutation runs, the fresh clone and the post-merge runs. It caught a live defect in round 4 and has
+not been softened.
+
+### Guardrail 6c — what was run rather than reasoned about
+
+`gh api orgs/worldofmodcraft/members/womcraft -i` (`204`),
+`gh api orgs/worldofmodcraft/members/worldofmodcraft -i` (`404`), and
+`gh api orgs/worldofmodcraft/members --jq '{login: .[0].login, id: .[0].id, count: length}'`
+(`{"count":1,"id":324089373,"login":"womcraft"}`), all under the already-active identity. The
+`--jq` transcript's key order is gojq's alphabetical order and is checked by `J5` like every other
+one; the two `-i` transcripts carry no `--jq` and are pinned command-to-output by `P16a`/`P16b`.
+
+### Credential rule (CLAUDE.md rule 11 / MANAGER.md guardrail 10)
+
+No credential was read, printed, copied or passed: no `gh auth token`, no `--show-token`, no
+reading of `~/.config/gh/hosts.yml` or any `~/.claude*` state, no account switching. Only `gh api`
+under the already-active identity. **No call was denied, so no retry-after-denial occurred.** Work
+stayed in `/home/ludwig/wt/registry-task-032` and this round's scratchpad;
+`/home/ludwig/registry` was cloned read-only and never written; no other worktree was touched; no
+other project's test suite was run; nothing was pushed and PR #4 was not touched.
+
+### What could not be verified, marked rather than dropped
+
+1. **Which concrete `pulls.user.id` an organisation-opened PR carries** — still unestablished, no
+   such PR exists here to read, and settling it by reading a stored credential is forbidden.
+   Marked at `R11` in the contract, not only here. It is **not** load-bearing for finding 1.
+2. **Round 3's five unresolvable items** stay marked, not settled (listed above).
+3. **The advisory tally varies between runs of the same commit** — 9/0/0 at the start of this
+   round, 6/0/1 at the end, both with the deterministic verdict unchanged. This is fix round 2's
+   design working (GitHub's 60-req/hour unauthenticated limit is shared per source IP and this
+   round's mutation battery is what exhausts it), and round 4 already recorded it.
+4. **PR #4's server-side state.** Not touched.
+
+### An environment conflict, reported rather than improvised around
+
+The round-5 brief states that **CLAUDE.md rule 11 and MANAGER.md guardrail 10 are "newly on
+`main`"**. They are **not on `main`**. On `/home/ludwig/wom` at `d139bf0`, `CLAUDE.md` ends at
+rule 10 and `MANAGER.md` §3 ends at guardrail 9. Both texts exist only on the unmerged branch
+`task/042-credential-rule` (`aeb5cd7`, `5841a95`), which `git merge-base --is-ancestor aeb5cd7 main`
+reports as **not** an ancestor of `main`.
+
+This round read them **there** and complied with them in full — they are Ludwig's rule and the
+merge status does not change that — but two consequences belong on the record:
+
+- `contracts/ownership.md` cites "CLAUDE.md rule 11, MANAGER.md guardrail 10" as the authority for
+  refusing to settle the `pulls.user.id` question by reading a credential. That citation is
+  accurate against `task/042-credential-rule` and **dangling against `main` today**. It is left
+  as-is deliberately: task 042 is the merge that makes it true, and editing the contract to cite a
+  rule by its content instead of its number would be inventing a second numbering. **Booked for
+  the manager:** either merge task 042, or the citation needs revisiting.
+- A reader of `main` alone cannot find the rule this round was told binds it. That is worth one
+  line in the mission log.
+
+Also noted, cosmetic and not acted on (out of scope, `docs/manager/MANAGER.md` is not in this
+task's declared file scope): MANAGER.md §2c says "Four rules follow" and then lists five.
+
+### Commits on the branch this round
+
+```
+3eb013d Task 032 fix round 5: T17 keeps the R11 taxonomy row and R11's scope reconciled, and the
+        contracts index moves with the contract
+8924b40 Task 032 fix round 5: P16 was green for the wrong reason -- its own mutation caught it
+8cd4180 Task 032 fix round 5: the three blocking findings of review round 4
+```
+
+### For the next reviewer — where to start
+
+1. **The one decision that is not yet Ludwig's own words** is `R11`'s widened scope, and the
+   second is the cardinality of takedown mutations per PR. Both are marked in the contract as the
+   manager's decisions of 2026-09-08 pending his confirmation, and `P22`/`P23` fail if either
+   marking leaves. Neither widens the exception surface; both are about reach, not permission.
+2. **Attack `T15` first.** It is this round's central claim: that an exception cannot land without
+   a `Precedence:` declaration or a visible allow-list edit. Try a cross-reference in a rule
+   paragraph phrased in a way nobody has used yet — `T15` consults no vocabulary, so it should
+   catch it; if it does not, that is the finding.
+3. **Attack `T16` second**, from the other side: a sentence that contradicts `R3` without using
+   the word "takedown".
+4. **Attack `J` with something other than a backslash** — a transcript inside a table, an indented
+   fence, a `--jq` filter that is an array of object constructions (`'[.[]|{a,b}]'`), which `CMD`
+   deliberately does not match today. The last one is a known, stated scope boundary of the
+   `--jq '{…}'` claim, not a hidden one, but it is where the next instance would hide.
+5. **`P19` is coverage, not a fixture** — it passed against the pre-fix text. Everything else in
+   `P13`-`P23` was shown red first.
+
+### The full, real output of `docs/tasks/032-verify.sh` at the end of this round
+
+Run from the worktree root, at `3eb013d` plus this log entry. `171 PASS / 0 FAIL / exit 0 /
+0 bytes on stderr`. The advisory tally is 6 matched / 0 drifted / 1 not evaluated in this run —
+advisory only, never part of the verdict (see "What could not be verified", item 3).
+
+```
+032-verify.sh -- task 032 fix-round-1 acceptance verification
+repo root: /home/ludwig/wt/registry-task-032
+doc: contracts/ownership.md (1090 lines)
+
+== B6 -- the fixture that would have caught the fabrication, shown failing against the pre-fix blob ==
+$ git show fcde6d5:contracts/ownership.md | (parse the PR#3 transcript)
+  FAIL  B6.1 pre-fix blob (fcde6d5) -- MUST be red (the known fabrication) -- key set ['merged', 'number', 'user'] / user ['id', 'login'] does not match what the filter can emit (expected top=['merged', 'user'], user=['id', 'login'])
+$ (parse the PR#3 transcript in the current working tree)
+  PASS  B6.2 current working tree -- MUST be green (the fix) -- exact key set ['merged', 'user'] / user ['id', 'login'], matches what the two-key filter can emit
+  Fixture demonstrated: red against fcde6d5, green against the current fix. (Section 2c rule 5.)
+PASS  B6.3 the B6 fixture reddens against the pre-fix blob and passes against the fix (Section 2c rule 5 shape)
+
+== B6 -- ADVISORY: live re-run of every command pasted in the document, diffed against the paste (never gates the verdict -- fix round 2) ==
+  $ gh api repos/worldofmodcraft/registry/pulls/3 --jq ...
+  live: {"merged":true,"user":{"id":324089373,"login":"womcraft"}}
+  doc:  {"merged":true,"user":{"id":324089373,"login":"womcraft"}}
+ADVISORY-PASS  B6.6 live PR#3 shape matches the document's paste exactly
+  $ gh api orgs/worldofmodcraft --jq ...
+  live: {"id":324218296,"login":"worldofmodcraft","type":"Organization"}
+  doc:  {"id":324218296,"login":"worldofmodcraft","type":"Organization"}
+ADVISORY-PASS  B6.8 live org id/login/type matches the document's paste exactly
+  $ gh api repos/worldofmodcraft/registry --jq ...
+  live: {"full_name":"worldofmodcraft/registry","owner":{"id":324218296,"login":"worldofmodcraft","type":"Organization"}}
+  doc:  {"full_name":"worldofmodcraft/registry","owner":{"id":324218296,"login":"worldofmodcraft","type":"Organization"}}
+ADVISORY-PASS  B6.10 live repo-owner shape matches the document's paste exactly (including nested key order)
+ADVISORY-PASS  B6.12 live member-caller membership check for womcraft returns 204 (matches the document)
+  $ gh api users/ghost --jq ...
+  live: {"id":10137,"login":"ghost","type":"User"}
+  doc:  {"id":10137,"login":"ghost","type":"User"}
+ADVISORY-PASS  B6.14 live ghost-account shape matches the document's paste exactly
+
+== B1 -- the org-membership endpoint: recorded fixture, deterministic, no network required (fix round 2, finding F-B) ==
+PASS  B1.0a fixture carries its own capture date/command/target metadata inline
+  fixture (captured 2026-09-06T12:27:39Z): status=302 redirect=https://api.github.com/organizations/324218296/public_members/womcraft
+PASS  B1.2 fixture records status=302 for the unauthenticated members-endpoint probe
+PASS  B1.3 the document's pasted transcript matches the fixture's recorded status=302/redirect line exactly
+PASS  B1.4 the fixture's redirect target is the public_members endpoint
+  fixture (captured 2026-09-06T12:27:39Z): final_status=404
+PASS  B1.5 fixture records final_status=404 after following the redirect
+PASS  B1.6 the document's pasted transcript matches the fixture's recorded final_status=404 line exactly
+  fixture (captured 2026-09-06T12:27:39Z): status=401
+PASS  B1.7 fixture records status=401 for the unauthenticated memberships-endpoint probe
+PASS  B1.8 the document's pasted transcript matches the fixture's recorded status=401 line exactly
+
+== B1 -- ADVISORY: live re-run of the same three probes against real GitHub, diffed against the fixture (never gates the verdict) ==
+  $ curl https://api.github.com/rate_limit -> core.remaining=0
+ADVISORY-SKIP  B1-live unauthenticated GitHub API rate limit exhausted (core.remaining=0) -- re-run after the reset time GitHub reports, or from a different source IP -- network/gh-auth unavailable, advisory only, never affects the verdict or exit code
+
+== T -- the rejection taxonomy is DERIVED from the MUSTs, and drift is detectable (round-2 finding B1) ==
+PASS  T1 the document declares verdict rules in the `**Rn (MUST)**` form (>= 11 expected)
+PASS  T2 the document declares checker rules in the `**In (MUST)**` form (>= 8 expected)
+PASS  T3 no rule id is declared twice
+PASS  T4 exactly one '## ' section carries the rejection taxonomy (an ambiguous heading is not a scope)
+PASS  T5 every declared verdict rule has a taxonomy row (a MUST with no rejection path is the defect)
+PASS  T6 every taxonomy row names a rule the document still declares (no orphan rows)
+PASS  T14 every line of the taxonomy table parses as a row keyed by a declared rule id (a row the parser cannot see is neither an orphan nor a stub -- it is invisible)
+PASS  T7 no taxonomy row is a stub -- each names what failed and what the rejection says
+PASS  T8 every paragraph containing an uppercase MUST cites a rule id (no uppercase MUST outside the scheme)
+PASS  T8b the paragraphs carrying a normative-sounding lowercase `must` with no rule id are exactly the 14 audited in fix round 4 -- T8 fences the uppercase token only, so a new lowercase one is a deliberate edit to this list, never a silent one
+PASS  T10 the document declares at least TWO precedence pairs in the `Precedence: Rx over Ry` form (the threshold the code tests, restated after round-4 non-blocking 4 found the label saying "at least one") (a search that finds nothing is a broken search: with no pair declared, T11 and T12 would both be vacuous)
+PASS  T11 every precedence declaration sits in the overriding rule's own paragraph and names only declared verdict rules
+PASS  T12 every rule that another rule overrides cites its override in its own paragraph (the exception is reconciled at BOTH ends, never only at the overriding one -- round-3 finding 2)
+PASS  T13 no verdict rule states an exception against ANOTHER SPECIFIC verdict rule without a declared precedence pair relating those two rules (round-4 finding 2a: being in some pair used to exempt a rule from every other rule)
+PASS  T15 every sentence in a verdict rule's paragraph that names another verdict rule is either covered by a declared precedence pair relating the two, or pinned in CROSSREF_ALLOWED -- no vocabulary is consulted, so a new exception cannot be phrased around a word list (round-4 finding 2b)
+PASS  T15b every CROSSREF_ALLOWED entry still matches a real sentence (a pin that matches nothing is a broken search, 2c rule 1, and it silently widens the allow-list)
+PASS  T16 inside R3's and R7's own paragraphs, every sentence that mentions a takedown names R11 -- so the exception can never be restated as a property of the DIFF's shape beside the correct one (Attempt 9, re-landed additively in round-4 finding 2)
+PASS  T9.R5 the taxonomy covers: first publish, non-reserved: the declared owner is not the submitter (round-2 B1, mode 1 of 2 missing)
+PASS  T9.R8 the taxonomy covers: first publish, reserved: the declared owner is not the reserved owner (round-2 B1, mode 2 of 2 missing)
+PASS  T9.R2 the taxonomy covers: the directory path and `id` disagree about the namespace (round-2 B2)
+PASS  T9.R10 the taxonomy covers: page.json touched where no entry.json exists (round-2 B3)
+PASS  T9.R9 the taxonomy covers: membership indeterminate -- the 302 arm (round-2 B4)
+PASS  T17 the R11 taxonomy row's trigger matches R11's own scope -- it names the platform's own identity and does NOT re-scope the rule to namespaces its author does not own (round-4 non-blocking 5)
+
+== B1 (round 2) -- the failure taxonomy is exhaustive, and no longer advertises itself as closed at three ==
+PASS  B1a.1 the closed-list phrasing 'one of **three** failure modes' is gone (it was the defect: a closed list beside an open set of MUSTs)
+PASS  B1a.2 the taxonomy section states the list is derived from the rule declarations, not maintained beside them
+        On failure the PR is rejected with a message that states, per namespace that failed: which namespace, the PR author's real numeric id and provider as read from the PR object, and the row below for the rule that failed. **The table is derived from the rule declarations above — one row per declared 
+PASS  B1a.3 the how-to-read section explains the rule-id convention a new uppercase MUST has to follow, in the precise terms T8 actually enforces (round-3 non-blocking 1: the old wording claimed a fence around normativity)
+        Because a promise not to let the two drift again is worth nothing, `docs/tasks/032-verify.sh` enforces the convention mechanically: its `T1`-`T16` checks fail the verification run if a rule id is declared twice, if a declared verdict rule such as `R1` has no taxonomy row, if a taxonomy row names a r
+PASS  B1a.4 the how-to-read section names the verify check that makes drift detectable rather than promised
+        **Where one rule disapplies another, both ends say so.** A verdict rule may be overridden by another verdict rule — `R8` replaces `R4`, `R5` and `R6` for a reserved namespace; `R11` lifts `R3` and `R7` for an authorised takedown. Every such pair is declared **in the overriding rule's own paragraph
+        Because a promise not to let the two drift again is worth nothing, `docs/tasks/032-verify.sh` enforces the convention mechanically: its `T1`-`T16` checks fail the verification run if a rule id is declared twice, if a declared verdict rule such as `R1` has no taxonomy row, if a taxonomy row names a r
+        **What that fence is, stated precisely rather than generously** (review round 3, non-blocking finding 1). `T8` is a paragraph-level convention over one uppercase token; it is not a detector of normativity, and this document does not claim it is one. A requirement written in that token *inside* an ex
+PASS  B1a.5a the correction paragraph still says plainly that T8 is a typographic convention and NOT a detector of normativity (round-3 non-blocking 1's correction, now guarded)
+        **What that fence is, stated precisely rather than generously** (review round 3, non-blocking finding 1). `T8` is a paragraph-level convention over one uppercase token; it is not a detector of normativity, and this document does not claim it is one. A requirement written in that token *inside* an ex
+PASS  B1a.5b the same paragraph still names the ratchet that replaces the fence T8 is not -- T8b pinning the fourteen lowercase-must paragraphs
+        **What that fence is, stated precisely rather than generously** (review round 3, non-blocking finding 1). `T8` is a paragraph-level convention over one uppercase token; it is not a detector of normativity, and this document does not claim it is one. A requirement written in that token *inside* an ex
+
+== B2 (round 2) -- one authoritative source for the namespace, and the other must agree ==
+PASS  B2a.1 a section states which of the two sources is authoritative
+        ## The namespace of a touched path: the directory path is authoritative, and `id` must agree
+PASS  B2a.2 I2's own paragraph carries the reason the path wins -- page.schema.json has neither id nor owner (round-3 non-blocking 4: the old pattern was the bare string 'page.json', satisfied by R1's paragraph instead)
+        **I2 (MUST)** — the namespace a rule is evaluated against is derived from the **directory path** and from nothing else. The path is authoritative. Three reasons, all structural rather than stylistic. First, `contracts/page.schema.json` has no `id` and no `owner`, so a `page.json` path has no in-fi
+PASS  B2a.3 the agreement requirement is a rule, not a description: entry.json's id must agree with its own directory
+        **R2 (MUST)** — for every `entry.json` the PR touches, `new.id` MUST equal the `<namespace>:<name>` derived from that file's own directory, and where an `old` entry exists `old.id` MUST agree as well. The two sources naming different namespaces is not a stylistic complaint to fold into schema vali
+PASS  B2a.4 the mods/alice.cooltool + id mallory:cooltool disagreement is worked as an attack attempt
+        **Attempt 7 — put the namespace in two places and let the checker pick.** `mallory` (real id `999`, username `mallory`) opens a first-publish PR creating `mods/alice.cooltool/entry.json` whose `id` is `mallory:cooltool` and whose `owner` is `{provider: "github", id: 999, name_at_registration: "mal
+PASS  B2a.5 the comparison model says the namespace is derived from the path only, never from id
+        **I2 (MUST)** — the namespace a rule is evaluated against is derived from the **directory path** and from nothing else. The path is authoritative. Three reasons, all structural rather than stylistic. First, `contracts/page.schema.json` has no `id` and no `owner`, so a `page.json` path has no in-fi
+
+== B3 (round 2) -- page.json for a namespace with no entry.json is defined, not merely claimed complete ==
+PASS  B3a.1 the page.json section names the no-entry.json case explicitly
+        ## `page.json` PRs: same ownership check, and the case where no `entry.json` exists
+        A PR touching `page.json` is enumerated exactly as an `entry.json` PR is (`I2`, `I7`): the namespace comes from the directory path, and ADR-0059 §3 requires such a PR to pass "the same ownership check (numeric id)" as one touching `entry.json`. Which rule then applies depends on what exists at the 
+PASS  B3a.2 the page.json section states page.json carries neither owner nor id, so the first-publish rule cannot apply
+        **R10 (MUST)** — a PR that touches `mods/<namespace>.<name>/page.json` where no `entry.json` for that namespace exists at the merge-base, and none is created in the same diff, MUST be rejected. There is no owner anywhere for the check to read: `old` does not exist, and `page.json` carries neither 
+PASS  B3a.3 the no-entry.json case has a rule with a verdict, not a gap
+        **R10 (MUST)** — a PR that touches `mods/<namespace>.<name>/page.json` where no `entry.json` for that namespace exists at the merge-base, and none is created in the same diff, MUST be rejected. There is no owner anywhere for the check to read: `old` does not exist, and `page.json` carries neither 
+PASS  B3a.4 case 2 -- the same PR creating the entry.json -- says which rules then decide the whole PR (round-3 non-blocking 4: the old pattern 'same PR|same diff' was satisfied by R10's paragraph)
+        1. **An `entry.json` for that namespace exists at the merge-base.** `R3` applies against that    entry's `old.owner` — or `R7`, if the namespace is on the reserved list. Nothing is special    about the touched file being `page.json`. 2. **No `entry.json` exists at the merge-base, but the same PR c
+PASS  B3a.5 the page.json section no longer claims completeness while leaving the case undefined
+
+== B4 (round 2) -- the 302 arm is mandatory, not one of two acceptable designs ==
+PASS  B4a.1 the 'either is acceptable' framing of the two designs is gone
+PASS  B4a.2 the reserved-namespace section states the 302 arm is mandatory
+        **I5 (MUST NOT)** — a checker MUST NOT follow the `302` and treat the followed request's final status as the answer; the request that asks the membership question is made with redirect-following turned off. This is the **mandatory** arm of the check, not one of two designs a reader may choose betw
+PASS  B4a.3 detecting the 302 without following it is a declared checker rule
+        **I5 (MUST NOT)** — a checker MUST NOT follow the `302` and treat the followed request's final status as the answer; the request that asks the membership question is made with redirect-following turned off. This is the **mandatory** arm of the check, not one of two designs a reader may choose betw
+PASS  B4a.4 an indeterminate membership answer has its own verdict rule, failing closed
+        **R9 (MUST)** — if the membership question returns anything other than the two answers GitHub documents for a member requester — `204` (is a member) or `404` (is not) — the check MUST reject the PR, closed, with an error naming the status it received. The `302` is the case this rule exists for
+PASS  B4a.5a running as a confirmed org member is stated as an ADDITION to the 302 arm
+        Running the check as a caller that is itself a confirmed organisation member is worth doing **in addition to** `I5` and `R9`, because it makes the direct `204`/`404` branch the one normally taken. It is **never instead of** them. It is a precondition this document cannot verify (see the next paragra
+PASS  B4a.5b running as a confirmed org member is stated to be NEVER an alternative to the 302 arm (the half that used to hide behind B4a.5's alternation)
+        Running the check as a caller that is itself a confirmed organisation member is worth doing **in addition to** `I5` and `R9`, because it makes the direct `204`/`404` branch the one normally taken. It is **never instead of** them. It is a precondition this document cannot verify (see the next paragra
+PASS  B4a.6 the redirect-following defaults are stated for each client separately, with what was tested here
+        So, **verified in this environment**, client by client rather than as one sweeping claim: plain `curl` does **not** follow a redirect — `-L` is opt-in, and an earlier revision of this document had this backwards; Python's `requests` **does** (`allow_redirects=True` is its default, shown by the `[3
+
+== B5 (round 2) -- B2.2 rewritten to look at the exception itself (a class defect, not an instance) ==
+PASS  B2.2 the reserved first-publish exception names the required owner value (324218296, read from reserved-namespaces.json) IN THE EXCEPTION ITSELF
+        **R8 (MUST)** — **Exception for a namespace on the reserved list (ADR-0119 §2), stated here at the point the ordinary rule is made, so the two never have to be reconciled by a reader:** at a first publish of a namespace on the reserved list, `new.owner` MUST equal the owner `reserved-namespaces.j
+
+== V -- content checks on the identity values themselves (round-2 non-blocking 6) ==
+PASS  V1 reserved-namespaces.json records the same owner.id for mc and test (324218296)
+PASS  V2 the org id the document pastes from `gh api orgs/worldofmodcraft` equals reserved-namespaces.json's recorded owner.id
+        ``` $ gh api orgs/worldofmodcraft --jq '{login,id,type}' {"id":324218296,"login":"worldofmodcraft","type":"Organization"} ``` This matches `reserved-namespaces.json`'s own recorded `owner.id` (`324218296`) for both `mc` and `test`, confirmed live against the real account rather than assumed from the
+        **What differs is *how a PR is authorised*, and it must differ, structurally — this is not a design choice with an alternative, it is a consequence of what the numbers are.** No individual GitHub account's numeric id can ever equal the organisation's own numeric id — they are different accounts,
+PASS  V3 the document's 'no individual id can equal the org id' argument still contrasts the two REAL ids
+        **What differs is *how a PR is authorised*, and it must differ, structurally — this is not a design choice with an alternative, it is a consequence of what the numbers are.** No individual GitHub account's numeric id can ever equal the organisation's own numeric id — they are different accounts,
+PASS  V4 the individual account id the argument uses is the one the PR#3 transcript actually returned
+        **Verified, live, against this project's own registry (re-run in this fix round, 2026-09-06):** ``` $ gh api repos/worldofmodcraft/registry/pulls/3 --jq '{merged, user:{login:.user.login,id:.user.id}}' {"merged":true,"user":{"id":324089373,"login":"womcraft"}} ``` (A two-key `--jq` object filter can
+PASS  V5 every 5+-digit number in the contract is a known identity or a marked placeholder
+PASS  V6 every identity the contract's argument depends on is still present in it
+PASS  V7 the recorded fixture's redirect target names the same organisation id as reserved-namespaces.json
+PASS  V8 the fixture's how_to_recapture commands are byte-identical to the commands it records (round-2 finding 15)
+
+== K -- Ludwig's two rulings of 2026-09-07 are written into the contract as rules ==
+PASS  K1 the ruling paragraph states WHAT Ludwig ruled, not merely that something was ruled on a date (round-3 non-blocking 4: the old pattern was the bare date)
+        **Ludwig ruled on 2026-09-07: the platform's own organisation account may open a takedown PR, and the human gate sits on the merge, not on the opening.**
+PASS  K2 the takedown opener is a verdict rule, so an unauthorised opener has a rejection path
+        **R11 (MUST)** — a PR performing a takedown against **any** namespace, whether or not its author owns it, is authorised only when its author is the platform's own identity: the account `reserved-namespaces.json` records — at the PR's merge-base revision of that file, never the revision the PR it
+PASS  K3 the takedown section keeps MANAGER.md Section 7's written-approval gate on the MERGE, unsoftened
+        **R11 (MUST)** — a PR performing a takedown against **any** namespace, whether or not its author owns it, is authorised only when its author is the platform's own identity: the account `reserved-namespaces.json` records — at the PR's merge-base revision of that file, never the revision the PR it
+        **I8 (MUST)** — passing this gate is not authorisation to merge. MANAGER.md §7 requires Ludwig's explicit **written approval**, given in session and referenced in the PR, before a takedown PR is merged, and this check neither represents nor replaces it: registry CI cannot verify that a human deci
+PASS  K4 passing this gate is stated NOT to be merge authorisation
+        **I8 (MUST)** — passing this gate is not authorisation to merge. MANAGER.md §7 requires Ludwig's explicit **written approval**, given in session and referenced in the PR, before a takedown PR is merged, and this check neither represents nor replaces it: registry CI cannot verify that a human deci
+PASS  K5 the takedown carve-out is confined to the takedown mutation itself, not to the whole PR
+        **Scope note — what in `R11` below is Ludwig's ruling and what is the manager's reading of it** (manager, 2026-09-08, **pending Ludwig's confirmation**). Ludwig ruled on the case in front of him and phrased it "against a namespace it does not own". Review round 4 (finding 1) showed that reading th
+        **R11 (MUST)** — a PR performing a takedown against **any** namespace, whether or not its author owns it, is authorised only when its author is the platform's own identity: the account `reserved-namespaces.json` records — at the PR's merge-base revision of that file, never the revision the PR it
+PASS  K6 case-insensitive namespace comparison is stated in the contract, with the live evidence at the point of the claim
+        **R4 (MUST)** — at a first publish of a namespace **not** on the reserved list, the namespace string (derived from the directory path per `I2`) MUST equal the PR author's current GitHub username (`pulls.user.login`), compared case-insensitively. For a namespace that **is** on the reserved list thi
+        The premise `R4`'s folding rests on — that a GitHub username identifies one account case-insensitively, so folding can never merge two different people — is **verified in this environment** rather than assumed (guardrail 6c):
+PASS  K7 the case-folding claim carries its verification inline (three casings, one account id)
+        ``` $ for u in womcraft WOMCRAFT WomCraft; do printf '%s -> ' "$u"; gh api users/$u --jq '{login,id}'; done womcraft -> {"id":324089373,"login":"womcraft"} WOMCRAFT -> {"id":324089373,"login":"womcraft"} WomCraft -> {"id":324089373,"login":"womcraft"} ```
+PASS  K8 Questions 3 and 4 are no longer booked as open questions for Ludwig
+PASS  K9a the case-folding answer is recorded with Ludwig and the date, so no round re-asks it
+        - **Case-folding the namespace/username comparison** (booked by fix round 1 as this document's   Question 3). **Answered by Ludwig, 2026-09-07:** approved, and required to be written into this   contract explicitly rather than left to a checker's implementation — no ADR states the   normalisation 
+PASS  K9b the takedown-opener answer is recorded with Ludwig, the date, and the merge gate it leaves to MANAGER.md Section 7
+        - **Case-folding the namespace/username comparison** (booked by fix round 1 as this document's   Question 3). **Answered by Ludwig, 2026-09-07:** approved, and required to be written into this   contract explicitly rather than left to a checker's implementation — no ADR states the   normalisation 
+
+== P -- Ludwig's takedown ruling is OPERATIVE, and its exception surface stays narrow (round-3 finding 2) ==
+PASS  P1 R3 carries the takedown exception in its own paragraph, at the point the ordinary rule is made
+        **R3 (MUST)** — for a namespace that already exists at the PR's merge-base and is not on the reserved list, the PR author's real `(provider, id)` pair MUST equal `old.owner.provider` and `old.owner.id`, **unless `R11` authorises the PR as a takedown** — the single exception to this rule, stated 
+PASS  P2 R3's exception is conditional on R11 AUTHORISING the PR, never on the PR merely being takedown-shaped
+        **R3 (MUST)** — for a namespace that already exists at the PR's merge-base and is not on the reserved list, the PR author's real `(provider, id)` pair MUST equal `old.owner.provider` and `old.owner.id`, **unless `R11` authorises the PR as a takedown** — the single exception to this rule, stated 
+PASS  P3 R3 states what happens in every other case: R11 grants nothing and R3 applies in full
+        **R3 (MUST)** — for a namespace that already exists at the PR's merge-base and is not on the reserved list, the PR author's real `(provider, id)` pair MUST equal `old.owner.provider` and `old.owner.id`, **unless `R11` authorises the PR as a takedown** — the single exception to this rule, stated 
+PASS  P4 R7 carries the same exception, so the reserved-namespace path cannot be the one left unreconciled
+        **R7 (MUST)** — a PR touching a namespace on the reserved list is authorised only if the PR author is a **current member** of the organisation `reserved-namespaces.json` records as that namespace's owner, **unless `R11` authorises the PR as a takedown**, on exactly the terms and with exactly the p
+PASS  P5 R11 declares the precedence itself, in its own paragraph, in the checked form
+        **R11 (MUST)** — a PR performing a takedown against **any** namespace, whether or not its author owns it, is authorised only when its author is the platform's own identity: the account `reserved-namespaces.json` records — at the PR's merge-base revision of that file, never the revision the PR it
+PASS  P6 R11's authorisation still covers NOTHING BUT the takedown mutation (the clause that keeps a non-takedown change from riding through the exception -- Attempt 8)
+        **R11 (MUST)** — a PR performing a takedown against **any** namespace, whether or not its author owns it, is authorised only when its author is the platform's own identity: the account `reserved-namespaces.json` records — at the PR's merge-base revision of that file, never the revision the PR it
+PASS  P7 R11 still fails closed until the platform's concrete id is configured, so the precedence cannot fire before anyone knows who it authorises
+        **The mechanism, marked rather than assumed (guardrail 6b).** A GitHub Organization does not itself authenticate, so which concrete `pulls.user.id` a PR opened on the organisation's behalf actually carries — a machine account the organisation owns, a GitHub App installation, or a member acting for
+PASS  P8 the attack-attempts section works the PRECEDENCE STATEMENT itself as an attempt, not just the takedown rule
+        **Attempt 9 — claim the precedence without the authorisation.** An account that is **not** the platform's own identity opens a PR whose diff is *nothing but* a takedown mutation: one existing version's `status` set to `"removed"` with a reason, in exactly the shape `append-only.rules.md` defines, 
+PASS  P9 that attempt is the takedown-shaped diff from an unauthorised account, and names what defeats it
+        **Attempt 9 — claim the precedence without the authorisation.** An account that is **not** the platform's own identity opens a PR whose diff is *nothing but* a takedown mutation: one existing version's `status` set to `"removed"` with a reason, in exactly the shape `append-only.rules.md` defines, 
+PASS  P10 the how-to-read section states the precedence convention, so a future exception has a form to follow
+        **Where one rule disapplies another, both ends say so.** A verdict rule may be overridden by another verdict rule — `R8` replaces `R4`, `R5` and `R6` for a reserved namespace; `R11` lifts `R3` and `R7` for an authorised takedown. Every such pair is declared **in the overriding rule's own paragraph
+PASS  P11 I7's 'every rule that applies' is reconciled with the precedence rather than left to a reader
+        **I7 (MUST)** — every namespace the PR touches is evaluated independently, and the PR is accepted only if *every* namespace passes every rule that applies to it. Which rules apply is decided by the rules themselves and never by the checker's own judgement: where one rule disapplies another, the ov
+PASS  P12 the takedown section still leaves the MERGE gate to MANAGER.md Section 7, unabsorbed and unweakened
+        **I8 (MUST)** — passing this gate is not authorisation to merge. MANAGER.md §7 requires Ludwig's explicit **written approval**, given in session and referenced in the PR, before a takedown PR is merged, and this check neither represents nor replaces it: registry CI cannot verify that a human deci
+PASS  P13 R7's paragraph states the fact its exception depends on -- a GitHub organisation is NOT a member of itself, so the platform's own identity fails R7's membership test outright (round-4 finding 1: it asserted the reverse)
+        **R7 (MUST)** — a PR touching a namespace on the reserved list is authorised only if the PR author is a **current member** of the organisation `reserved-namespaces.json` records as that namespace's owner, **unless `R11` authorises the PR as a takedown**, on exactly the terms and with exactly the p
+PASS  P14 R7's paragraph states the CONSEQUENCE: R11 is what authorises the platform's own takedown inside mc:/test:, so the R7 half of the precedence fires on real PRs rather than on none
+        **R7 (MUST)** — a PR touching a namespace on the reserved list is authorised only if the PR author is a **current member** of the organisation `reserved-namespaces.json` records as that namespace's owner, **unless `R11` authorises the PR as a takedown**, on exactly the terms and with exactly the p
+PASS  P15 the false reconciliation claim (that the platform's own identity owns every reserved namespace and so satisfies R7 outright) is GONE from the reserved-namespace section, not caveated in place (guardrail 6c)
+PASS  P16a the transcript shows the membership endpoint answering 204 for a REAL member (the positive control: without it, 404 proves nothing about the endpoint)
+        **The membership test, run rather than reasoned about** (guardrail 6c — `gh` is on this machine, so it was run, not caveated). The same endpoint, asked about a real member and about the organisation itself: ``` $ gh api orgs/worldofmodcraft/members/womcraft -i | head -1 HTTP/2.0 204 No Content $ g
+PASS  P16b the transcript shows the SAME endpoint answering 404 for the organisation itself -- the fact R7's exception depends on (guardrail 6b: the verification travels with the claim)
+        **The membership test, run rather than reasoned about** (guardrail 6c — `gh` is on this machine, so it was run, not caveated). The same endpoint, asked about a real member and about the organisation itself: ``` $ gh api orgs/worldofmodcraft/members/womcraft -i | head -1 HTTP/2.0 204 No Content $ g
+PASS  P16c the transcript shows the organisation's whole member list, and the organisation is not in it
+        **The membership test, run rather than reasoned about** (guardrail 6c — `gh` is on this machine, so it was run, not caveated). The same endpoint, asked about a real member and about the organisation itself: ``` $ gh api orgs/worldofmodcraft/members/womcraft -i | head -1 HTTP/2.0 204 No Content $ g
+PASS  P17 R11's scope is EVERY namespace, owned or not, so the R7 half of its precedence has something to fire on (manager decision 2026-09-08 on round-4 finding 1, pending Ludwig's confirmation)
+        **R11 (MUST)** — a PR performing a takedown against **any** namespace, whether or not its author owns it, is authorised only when its author is the platform's own identity: the account `reserved-namespaces.json` records — at the PR's merge-base revision of that file, never the revision the PR it
+PASS  P18 R11 is no longer scoped away from namespaces its author owns -- the narrow phrasing that made the R7 half of the precedence unreachable is gone
+PASS  P19 R11 names the platform identity's numeric id, and it is the id reserved-namespaces.json actually records (324218296, read from the data file, never from a literal here)
+        **R11 (MUST)** — a PR performing a takedown against **any** namespace, whether or not its author owns it, is authorised only when its author is the platform's own identity: the account `reserved-namespaces.json` records — at the PR's merge-base revision of that file, never the revision the PR it
+PASS  P20 R11 says which revision of reserved-namespaces.json it reads the platform identity from (round-4 non-blocking 8: nothing said, and I4 bound only list membership)
+        **R11 (MUST)** — a PR performing a takedown against **any** namespace, whether or not its author owns it, is authorised only when its author is the platform's own identity: the account `reserved-namespaces.json` records — at the PR's merge-base revision of that file, never the revision the PR it
+PASS  P21 R11 states the SUFFICIENT condition in its own paragraph, not only the necessary one (round-4 non-blocking 7: a reader opening at R11 could not derive it)
+        **R11 (MUST)** — a PR performing a takedown against **any** namespace, whether or not its author owns it, is authorised only when its author is the platform's own identity: the account `reserved-namespaces.json` records — at the PR's merge-base revision of that file, never the revision the PR it
+PASS  P22 R11 says how many takedown mutations one authorised PR may carry, and marks the choice as pending Ludwig's confirmation (round-4 non-blocking 6)
+        **R11 (MUST)** — a PR performing a takedown against **any** namespace, whether or not its author owns it, is authorised only when its author is the platform's own identity: the account `reserved-namespaces.json` records — at the PR's merge-base revision of that file, never the revision the PR it
+PASS  P23 the widening of R11's scope is marked as the MANAGER's reading of Ludwig's ruling, pending his confirmation, rather than presented as his words
+        **Scope note — what in `R11` below is Ludwig's ruling and what is the manager's reading of it** (manager, 2026-09-08, **pending Ludwig's confirmation**). Ludwig ruled on the case in front of him and phrased it "against a namespace it does not own". Review round 4 (finding 1) showed that reading th
+
+== B1 (round 1) -- the document states the caller-dependent rule, the redirect hazard, and the Actions-token caveat ==
+PASS  B1.10 the document states three GitHub-documented outcomes including 302 for a non-member requester
+        **The membership check itself: the answer depends on who is calling, not only on who is being asked about — this is documented GitHub behaviour, not just an observation from one token.** GitHub's own REST reference for `GET /orgs/{org}/members/{username}` states three outcomes: `204` if "requester
+        - **Member-caller branch** (the `womcraft` token, itself an org member, asking about `womcraft`):   ```   $ gh api orgs/worldofmodcraft/members/womcraft -i   HTTP/2.0 204 No Content   ```   Direct `204`/`404` answers, no redirect, exactly as documented for a member requester. - **Non-member-caller b
+PASS  B1.11 the document states a checker must NOT follow the redirect and treat the result as the answer
+        **I5 (MUST NOT)** — a checker MUST NOT follow the `302` and treat the followed request's final status as the answer; the request that asks the membership question is made with redirect-following turned off. This is the **mandatory** arm of the check, not one of two designs a reader may choose betw
+PASS  B1.12a curl is stated NOT to follow a redirect by default, which is what was run here
+        So, **verified in this environment**, client by client rather than as one sweeping claim: plain `curl` does **not** follow a redirect — `-L` is opt-in, and an earlier revision of this document had this backwards; Python's `requests` **does** (`allow_redirects=True` is its default, shown by the `[3
+PASS  B1.12b Python's requests is stated to follow one by default, with allow_redirects=True named as the reason
+        So, **verified in this environment**, client by client rather than as one sweeping claim: plain `curl` does **not** follow a redirect — `-L` is opt-in, and an earlier revision of this document had this backwards; Python's `requests` **does** (`allow_redirects=True` is its default, shown by the `[3
+PASS  B1.12c gh api is stated to follow one, with the facebook/jest -> jestjs/jest evidence that showed it
+        So, **verified in this environment**, client by client rather than as one sweeping claim: plain `curl` does **not** follow a redirect — `-L` is opt-in, and an earlier revision of this document had this backwards; Python's `requests` **does** (`allow_redirects=True` is its default, shown by the `[3
+PASS  B1.12d octokit's redirect default is marked NOT established here rather than asserted (guardrail 6b)
+        So, **verified in this environment**, client by client rather than as one sweeping claim: plain `curl` does **not** follow a redirect — `-L` is opt-in, and an earlier revision of this document had this backwards; Python's `requests` **does** (`allow_redirects=True` is its default, shown by the `[3
+PASS  B1.13 the document marks the GITHUB_TOKEN/Actions-caller case as unverified, at the point the claim is made
+        **What this means for the actual CI caller — marked here, not assumed.** Which branch CI hits depends entirely on whether the identity that registry CI uses to authenticate is itself an organisation member. **This could not be established in this environment: this machine has no GitHub Actions run
+PASS  B1.14 the document names the memberships endpoint as a candidate, not an answer
+        **A second candidate, with its own caller requirement — not adopted, only established:** `GET /orgs/{org}/memberships/{username}` has no `302` branch, but GitHub's own documentation states it requires the same precondition: *"In order to get a user's membership with an organization, the authentica
+PASS  B1.15 the old, caller-unqualified flat claim ('returns .204. if the named user is a member, .404. otherwise') is gone (whole-document scope is correct here: an absence claim)
+
+== B2 (round 1) -- the reserved-namespace first-publish exception is stated where the first-publish rule is made ==
+PASS  B2.1 the first-publish section states an explicit exception for reserved namespaces
+        **R8 (MUST)** — **Exception for a namespace on the reserved list (ADR-0119 §2), stated here at the point the ordinary rule is made, so the two never have to be reconciled by a reader:** at a first publish of a namespace on the reserved list, `new.owner` MUST equal the owner `reserved-namespaces.j
+PASS  B2.3 the reserved-namespace section states it governs first publish, not only present->present
+        **This section governs a reserved namespace's first publish exactly as it governs every later version — it is not confined to `present -> present`.** "What a first publish binds" above states this section's rule replaces the ordinary first-publish rule for `mc` and `test`, in full, not only after 
+PASS  B2.4 reserved-namespaces.json's real mc/test owner.id both equal 324218296, matching what the document cites
+
+== B3 (round 1) -- the namespace-string check ==
+PASS  B3.1 the document states the namespace-string rule as a rule, not a description
+        **R4 (MUST)** — at a first publish of a namespace **not** on the reserved list, the namespace string (derived from the directory path per `I2`) MUST equal the PR author's current GitHub username (`pulls.user.login`), compared case-insensitively. For a namespace that **is** on the reserved list thi
+PASS  B3.2 the document states case-folding to lowercase
+        **Case-folding: compare after folding both sides to lowercase — Ludwig's ruling, 2026-09-07.** `contracts/entry.schema.json`'s `id` pattern (`^[a-z0-9][a-z0-9_-]*:[a-z0-9][a-z0-9_-]*$`) is lowercase-only, while GitHub usernames may contain uppercase letters, so a literal, case-sensitive comparison
+PASS  B3.3 reserved namespaces are stated exempt from the namespace-string check
+        **Reserved namespaces are exempt from this check.** `mc` and `test` do not derive their namespace string from any account's username at all (ADR-0119 §1-2); `R8` and `R7` are the entire rule for those namespaces' first publish, replacing `R4`, `R5` and `R6` together.
+PASS  B3.4 the namespace-string section records the residual case it does NOT close (round-2 finding 12)
+        **What `R4` does not close — the residual, recorded rather than left to be discovered.** `R4` compares against the author's username *at the moment of the first publish*, which is the only moment a namespace string is ever derived, so the rename-and-claim sequence survives it: `alice` renames her 
+PASS  B3.5 the mallory/alice first-publish-capture attack is worked in the attack-attempts section
+        **Attempt 5 — first-publish into a namespace named after someone else, relying on the id rule alone.** An account whose real numeric id is `999` and whose current username is `mallory` opens a first-publish PR creating `mods/alice.cooltool/entry.json` with `owner: {provider: "github", id: 999, nam
+        **Attempt 7 — put the namespace in two places and let the checker pick.** `mallory` (real id `999`, username `mallory`) opens a first-publish PR creating `mods/alice.cooltool/entry.json` whose `id` is `mallory:cooltool` and whose `owner` is `{provider: "github", id: 999, name_at_registration: "mal
+PASS  B3.6 that attack attempt names the review finding it came from
+        **Attempt 5 — first-publish into a namespace named after someone else, relying on the id rule alone.** An account whose real numeric id is `999` and whose current username is `mallory` opens a first-publish PR creating `mods/alice.cooltool/entry.json` with `owner: {provider: "github", id: 999, nam
+PASS  B3.7 name_at_registration at first publish is a rule with a verdict, not a description (round-2 finding 11)
+        **R6 (MUST)** — at that same first publish of a namespace **not** on the reserved list, `new.owner.name_at_registration` MUST equal the PR author's username as the PR object reports it (`pulls.user.login`), compared case-insensitively per `R4`'s folding rule; for a namespace on the reserved list t
+PASS  B3.8 R6 names itself as this document's DERIVATION, so a reader can see the rule rests on an interpretation (Ludwig, 2026-09-07)
+        **R6 (MUST)** — at that same first publish of a namespace **not** on the reserved list, `new.owner.name_at_registration` MUST equal the PR author's username as the PR object reports it (`pulls.user.login`), compared case-insensitively per `R4`'s folding rule; for a namespace on the reserved list t
+PASS  B3.9 R6 says plainly that ADR-0058 does not state the rule in those words
+        **R6 (MUST)** — at that same first publish of a namespace **not** on the reserved list, `new.owner.name_at_registration` MUST equal the PR author's username as the PR object reports it (`pulls.user.login`), compared case-insensitively per `R4`'s folding rule; for a namespace on the reserved list t
+PASS  B3.10 R6 is not softened into a recommendation in ANY casing (the attribution marks the basis, never the strength)
+PASS  B3.11 R6's body still states MUST, so the rule's declaration and its text cannot disagree
+        **R6 (MUST)** — at that same first publish of a namespace **not** on the reserved list, `new.owner.name_at_registration` MUST equal the PR author's username as the PR object reports it (`pulls.user.login`), compared case-insensitively per `R4`'s folding rule; for a namespace on the reserved list t
+
+== B4 (round 1) -- page.json enumeration ==
+  $ grep -c "page.json" contracts/ownership.md -> 27
+PASS  B4.1 contracts/ownership.md mentions page.json (27 hits; the review's own falsifying command returned 0 before round 1)
+PASS  B4.3 the enumeration section explicitly includes page.json paths
+        The check runs **once per distinct namespace the PR touches, independently** — never only against the first `entry.json` in the diff, and never only against whichever file changed the most lines. A registry PR is a single diff that may touch any number of `mods/<namespace>.<name>/entry.json` **and
+PASS  B4.4 ADR-0059 Section 3's exact wording is quoted (same ownership check, numeric id)
+        A PR touching `page.json` is enumerated exactly as an `entry.json` PR is (`I2`, `I7`): the namespace comes from the directory path, and ADR-0059 §3 requires such a PR to pass "the same ownership check (numeric id)" as one touching `entry.json`. Which rule then applies depends on what exists at the 
+PASS  B4.5 the asset-scan requirement is named and deferred to task 040
+        **What this document does not additionally require for `page.json` — a declared boundary, not a silent one.** ADR-0059 §3 also requires an "asset scan on new screenshots" for a page-content PR. That is a separate gate, owned by the asset scanner (`contracts/validation-report.schema.json`), not th
+PASS  B4.5a the task file's header (its Context list) was extracted, and is a real subset of the file
+PASS  B4.6 ADR-0059 is in the task file's own Context list
+        1. `/home/ludwig/wom/CLAUDE.md` — rule 0 (token guard), rule 1 (English), rule 5 (forbidden    shortcuts). 2. `/home/ludwig/wom/docs/manager/MANAGER.md` — guardrails 6/6b/6c in particular. 3. `docs/tasks/032-ownership-edge-contract.md` (platform repo, `origin/main`) — the full spec and    acceptance criteria quoted in this task's brief. 4. ADR-0058 (publishing flow, ownership §2, confirmation text §3), ADR-0119 (reserved    namespaces), ADR-0039 (namespace = username), ADR-0041 (integrity chain), **ADR-0030**    (registry entry format — its line 30 states "the namespace is the GitHub username", which    ADR-0119 amends for exactly the reserved case this contract implements; added in fix round 3,    2026-09-07, per review round 2's finding 18 and the manager's ruling on it: ADR-0030 adds    nothing ADR-0039 does not, and the consistency rule is the point, since task 034 was required    to correct the identical miss this session). **Missing from this    list originally, found in review round 1 (finding B4): ADR-0059** (mod pages — §3's "same    ownership check (numeric id)" requirement for `page.json` PRs), which ADR-0119's own    "Interacts with" line already names as relevant. Added here in fix round 1, 2026-09-06 — this    is the third Context-selection miss recorded on this mission, per the review. 5. `contracts/append-only.rules.md`, `contracts/signature-format.md`,    `contracts/artifact-naming.md`, `docs/contracts/README.md` — house style, in this worktree. 6. `docs/architecture/depgraph.md` (platform repo, `origin/main`) — E16's exact wording and the    amendment log entry. 7. `contracts/entry.schema.json` and `reserved-namespaces.json` in this worktree, for the exact    `owner` shape and the real reserved-namespace data.
+PASS  B4.7 ADR-0030 is in the task file's own Context list, not merely mentioned where the review named the miss (round-2 finding 18)
+        1. `/home/ludwig/wom/CLAUDE.md` — rule 0 (token guard), rule 1 (English), rule 5 (forbidden    shortcuts). 2. `/home/ludwig/wom/docs/manager/MANAGER.md` — guardrails 6/6b/6c in particular. 3. `docs/tasks/032-ownership-edge-contract.md` (platform repo, `origin/main`) — the full spec and    acce
+
+== B5 (round 1) -- the takedown question, now answered rather than declared ==
+  $ grep -ic "takedown" contracts/ownership.md -> 52
+PASS  B5.1 contracts/ownership.md mentions 'takedown' (52 hits; the review's own falsifying command returned 0 before round 1)
+PASS  B5.3 the takedown section still names both contracts the delegation falls between
+        A legally-mandated takedown (ADR-0041) sets an existing version's `status` to `"removed"` with a reason. `contracts/append-only.rules.md` defines the *shape* of that one permitted in-place mutation and explicitly declines to say who may perform it: *"This document defines the shape of a legal takedo
+        **R11 (MUST)** — a PR performing a takedown against **any** namespace, whether or not its author owns it, is authorised only when its author is the platform's own identity: the account `reserved-namespaces.json` records — at the PR's merge-base revision of that file, never the revision the PR it
+PASS  B5.4 R11's own paragraph says what happens to a takedown PR from any other account, naming the rules that reject it (round-3 non-blocking 4: the old pattern was the bare word 'rejected', matched by three paragraphs)
+        **R11 (MUST)** — a PR performing a takedown against **any** namespace, whether or not its author owns it, is authorised only when its author is the platform's own identity: the account `reserved-namespaces.json` records — at the PR's merge-base revision of that file, never the revision the PR it
+PASS  B5.6 the takedown section records which review finding raised it
+        A legally-mandated takedown (ADR-0041) sets an existing version's `status` to `"removed"` with a reason. `contracts/append-only.rules.md` defines the *shape* of that one permitted in-place mutation and explicitly declines to say who may perform it: *"This document defines the shape of a legal takedo
+        **R11 (MUST)** — a PR performing a takedown against **any** namespace, whether or not its author owns it, is authorised only when its author is the platform's own identity: the account `reserved-namespaces.json` records — at the PR's merge-base revision of that file, never the revision the PR it
+
+== N -- non-blocking items from both review rounds ==
+PASS  N1 reserved-list revision rule: old, never new, is stated in the reserved-namespace section
+        **I4 (MUST)** — which revision of `reserved-namespaces.json` the check reads: `old`, never `new` — the same discipline "The comparison model" above applies to `owner`, applied here to list membership. The check evaluates a PR against the reserved list as it stood at the PR's merge-base with the 
+PASS  N2a GITHUB_ACTOR is named in the identity section
+        **`GITHUB_ACTOR` and `GITHUB_ACTOR_ID`, the environment variables GitHub Actions exposes to a running job, are equally forbidden as an identity source — for a different, more subtle reason than the git-commit case above.** Unlike commit metadata, `GITHUB_ACTOR_ID` genuinely is a numeric, forge-ver
+        **I1 (MUST)** — the check reads the submitting identity from the PR object's `pulls.user.id` and `pulls.user.login` and from nothing else: never from a commit's author or committer fields, never from a `Co-Authored-By` trailer, never from any other text inside the diff, and never from `GITHUB_ACTO
+PASS  N2b GITHUB_ACTOR_ID is named in the identity section
+        **`GITHUB_ACTOR` and `GITHUB_ACTOR_ID`, the environment variables GitHub Actions exposes to a running job, are equally forbidden as an identity source — for a different, more subtle reason than the git-commit case above.** Unlike commit metadata, `GITHUB_ACTOR_ID` genuinely is a numeric, forge-ver
+        **I1 (MUST)** — the check reads the submitting identity from the PR object's `pulls.user.id` and `pulls.user.login` and from nothing else: never from a commit's author or committer fields, never from a `Co-Authored-By` trailer, never from any other text inside the diff, and never from `GITHUB_ACTO
+PASS  N2c the identity section forbids them as an identity source
+        **`GITHUB_ACTOR` and `GITHUB_ACTOR_ID`, the environment variables GitHub Actions exposes to a running job, are equally forbidden as an identity source — for a different, more subtle reason than the git-commit case above.** Unlike commit metadata, `GITHUB_ACTOR_ID` genuinely is a numeric, forge-ver
+PASS  N4 docs/tasks/032-verify.sh exists and is executable (this script)
+PASS  N5 docs/contracts/README.md's worked-examples count names eight prose documents
+        39:eight prose `.md` documents** — `append-only.rules.md`, task 025's six (`artifact-naming.md`,
+PASS  N5b docs/contracts/README.md's checking-logic paragraph names three tasks
+        74:- **No checking logic, in any of the three tasks.** No file here reads a PR diff, calls a git
+PASS  N9 the two-namespace example names alice as the concrete PR author instead of restating the owner (round-2 finding 9; round-3 non-blocking 4: the old pattern 'opened by' matched elsewhere)
+        **The two-namespace case, stated explicitly, with a named author rather than a restatement of ownership.** A PR has exactly one author (`pulls.user`, a single account), so take a concrete one: the PR is **opened by** `alice`, and the id the check compares is `alice`'s own real `pulls.user.id` — th
+PASS  N10 the first-publish classification paragraph says merge-base, matching append-only.rules.md, not 'target branch' (round-2 finding 10)
+        For a namespace that does not yet exist at the PR's merge-base with the target branch (no `old` value — this is a first publish), there is nothing in `old` to compare against; "What a first publish binds" below states the rules that apply instead. The classification is made against the **merge-bas
+PASS  N13 a PR touching ONLY reserved-namespaces.json is named as enumerating no namespace, with ADR-0119's human review as its guard (round-2 finding 13)
+        **A PR touching only `reserved-namespaces.json`, and nothing under `mods/`, passes this check vacuously** — it touches no path this document enumerates, so there is no namespace for any rule to be evaluated against, and a green ownership check on such a PR means only "nothing here was mine to judg
+PASS  N14 the case-folding premise (usernames are unique case-insensitively) is stated with its live evidence (round-2 finding 14)
+        ``` $ for u in womcraft WOMCRAFT WomCraft; do printf '%s -> ' "$u"; gh api users/$u --jq '{login,id}'; done womcraft -> {"id":324089373,"login":"womcraft"} WOMCRAFT -> {"id":324089373,"login":"womcraft"} WomCraft -> {"id":324089373,"login":"womcraft"} ```
+PASS  N16 the garbled 'authenticates as is itself' sentence is repaired (round-2 finding 16)
+
+== G/W -- every whole-document absence guard is proven able to fire, against the blob it names AND against a re-wrap (fix round 4, finding 3) ==
+PASS  G1 B1a.1's pattern fires against f660c11:contracts/ownership.md -- round-2 finding B1's closed-list phrasing, the text this guard exists to forbid
+PASS  W1 B1a.1's pattern still fires when that same blob is re-wrapped at 20 columns (a line break must not walk past an absence guard)
+PASS  G2 B4a.1's pattern fires against f660c11:contracts/ownership.md -- round-2 finding B4's 'either design is fine' framing, the text this guard exists to forbid
+PASS  W2 B4a.1's pattern still fires when that same blob is re-wrapped at 20 columns (a line break must not walk past an absence guard)
+PASS  G3 B1.15's pattern fires against fcde6d5:contracts/ownership.md -- round-1 finding B1's caller-unqualified membership claim, the text this guard exists to forbid
+PASS  W3 B1.15's pattern still fires when that same blob is re-wrapped at 20 columns (a line break must not walk past an absence guard)
+PASS  G4 N16's pattern fires against f660c11:contracts/ownership.md -- round-2 finding 16's garbled sentence, the text this guard exists to forbid
+PASS  W4 N16's pattern still fires when that same blob is re-wrapped at 20 columns (a line break must not walk past an absence guard)
+
+== J -- every `gh api --jq` transcript in the contract is one gojq could actually emit (fix round 4, finding 1) ==
+PASS  J1 the contract contains `gh api ... --jq '{...}'` transcripts for this check to read (a search that finds nothing is a broken search)
+PASS  J5 line 149: {"merged":true,"user":{"id":324089373,"login":"womcraft"}} is output the filter {merged, user:{login:.user.login,id:.user.id}} could really produce
+PASS  J5 line 396: {"id":324089373,"login":"womcraft"} is output the filter {login,id} could really produce
+PASS  J5 line 397: {"id":324089373,"login":"womcraft"} is output the filter {login,id} could really produce
+PASS  J5 line 398: {"id":324089373,"login":"womcraft"} is output the filter {login,id} could really produce
+PASS  J5 line 438: {"id":324218296,"login":"worldofmodcraft","type":"Organization"} is output the filter {login,id,type} could really produce
+PASS  J5 line 460: {"full_name":"worldofmodcraft/registry","owner":{"id":324218296,"login":"worldofmodcraft","type":"Organization"}} is output the filter {full_name,owner:{login:.owner.login,id:.owner.id,type:.owner.type}} could really produce
+PASS  J5 line 524: {"full_name":"jestjs/jest","id":15062869} is output the filter {full_name,id} could really produce
+PASS  J5 line 578: {"role":"admin","state":"active"} is output the filter {role,state} could really produce
+PASS  J5 line 642: {"count":1,"id":324089373,"login":"womcraft"} is output the filter {login: .[0].login, id: .[0].id, count: length} could really produce
+PASS  J5 line 928: {"id":10137,"login":"ghost","type":"User"} is output the filter {login,id,type} could really produce
+PASS  J6a the scanner sees a `gh api --jq` command written with a backslash continuation (the style this document already uses for its three curl transcripts; round-4 finding 3 shipped a fabricated transcript behind exactly one backslash)
+PASS  J6b the scanner reads the output line that follows a continued command, rather than stopping at the continuation
+PASS  J6c the same keyset/order checks the real transcripts get REJECT the fixture's fabricated `{"type":"User","login":"ghost","id":10137}` (gojq sorts constructed-object keys, so that order is unproducible) -- an inverted probe: this fixture must FAIL to be evidence
+
+== Scope and suite -- unchanged elsewhere, existing tests still pass ==
+  $ python3 -m unittest discover -s tests/contracts   (elapsed time normalised)
+  .......................
+  ----------------------------------------------------------------------
+  Ran 23 tests in <elapsed>s
+  
+  OK
+PASS  S1 tests/contracts suite passes (exit 0), untouched by this round
+  $ git merge-base HEAD origin/main -> e449e26d03c26c7d47facbe02c02ce6f6a1baf44
+  $ { git diff --name-only e449e26d03c26c7d47facbe02c02ce6f6a1baf44 -- /home/ludwig/wt/registry-task-032 ; git -C /home/ludwig/wt/registry-task-032 ls-files --others --exclude-standard ; } | grep -v __pycache__ | sort -u
+  contracts/ownership.md
+  docs/contracts/README.md
+  docs/tasks/032-b1-fixtures.json
+  docs/tasks/032-ownership-contract.md
+  docs/tasks/032-verify.sh
+PASS  S3 every path changed since the merge-base with origin/main is inside task 032's declared file scope (subset test, survives the merge)
+PASS  S5 (lexical convention check, not a structural guarantee) this script contains no old.owner.id/new.owner.id equality logic (no ownership-gate implementation)
+
+== E -- this suite's own stderr (fix round 4, finding 5) ==
+PASS  E1 the deterministic part of this suite ran with completely clean stderr (0 bytes on fd 2)
+ADVISORY-PASS  E2 the advisory (live network/gh) sections wrote nothing to stderr
+
+== RESULT ==
+advisory (live, network/gh-auth dependent, informational only -- NEVER affects the verdict or exit code): 6 matched fixture/paste, 0 drifted, 1 not evaluated
+ALL CHECKS PASSED (deterministic verdict -- 0 network calls required to reach it)
+```
