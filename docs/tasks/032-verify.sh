@@ -908,6 +908,19 @@ need = {
 for rid, why in need.items():
     pf("T9.%s the taxonomy covers: %s" % (rid, why), rid in rows, "no row for %s" % rid)
 
+# T17 -- FIX ROUND 5, review-round-4 non-blocking 5. T5/T6 check that a row EXISTS for every rule
+# and that no row is orphaned; neither checks that a row says what its rule says. Round 4's R11
+# row was broader than R11 itself ("a takedown PR is opened by an account other than the
+# platform's own identity", unqualified, against a rule scoped to "a namespace its author does
+# not own"), so the row and the rule gave different verdicts for a publisher taking down a
+# version of their own entry. Widening R11's scope reconciles them; this check is what keeps them
+# reconciled, for the one row where the divergence was found. It is deliberately narrow: a
+# general row-vs-rule equivalence check is not something a text comparison can honestly claim.
+r11_row = " | ".join(rows.get("R11", []))
+pf("T17 the R11 taxonomy row's trigger matches R11's own scope -- it names the platform's own identity and does NOT re-scope the rule to namespaces its author does not own (round-4 non-blocking 5)",
+   bool(r11_row) and "platform's own identity" in r11_row and "does not own" not in r11_row,
+   "R11 row reads: %r" % r11_row)
+
 sys.exit(1 if failures else 0)
 PY
 if [ $? -ne 0 ]; then fail "T0 the rule/taxonomy derivation check reported failures (see FAIL lines above)"; fi
