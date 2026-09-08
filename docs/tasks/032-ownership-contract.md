@@ -4207,7 +4207,29 @@ taken: *an exception-shaped sentence must carry its `Precedence:` declaration to
   takedown — **every sentence that mentions a takedown must name `R11`.** A diff-shape sentence
   cannot name `R11` and still say what Attempt 9 needs it to say.
 
-`T13` now fires for **all 11 verdict rules**. There is no per-rule exemption left in the code: the
+**`T13` now fires for all 11 verdict rules — probed one by one, not asserted.** An exception
+sentence ("This rule does not apply where `Ry` has already spoken.") was appended to each verdict
+rule's declaring paragraph in turn, naming a rule no declared pair relates it to, and the suite
+run; the paragraph was restored with `git checkout` after each, and `sha256sum -c` confirmed
+`contracts/ownership.md` byte-identical at the end:
+
+```
+R1   exception naming R2   -> T13 red: 1   T15 red: 1
+R2   exception naming R1   -> T13 red: 1   T15 red: 1
+R3   exception naming R9   -> T13 red: 1   T15 red: 1
+R4   exception naming R9   -> T13 red: 1   T15 red: 1
+R5   exception naming R9   -> T13 red: 1   T15 red: 1
+R6   exception naming R9   -> T13 red: 1   T15 red: 1
+R7   exception naming R9   -> T13 red: 1   T15 red: 1
+R8   exception naming R9   -> T13 red: 1   T15 red: 1
+R9   exception naming R1   -> T13 red: 1   T15 red: 1
+R10  exception naming R3   -> T13 red: 1   T15 red: 1
+R11  exception naming R9   -> T13 red: 1   T15 red: 1
+contracts/ownership.md: OK
+```
+
+Under round 4's `in_a_pair` exemption, seven of those eleven rows — `R3`, `R4`, `R5`, `R6`, `R7`,
+`R8` and `R11` — would have read `T13 red: 0`. There is no per-rule exemption left in the code: the
 only exemptions are (a) a declared pair relating the two specific rules named, and (b) five pinned
 sentences. `T15` covers the same 11 with no vocabulary at all.
 
