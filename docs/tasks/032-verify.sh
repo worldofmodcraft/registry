@@ -1158,8 +1158,18 @@ expect_hits_in_para "P14 R7's paragraph states the CONSEQUENCE: R11 is what auth
     '\*\*R7 \(MUST\)\*\*' 'only thing that can authorise.*inside.*.mc:.*or.*.test:'
 expect_no_hits_in "P15 the false reconciliation claim (that the platform's own identity owns every reserved namespace and so satisfies R7 outright) is GONE from the reserved-namespace section, not caveated in place (guardrail 6c)" \
     'reserved-namespace case' "the platform.s own identity is the organisation that owns every reserved namespace"
-expect_hits_in "P16 the claim carries its verification at the point it is made (guardrail 6b): the 204/404 contrast on the same endpoint, for a real member and for the organisation itself" \
-    'reserved-namespace case' 'members/worldofmodcraft -i'
+# P16a-c: the claim's verification, bound COMMAND-TO-OUTPUT inside the one paragraph that
+# carries the transcript. An earlier draft of this check searched the section for the string
+# `members/worldofmodcraft -i` and stayed green when the whole transcript was deleted, because
+# R7's prose names the same command one paragraph above -- the round-2 finding B5 shape, caught
+# here by this round's own mutation M14. Three checks, because the transcript makes three
+# separate claims (2c rule 3), and each pins the status to the command that produced it.
+expect_hits_in_para "P16a the transcript shows the membership endpoint answering 204 for a REAL member (the positive control: without it, 404 proves nothing about the endpoint)" \
+    '\*\*The membership test, run rather than reasoned about\*\*' 'members/womcraft -i \| head -1 HTTP/2\.0 204 No Content'
+expect_hits_in_para "P16b the transcript shows the SAME endpoint answering 404 for the organisation itself -- the fact R7's exception depends on (guardrail 6b: the verification travels with the claim)" \
+    '\*\*The membership test, run rather than reasoned about\*\*' 'members/worldofmodcraft -i \| head -1 HTTP/2\.0 404 Not Found'
+expect_hits_in_para "P16c the transcript shows the organisation's whole member list, and the organisation is not in it" \
+    '\*\*The membership test, run rather than reasoned about\*\*' '.count.:1,.id.:324089373,.login.:.womcraft.'
 expect_hits_in_para "P17 R11's scope is EVERY namespace, owned or not, so the R7 half of its precedence has something to fire on (manager decision 2026-09-08 on round-4 finding 1, pending Ludwig's confirmation)" \
     '\*\*R11 \(MUST\)\*\*' 'against \*\*any\*\* namespace, whether or not its author'
 expect_no_hits_in_para "P18 R11 is no longer scoped away from namespaces its author owns -- the narrow phrasing that made the R7 half of the precedence unreachable is gone" \
