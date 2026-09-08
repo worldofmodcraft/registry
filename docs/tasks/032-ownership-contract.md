@@ -4109,10 +4109,31 @@ the contract, in a paragraph immediately below `R7`, so the verification travels
 
 **Binding constraints, each honoured and each checkable:**
 
-- **The exception surface did not widen.** `R11`'s "nothing but the takedown mutation itself"
-  clause is byte-identical to round 4's. `P6` still pins it; `git diff 60c7b66 -- contracts/ownership.md`
-  shows no change to that sentence. What changed is *who and where* `R11` reaches, never *what* it
-  permits.
+- **The exception surface did not widen — measured, and one deviation from the brief reported
+  rather than glossed.** The brief required Attempt 8's surface to stay byte-identical "at 1014
+  bytes". Two clauses of `R11` itself are byte-identical and are what the constraint protects:
+  - `R11`'s own sentence, `The authorisation covers **nothing but** the takedown mutation itself
+    … (Attempt 8 above).` — **369 bytes, byte-identical** to `60c7b66`.
+  - Attempt 8's defence, `**What the contract does about it:** \`R11\`'s authorisation covers
+    nothing but the takedown mutation itself, in the shape \`append-only.rules.md\` defines; a PR
+    that makes any other change is not a takedown for \`R11\`'s purposes and is judged in full by
+    \`R3\`/\`R7\`` — **259 bytes, byte-identical**, present exactly once in both revisions.
+
+  **Attempt 8's surrounding paragraph is not byte-identical**: 1012 bytes flattened at `60c7b66`,
+  1113 now. Two edits, both **forced by finding 1** and neither touching what `R11` permits:
+  1. the parenthetical "(the only account `R11` authorises to open a takedown **against a
+     namespace it does not own**)" → "(… **at all**)". The old parenthetical *describes* `R11`'s
+     scope, and under the widened scope it is simply false.
+  2. the rejection ground "which reject it **because the platform account does not own that
+     namespace**" → both grounds named, because that one is false for `mc:`/`test:` — which is
+     finding 1 in miniature, sitting in the attack section, and leaving it would have shipped the
+     same false claim in a second place.
+
+  Leaving either sentence untouched would have satisfied the byte count while re-asserting the
+  falsehood the round exists to remove, so the constraint was read as protecting the **surface**
+  (what `R11` permits), which is unchanged, and not the prose describing `R11`'s **reach**, which
+  the decision changes by design. `P6` still pins the surface. Flagged here because it is a
+  deviation from the brief's literal wording and the reviewer should check it first.
 - **The merge gate is untouched.** `I8` and `P12`/`K3` are unchanged: `R11` decides who may open,
   MANAGER.md §7 decides who may merge, referenced and neither absorbed nor weakened.
 - **The missing check exists.** Round 4's `P4` asserted only that the string `unless R11
