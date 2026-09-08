@@ -43,8 +43,17 @@ another verdict rule — `R8` replaces `R4`, `R5` and `R6` for a reserved namesp
 and `R7` for an authorised takedown. Every such pair is declared **in the overriding rule's own
 paragraph**, in the exact form **`Precedence: R8 over R4, R5, R6`**, and every rule named after
 `over` cites the overriding rule in its own declaring paragraph. Both halves are required, and
-`docs/tasks/032-verify.sh`'s `T10`-`T13` fail the verification run if either is missing, or if a
-verdict rule states an exception against another verdict rule with no declared pair at all. This
+`docs/tasks/032-verify.sh`'s `T10`-`T13` fail the verification run if either is missing. The fence
+around *new* exceptions is `T15`, and it is worth stating exactly what it does, because an earlier
+revision of this paragraph claimed more than the check delivered (review round 4, finding 2):
+**every sentence in a verdict rule's paragraph that names another verdict rule must be covered by a
+declared pair relating those two specific rules, or be pinned by name in the check's
+`CROSSREF_ALLOWED` list.** No vocabulary is consulted — there is no list of exception-sounding
+words to phrase around, and being party to one pair exempts a rule from nothing with respect to any
+other rule. `T15b` fails if a pin stops matching, so the list cannot silently widen, and `T16`
+fails if `R3`'s or `R7`'s own paragraph says anything about a takedown without naming `R11`, which
+is what stops the correct exception and a contradicting one from sitting side by side in the same
+paragraph. This
 convention exists because review round 3 (finding 2) found Ludwig's takedown ruling written into
 `R11` while `R3`, 792 lines earlier, stayed unconditional: two faithful readings of the same
 document disagreed about whether the platform's own legally-mandated takedown is accepted or
@@ -59,7 +68,7 @@ reject nothing. The rule declarations are therefore the authority; the table is 
 rejection message, keyed by rule id, and it is exactly as long as the set of verdict rules is.
 
 Because a promise not to let the two drift again is worth nothing, `docs/tasks/032-verify.sh`
-enforces the convention mechanically: its `T1`-`T14` checks fail the verification run if a rule id
+enforces the convention mechanically: its `T1`-`T16` checks fail the verification run if a rule id
 is declared twice, if a declared verdict rule such as `R1` has no taxonomy row, if a taxonomy row
 names a rule that no longer exists or is malformed, or if a paragraph containing the uppercase
 token `MUST` cites no rule id. The convention that last check enforces is that **every paragraph
@@ -576,7 +585,13 @@ transcript; the correction was applied there and not here. The filter above is n
 same order it emits. The values were always correct; only the key order was unproducible.
 `docs/tasks/032-verify.sh`'s `J` checks now assert this for **every** `gh api ... --jq '{…}'`
 transcript in this document, deriving the permitted key set from each filter, so the next instance
-cannot hide behind a per-transcript check again.)
+cannot hide behind a per-transcript check again. "Every" became true only in fix round 5: until
+then the scanner read raw lines, so a command written with a backslash continuation — the style
+this document uses for its three `curl` transcripts — was silently skipped, and a fabricated
+`{"type":"User","login":"ghost","id":10137}` shipped behind one backslash at 147 checks passing
+(review round 4, finding 3). Continuations are now folded before the scan, and `J6` is the
+positive control that keeps them folded: it runs the real scanner over a continued transcript and
+reddens if it stops seeing it.)
 `state == "active"` is the success condition when this endpoint answers at all. **This endpoint is
 a candidate, not an answer**, exactly as the round-1 fix brief named it: it removes the `302`/
 redirect ambiguity, but it does not remove the "is CI's own identity an org member" question above
@@ -598,16 +613,41 @@ is a **current member** of the organisation `reserved-namespaces.json` records a
 owner, **unless `R11` authorises the PR as a takedown**, on exactly the terms and with exactly the
 precedence `R3` states above: `R11` is evaluated first, and only a PR whose author is the
 platform's own identity and whose diff is nothing but the takedown mutation escapes this rule. The
-exception is stated here for completeness of the reconciliation rather than because it changes many
-verdicts — the platform's own identity is the organisation that owns every reserved namespace
-today, so such a PR normally satisfies this rule outright — but `R11` names `R3` **and** `R7` as
-the rules it lifts, and a rule named as overridden that carries no trace of the override is exactly
-the defect review round 3 found (finding 2). This is a reservation, not an ownership exemption: every other account is rejected, exactly
+exception is load-bearing here rather than decorative: **a GitHub organisation is not a member of
+itself**, so the platform's own identity fails this rule's membership test outright, and `R11` is
+the only thing that can authorise the platform's own legally-mandated takedown of a version inside
+`mc:` or `test:` — the half of the precedence `R11` declares that names this rule therefore fires
+on real PRs rather than on none. An earlier revision of this paragraph asserted the reverse (that
+the platform's own identity "normally satisfies this rule outright"), which would have left review
+round 1's finding B5 alive in exactly the namespaces the platform's own content lives in:
+`gh api orgs/worldofmodcraft/members/worldofmodcraft -i` answers `HTTP/2.0 404`, and `404` is the
+status this document's membership paragraphs above define as "is not a member" (the transcript is
+directly below this paragraph, re-run 2026-09-08 under this machine's already-active `gh`
+identity). This is a reservation, not an ownership exemption: every other account is rejected, exactly
 as an ordinary namespace rejects a non-owner, citing ADR-0119 by name in the rejection message
 (ADR-0119 §3: "rejects it otherwise with a message naming this ADR"). It applies to a first publish
 and to every later version alike — see "governs a reserved namespace's first publish" above — and
 it is an active check re-run on each CI evaluation, never an early exit taken because a namespace
 is special.
+
+**The membership test, run rather than reasoned about** (guardrail 6c — `gh` is on this machine,
+so it was run, not caveated). The same endpoint, asked about a real member and about the
+organisation itself:
+```
+$ gh api orgs/worldofmodcraft/members/womcraft -i | head -1
+HTTP/2.0 204 No Content
+$ gh api orgs/worldofmodcraft/members/worldofmodcraft -i | head -1
+HTTP/2.0 404 Not Found
+$ gh api orgs/worldofmodcraft/members --jq '{login: .[0].login, id: .[0].id, count: length}'
+{"count":1,"id":324089373,"login":"womcraft"}
+```
+`204` is "is a member" and `404` is "is not a member", the same two statuses `R9` and the
+membership paragraphs above already turn on, and the organisation's entire member list is the one
+individual account `womcraft` — the organisation does not appear in it. What this does **not**
+establish is which concrete `pulls.user.id` a PR opened on the organisation's behalf carries; that
+question is marked, still open, at `R11` below. It does not need to be settled here: the membership
+test answers `404` for the organisation's own id whatever mechanism produces it, so `R11`'s lift of
+`R7` is required either way.
 
 ## Where the check runs and what it does on failure: the rejection taxonomy
 
@@ -828,15 +868,16 @@ of ownership arises. Two independent rules, because the defect was that a checke
 Found in review round 2 (finding B2).
 
 **Attempt 8 — wrap something else in a takedown.** The platform's own account (the only account
-`R11` authorises to open a takedown against a namespace it does not own) opens a PR that sets a
+`R11` authorises to open a takedown at all) opens a PR that sets a
 version's `status` to `"removed"` with a reason **and**, in the same diff, adds a new version to
 that entry, or edits its `owner`, or rewrites its `page.json`. The bet is that a checker
 implementing `R11` classifies the PR as "a takedown" from the presence of the status change and
 then exempts the *whole PR* from the ordinary rules. **What the contract does about it:** `R11`'s
 authorisation covers nothing but the takedown mutation itself, in the shape
 `append-only.rules.md` defines; a PR that makes any other change is not a takedown for `R11`'s
-purposes and is judged in full by `R3`/`R7`, which reject it because the platform account does not
-own that namespace. `append-only.rules.md`'s own frozen-field rule is the second, independent
+purposes and is judged in full by `R3`/`R7` — which reject it either because the platform account
+does not own that namespace (`R3`), or, for `mc:`/`test:`, because the organisation is not a member
+of itself and so fails the membership test (`R7`). `append-only.rules.md`'s own frozen-field rule is the second, independent
 barrier against the `owner`-editing variant, exactly as it is for Attempt 1.
 
 **Attempt 9 — claim the precedence without the authorisation.** An account that is **not** the
@@ -940,15 +981,47 @@ and booked it for Ludwig.
 **Ludwig ruled on 2026-09-07: the platform's own organisation account may open a takedown PR, and
 the human gate sits on the merge, not on the opening.**
 
-**R11 (MUST)** — a PR performing a takedown against a namespace its author does not own is
-authorised only when its author is the platform's own identity: the account
-`reserved-namespaces.json` records as the reserved namespaces' owner — `provider: "github"`,
-`id: 324218296`, the `worldofmodcraft` organisation. Every other author is rejected by `R3` or
-`R7` exactly as any other unauthorised PR is, with no takedown carve-out at all. The authorisation
+**Scope note — what in `R11` below is Ludwig's ruling and what is the manager's reading of it**
+(manager, 2026-09-08, **pending Ludwig's confirmation**). Ludwig ruled on the case in front of him
+and phrased it "against a namespace it does not own". Review round 4 (finding 1) showed that
+reading that phrase as the rule's scope disables the power entirely for `mc:` and `test:` — the
+namespaces the platform's own content lives in — because a GitHub organisation is not a member of
+itself, so `R7` rejects the platform's own identity there and `R11`, scoped away from owned
+namespaces, never reaches it. The manager decided on 2026-09-08 that the narrow phrasing
+under-reaches rather than carving anything out, so `R11` below authorises the platform's own
+identity regardless of whether it owns the namespace. What is **not** in question either way: the
+exception surface is unchanged — `R11` authorises nothing but the takedown mutation itself, exactly
+as narrowly as before — and MANAGER.md §7's written-approval gate on the **merge** is untouched by
+this or by anything else in this document.
+
+**R11 (MUST)** — a PR performing a takedown against **any** namespace, whether or not its author
+owns it, is authorised only when its author is the platform's own identity: the account
+`reserved-namespaces.json` records — at the PR's merge-base revision of that file, never the
+revision the PR itself proposes, exactly as `I4` requires for every other reading of that file —
+as the reserved namespaces' owner: `provider: "github"`, `id: 324218296`, the `worldofmodcraft`
+organisation. The scope is every namespace deliberately, and not only the ones the platform does
+not own: the platform owns `mc:` and `test:` through that same account, a GitHub organisation is
+not a member of itself, and `R7` therefore rejects the platform's own identity for precisely the
+namespaces the platform's own content lives in — so a rule scoped to namespaces its author does
+not own would leave review round 1's finding B5 alive there, and would leave the half of the
+precedence below that names `R7` firing on nothing at all (review round 4, finding 1). Every other
+author is rejected by `R3` or `R7` exactly as any other unauthorised PR is, with no takedown
+carve-out at all. The two conditions this rule names — the platform's own identity **and** the
+diff described next — are not merely necessary but jointly **sufficient**: a PR meeting both is
+authorised, and no third condition is held back elsewhere in this document, which is what `R3`'s
+and `R7`'s "if, and only if" already say from their own ends. The authorisation
 covers **nothing but** the takedown mutation itself, in the shape `append-only.rules.md` defines: a
 PR that sets `status` to `"removed"` with its reason *and* makes any other change — a new version,
 an edited `owner`, a `page.json` rewrite — is not a takedown for this rule's purposes and is judged
-in full by the ordinary rules (Attempt 8 above). **`R11` does not merely narrow who may open a
+in full by the ordinary rules (Attempt 8 above). **How many takedown mutations one authorised PR
+may carry**: any number, provided the diff contains nothing else — "the takedown mutation" names a
+*kind* of change here, matching `append-only.rules.md`'s own heading "The one permitted in-place
+mutation: takedown", so a legal notice covering three versions of one entry is one PR and not
+three. That reading enlarges nothing about what may be done to any single version, and it does not
+touch the merge gate: MANAGER.md §7's written approval is given per PR and names every version the
+PR removes. It is **the manager's decision of 2026-09-08, pending Ludwig's confirmation**, because
+the strict reading (one version per PR) is equally faithful to the words this rule already had, and
+the choice of which is meant belongs to him. **`R11` does not merely narrow who may open a
 takedown; it is what makes one openable at all, and the rules it lifts are named here rather than
 left for a reader to infer — Precedence: R11 over R3, R7.** For the one PR `R11` authorises, `R3`
 and `R7` do not apply, so `I7`'s "every rule that applies to it" is satisfied without them; for

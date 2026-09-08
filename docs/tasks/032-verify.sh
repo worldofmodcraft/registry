@@ -293,6 +293,28 @@ expect_hits_in_para() {
     fi
 }
 
+expect_no_hits_in_para() {
+    # The absence twin of expect_hits_in_para (fix round 5). Same uniqueness discipline: an
+    # anchor matching zero or several paragraphs is not a scope and FAILS, so this can never
+    # degrade into "the text is absent because I looked in the wrong place". Paragraph-scoped
+    # absence is what an "an earlier revision said the opposite, and the opposite is gone"
+    # claim needs -- a whole-document absence check cannot make it, because this document
+    # legitimately quotes the deleted claim when explaining why it was deleted.
+    local label="$1" anchor="$2" pattern="$3" file="${4:-$DOC}" paras n
+    paras=$(awk 'BEGIN{RS=""} {gsub(/\n/," "); print}' "$file" | grep -E "$anchor")
+    n=$(printf '%s' "$paras" | grep -c . || true)
+    if [ "$n" -ne 1 ]; then
+        fail "$label -- anchor /$anchor/ matched $n paragraphs in $file; an anchor that is not unique is not a scope"
+        return
+    fi
+    if printf '%s\n' "$paras" | grep -qE "$pattern"; then
+        fail "$label -- pattern /$pattern/ is STILL present in the ONE paragraph anchored by /$anchor/ (expected it gone)"
+        printf '%s\n' "$paras" | grep -oE ".{0,80}$pattern.{0,80}" | sed 's/^/        /'
+    else
+        pass "$label"
+    fi
+}
+
 section() { printf '\n== %s ==\n' "$1"; }
 
 printf '032-verify.sh -- task 032 fix-round-1 acceptance verification\n'
@@ -737,7 +759,7 @@ for rid, flat in sorted(para_of_rule.items()):
     for m in PREC.finditer(flat):
         pairs.append((rid, m.group(1), re.findall(r'R\d+', m.group(2))))
 
-pf("T10 the document declares at least one precedence pair in the `Precedence: Rx over Ry` form (a search that finds nothing is a broken search: with no pair declared, T11 and T12 would both be vacuous)",
+pf("T10 the document declares at least TWO precedence pairs in the `Precedence: Rx over Ry` form (the threshold the code tests, restated after round-4 non-blocking 4 found the label saying \"at least one\") (a search that finds nothing is a broken search: with no pair declared, T11 and T12 would both be vacuous)",
    len(pairs) >= 2, "found %d: %s" % (len(pairs), pairs))
 
 bad = []
@@ -763,25 +785,117 @@ for _, over, unders in pairs:
 pf("T12 every rule that another rule overrides cites its override in its own paragraph (the exception is reconciled at BOTH ends, never only at the overriding one -- round-3 finding 2)",
    not unreconciled, "; ".join(unreconciled))
 
-# The reverse fence: exception language inside a VERDICT rule's paragraph, naming another verdict
-# rule, must be backed by a declared pair. This is what stops the next exception landing in prose
-# with no precedence statement. Scoped to R rules deliberately -- they are the rules that reject,
-# and an unreconciled exception among them is the defect that reached three review rounds.
-EXC = re.compile(r'\bunless\b|\bdoes not apply\b|\bdo not apply\b|\bException for\b|\breplaces\b|\breplaced by\b|\bsupersede', re.I)
-in_a_pair = set()
+# --- THE EXCEPTION FENCE (fix round 5, review-round-4 finding 2) -----------------------------
+# Round 4's `T13` could not fire for 7 of the 11 verdict rules, and could not see an exception
+# written in any words outside a seven-item phrase list. Two independent defects, both real and
+# both demonstrated green by the reviewer before this rewrite:
+#   (a) BLANKET EXEMPTION. `in_a_pair` was built from BOTH ends of every declared pair and then
+#       used as a per-RULE exemption, so a rule participating in ONE pair became exempt for
+#       EVERY other rule. R3, R4, R5, R6, R7, R8 and R11 were all in a pair, so `T13` was
+#       permanently silent on them -- including R3 and R7, the two whose unreconciled exception
+#       cost three review rounds. Only R1, R2, R9 and R10 were guarded at all.
+#   (b) A PHRASE LIST. The detector matched seven fixed phrases, so "is overridden by",
+#       "notwithstanding", "takes precedence over", "is lifted by" were invisible even in the
+#       four rules it still looked at. A phrase list is a list of words the next author walks
+#       around; this task has now met that same drift defect three times under different names.
+# The fix is the inversion the fix brief asked for, and it is the boring one (ADR-0103): an
+# exception-shaped sentence is not RECOGNISED by its vocabulary, it is REQUIRED to carry its
+# `Precedence:` declaration to be legal at all. `T15` is that rule and needs no vocabulary --
+# any sentence in a verdict rule's paragraph that names another verdict rule must be covered by
+# a declared pair relating those two rules, or be pinned in the allow-list below, which is the
+# same ratchet shape `T8b` and `V5` already use and is auditable in a diff.
+# `T13` stays -- narrowed and made pair-aware, never weakened -- as the phrase-named net, so a
+# failure can still say "this reads as an exception" rather than only "this names another rule".
+SENT_SPLIT = re.compile(r'(?<=[.:;!?])\s+')
+
+def sentences(flat):
+    return [s for s in SENT_SPLIT.split(flat) if s.strip()]
+
+# Pair-aware relation: the declared pairs relate SPECIFIC rules, in both directions. A rule
+# being in some pair says nothing about its relation to a rule that pair does not name.
+related = set()
 for _, over, unders in pairs:
-    in_a_pair.add(over)
-    in_a_pair.update(unders)
-loose = []
+    for u in unders:
+        related.add((over, u))
+        related.add((u, over))
+
+# THE RATCHET. Every sentence below names another verdict rule WITHOUT disapplying it (a
+# cross-reference, not an exception), and no declared pair relates the two rules. They are
+# pinned by rule id plus the first 70 characters of the sentence, so a NEW cross-referencing
+# sentence -- which is what every one of the three re-landed attacks below is -- cannot appear
+# without a deliberate edit here, with its reason visible in the diff.
+CROSSREF_ALLOWED = [
+    ("R3", "**R3 (MUST)** — for a namespace that already exists at the PR's merge-"),
+    ("R6", "**R6 (MUST)** — at that same first publish of a namespace **not** on t"),
+    ("R6", "no rule ever compares it to decide who may touch an existing namespace"),
+    ("R7", "**R7 (MUST)** — a PR touching a namespace on the reserved list is auth"),
+    # REMOVED in fix round 5: R7's sentence "The exception is stated here for completeness of the
+    # reconciliation rather than because it changes many verdicts -- the platform's own identity
+    # is the organisation that owns every reserved namespace today, so such a PR normally
+    # satisfies this rule outright". That claim is FALSE (review round 4, finding 1): a GitHub
+    # organisation is not a member of itself, so the platform's own identity fails R7 outright.
+    # The sentence is deleted from the contract rather than caveated (guardrail 6c), so its pin
+    # is deleted here -- and T15b is what forces this line to be touched at all.
+    ("R8", "Authorisation for such a PR is `R7`, organisation membership, from the"),
+]
+ALLOWED = set(CROSSREF_ALLOWED)
+
+EXC = re.compile(
+    r'\bunless\b|\bdoes not apply\b|\bdo not apply\b|\bException for\b|\breplaces\b'
+    r'|\breplaced by\b|\bsupersede|\boverrid|\bnotwithstanding\b|\btakes precedence over\b'
+    r'|\bis lifted by\b|\byields to\b|\bescapes\b|\bexempt|\bcarve-out\b|\bset aside\b'
+    r'|\bdisappl|\bin place of\b|\binstead of\b', re.I)
+
+loose, unpaired, seen_keys = [], [], set()
 for rid, flat in sorted(para_of_rule.items()):
     if not rid.startswith('R'):
         continue
-    others = {x for x in re.findall(r'\bR\d+\b', flat) if x != rid and x in declared}
-    if others and EXC.search(flat) and rid not in in_a_pair:
-        loose.append("%s: exception language naming %s with no declared precedence pair -- `%s`"
-                     % (rid, sorted(others), flat[:120]))
-pf("T13 no verdict rule states an exception against another verdict rule without a declared precedence pair (an exception cannot land unreconciled again)",
+    for s in sentences(flat):
+        others = {x for x in re.findall(r'\bR\d+\b', s) if x != rid and x in declared}
+        if not others:
+            continue
+        key = (rid, s[:70])
+        uncovered = sorted(o for o in others if (rid, o) not in related)
+        if not uncovered:
+            continue
+        if key in ALLOWED:
+            seen_keys.add(key)
+            continue
+        unpaired.append("%s names %s in a sentence no declared precedence pair relates them by, "
+                        "and the sentence is not in CROSSREF_ALLOWED -- `%s`" % (rid, uncovered, s[:110]))
+        if EXC.search(s):
+            loose.append("%s: exception language against %s with no declared precedence pair "
+                         "relating them -- `%s`" % (rid, uncovered, s[:110]))
+
+pf("T13 no verdict rule states an exception against ANOTHER SPECIFIC verdict rule without a declared precedence pair relating those two rules (round-4 finding 2a: being in some pair used to exempt a rule from every other rule)",
    not loose, "; ".join(loose))
+pf("T15 every sentence in a verdict rule's paragraph that names another verdict rule is either covered by a declared precedence pair relating the two, or pinned in CROSSREF_ALLOWED -- no vocabulary is consulted, so a new exception cannot be phrased around a word list (round-4 finding 2b)",
+   not unpaired, "; ".join(unpaired))
+stale = [k for k in CROSSREF_ALLOWED if k not in seen_keys]
+pf("T15b every CROSSREF_ALLOWED entry still matches a real sentence (a pin that matches nothing is a broken search, 2c rule 1, and it silently widens the allow-list)",
+   not stale, "entries matching nothing in the document: %s" % stale)
+
+# T16 -- THE ADDITIVE ATTACK (round-4 finding 2, the reproduction that mattered). `P2` checks
+# that R3's paragraph CONTAINS the correct "if, and only if, `R11` authorises" sentence; nothing
+# checked that it contains no SECOND sentence saying the opposite. The reviewer re-landed
+# Attempt 9's attack additively -- keeping the correct sentence and adding "a PR whose diff is
+# nothing but the takedown mutation does not apply `R3` either, whoever opened it" beside it --
+# and the suite stayed at 147 PASS / exit 0. That sentence names no other rule, so `T13`/`T15`
+# cannot see it either. The rule here is narrow and boring: R3 and R7 are the two rules whose
+# ONLY exception is the takedown, so inside their paragraphs NOTHING may be said about takedowns
+# without naming the rule that authorises them. A diff-shape sentence cannot name `R11` and
+# still say what Attempt 9 needs it to say.
+tk = []
+for rid in ('R3', 'R7'):
+    body = para_of_rule.get(rid, "")
+    if not body:
+        tk.append("%s has no declaring paragraph, so its takedown sentences cannot be checked" % rid)
+        continue
+    for s in sentences(body):
+        if re.search(r'takedown', s, re.I) and not re.search(r'\bR11\b', s):
+            tk.append("%s: `%s`" % (rid, s[:140]))
+pf("T16 inside R3's and R7's own paragraphs, every sentence that mentions a takedown names R11 -- so the exception can never be restated as a property of the DIFF's shape beside the correct one (Attempt 9, re-landed additively in round-4 finding 2)",
+   not tk, "sentence(s) discussing a takedown without naming R11: %s" % "; ".join(tk))
 
 # --- the taxonomy must actually cover the five cases the last two review rounds found missing ---
 need = {
@@ -809,6 +923,15 @@ expect_hits_in "B1a.3 the how-to-read section explains the rule-id convention a 
     'How to read this document' 'every paragraph of this document containing an uppercase .MUST. cites a rule id'
 expect_hits_in "B1a.4 the how-to-read section names the verify check that makes drift detectable rather than promised" \
     'How to read this document' '032-verify\.sh'
+# FIX ROUND 5, review-round-4 non-blocking 2. Round 3's correction -- the honest statement of what
+# T8 is NOT -- was itself unguarded: the whole "What that fence is" paragraph could be deleted with
+# the suite at 147 PASS / exit 0, because B1a.3 checks the paragraph BEFORE it. Guardrail 6b asks
+# the caveat to travel with the claim; nothing kept it there. Two checks, because the paragraph
+# makes two separate corrections (2c rule 3).
+expect_hits_in_para "B1a.5a the correction paragraph still says plainly that T8 is a typographic convention and NOT a detector of normativity (round-3 non-blocking 1's correction, now guarded)" \
+    '\*\*What that fence is, stated precisely rather than generously\*\*' 'not a detector of.{0,3}normativity'
+expect_hits_in_para "B1a.5b the same paragraph still names the ratchet that replaces the fence T8 is not -- T8b pinning the fourteen lowercase-must paragraphs" \
+    '\*\*What that fence is, stated precisely rather than generously\*\*' '.T8b. pins that set of fourteen'
 
 # --------------------------------------------------------------------------------
 section "B2 (round 2) -- one authoritative source for the namespace, and the other must agree"
@@ -849,8 +972,16 @@ expect_hits_in_para "B4a.3 detecting the 302 without following it is a declared 
     '\*\*I5 \(MUST NOT\)\*\*' '302'
 expect_hits_in_para "B4a.4 an indeterminate membership answer has its own verdict rule, failing closed" \
     '\*\*R9 \(MUST\)\*\*' '302'
-expect_hits_in "B4a.5 running as a confirmed org member is stated as an ADDITION to the 302 arm, never an alternative to it" \
-    'reserved-namespace case' 'in addition to|never instead of|not a substitute for the'
+# FIX ROUND 5, review-round-4 non-blocking 1. B4a.5's label named TWO things behind one
+# alternation, so either half could leave silently: deleting "It is **never instead of** them."
+# from the contract left the suite at 147 PASS / exit 0, because `in addition to` still matched.
+# That is the round-3-finding-4 shape at lower stakes, and 2c rule 3 is explicit about it, so the
+# check is split, one per half of the old label. (The remaining alternation inside B4a.5b is over
+# two spellings of the SAME claim, not over two claims.)
+expect_hits_in "B4a.5a running as a confirmed org member is stated as an ADDITION to the 302 arm" \
+    'reserved-namespace case' 'in addition to'
+expect_hits_in "B4a.5b running as a confirmed org member is stated to be NEVER an alternative to the 302 arm (the half that used to hide behind B4a.5's alternation)" \
+    'reserved-namespace case' 'never instead of|not a substitute for the'
 expect_hits_in "B4a.6 the redirect-following defaults are stated for each client separately, with what was tested here" \
     'reserved-namespace case' 'verified in this environment|verified here'
 
@@ -1006,6 +1137,43 @@ expect_hits_in_para "P11 I7's 'every rule that applies' is reconciled with the p
     '\*\*I7 \(MUST\)\*\*' 'Precedence|precedence'
 expect_hits_in "P12 the takedown section still leaves the MERGE gate to MANAGER.md Section 7, unabsorbed and unweakened" \
     'Takedown PRs' 'R11. decides who may open'
+
+# --- P13-P23: REVIEW ROUND 4, FINDING 1 -------------------------------------------------------
+# Round 4's R7 paragraph asserted, flat, that "the platform's own identity is the organisation
+# that owns every reserved namespace today, so such a PR normally satisfies this rule outright".
+# It is false, and it took under a minute to falsify with a tool already on this machine
+# (guardrail 6c): a GitHub organisation is not a member of itself, and R7 tests CURRENT
+# MEMBERSHIP. `gh api orgs/worldofmodcraft/members/worldofmodcraft -i` answers HTTP/2.0 404, the
+# status this document defines as "is not a member". The consequence was not a stray sentence:
+# with R11 scoped to "a namespace its author does not own", and R8 binding every reserved
+# namespace's owner to that same organisation, R11 could never apply to mc:/test: -- so the
+# platform could not take down a version in its own reserved namespaces (round-1 finding B5's
+# outcome, alive) and the R7 half of `Precedence: R11 over R3, R7` fired on nothing.
+# Nothing in round 4's suite covered it: P4 asserts only that the string `unless R11 authorises`
+# is present in R7's paragraph, which is exactly how a false factual claim shipped beside it.
+# These assert the CONTENT and its DIRECTION (the B1.12a pattern), not the mention.
+expect_hits_in_para "P13 R7's paragraph states the fact its exception depends on -- a GitHub organisation is NOT a member of itself, so the platform's own identity fails R7's membership test outright (round-4 finding 1: it asserted the reverse)" \
+    '\*\*R7 \(MUST\)\*\*' 'organisation is not a member of.{0,4}itself'
+expect_hits_in_para "P14 R7's paragraph states the CONSEQUENCE: R11 is what authorises the platform's own takedown inside mc:/test:, so the R7 half of the precedence fires on real PRs rather than on none" \
+    '\*\*R7 \(MUST\)\*\*' 'only thing that can authorise.*inside.*.mc:.*or.*.test:'
+expect_no_hits_in "P15 the false reconciliation claim (that the platform's own identity owns every reserved namespace and so satisfies R7 outright) is GONE from the reserved-namespace section, not caveated in place (guardrail 6c)" \
+    'reserved-namespace case' "the platform.s own identity is the organisation that owns every reserved namespace"
+expect_hits_in "P16 the claim carries its verification at the point it is made (guardrail 6b): the 204/404 contrast on the same endpoint, for a real member and for the organisation itself" \
+    'reserved-namespace case' 'members/worldofmodcraft -i'
+expect_hits_in_para "P17 R11's scope is EVERY namespace, owned or not, so the R7 half of its precedence has something to fire on (manager decision 2026-09-08 on round-4 finding 1, pending Ludwig's confirmation)" \
+    '\*\*R11 \(MUST\)\*\*' 'against \*\*any\*\* namespace, whether or not its author'
+expect_no_hits_in_para "P18 R11 is no longer scoped away from namespaces its author owns -- the narrow phrasing that made the R7 half of the precedence unreachable is gone" \
+    '\*\*R11 \(MUST\)\*\*' 'takedown against a namespace its author does not own'
+expect_hits_in_para "P19 R11 names the platform identity's numeric id, and it is the id reserved-namespaces.json actually records ($ORG_ID, read from the data file, never from a literal here)" \
+    '\*\*R11 \(MUST\)\*\*' "$ORG_ID"
+expect_hits_in_para "P20 R11 says which revision of reserved-namespaces.json it reads the platform identity from (round-4 non-blocking 8: nothing said, and I4 bound only list membership)" \
+    '\*\*R11 \(MUST\)\*\*' 'merge-base revision of that file'
+expect_hits_in_para "P21 R11 states the SUFFICIENT condition in its own paragraph, not only the necessary one (round-4 non-blocking 7: a reader opening at R11 could not derive it)" \
+    '\*\*R11 \(MUST\)\*\*' 'jointly \*\*sufficient\*\*'
+expect_hits_in_para "P22 R11 says how many takedown mutations one authorised PR may carry, and marks the choice as pending Ludwig's confirmation (round-4 non-blocking 6)" \
+    '\*\*R11 \(MUST\)\*\*' 'How many takedown mutations one authorised PR.*pending Ludwig.s confirmation'
+expect_hits_in "P23 the widening of R11's scope is marked as the MANAGER's reading of Ludwig's ruling, pending his confirmation, rather than presented as his words" \
+    'Takedown PRs' 'manager.s reading of it.*pending Ludwig.s confirmation|pending Ludwig.s confirmation.*manager decided'
 
 # --------------------------------------------------------------------------------
 section "B1 (round 1) -- the document states the caller-dependent rule, the redirect hazard, and the Actions-token caveat"
@@ -1295,23 +1463,51 @@ def check_keyset(pairs, spec, path, problems):
 CMD = re.compile(r"gh api\b.*?--jq\s+'(\{.*?\})'")
 JSON_TAIL = re.compile(r'(\{.*\})\s*$')
 
-blocks = []
-for i, line in enumerate(lines):
-    if not line.lstrip().startswith('$ '):
-        continue          # command lines only: prose that mentions the command is not a transcript
-    m = CMD.search(line)
-    if not m:
-        continue
-    outs = []
-    for j in range(i + 1, len(lines)):
-        t = lines[j].strip()
-        if t == '' or t.startswith('```') or t.startswith('$ ') or t.startswith('('):
-            break
-        jm = JSON_TAIL.search(t)
-        if not jm:
-            break
-        outs.append((j + 1, jm.group(1)))
-    blocks.append((i + 1, m.group(1), outs))
+def scan_blocks(src_lines):
+    """Every `$ gh api ... --jq '{...}'` transcript in `src_lines`, as
+    (1-based command line number, filter text, [(1-based output line number, JSON text)]).
+
+    FIX ROUND 5, review-round-4 finding 3. This scanner used to read raw lines only, so a
+    command written with a backslash continuation -- THE HOUSE STYLE THIS VERY DOCUMENT USES
+    for its three `curl` transcripts -- matched nothing and was silently skipped, while the
+    contract claimed `J` checks EVERY such transcript. A fabricated
+    `{"type":"User","login":"ghost","id":10137}` (a key order gojq cannot emit) shipped at
+    147 PASS / exit 0 behind one backslash. Continuations are therefore folded into the
+    command line BEFORE the scan, which is the same "wrapping is presentational, never
+    semantic" principle `expect_no_hits` already applies to prose. `J6` below is the fixture:
+    it runs THIS function -- not a copy -- over a synthetic transcript written with a
+    continuation, and reddens the moment the folding stops happening.
+    """
+    folded = []               # (text, 1-based line number of the command's FIRST line)
+    i = 0
+    while i < len(src_lines):
+        cur = src_lines[i]
+        start = i
+        while cur.rstrip().endswith('\\') and i + 1 < len(src_lines):
+            i += 1
+            cur = cur.rstrip()[:-1].rstrip() + ' ' + src_lines[i].strip()
+        folded.append((cur, start, i))
+        i += 1
+    out_blocks = []
+    for idx, (line, start, end) in enumerate(folded):
+        if not line.lstrip().startswith('$ '):
+            continue      # command lines only: prose that mentions the command is not a transcript
+        m = CMD.search(line)
+        if not m:
+            continue
+        outs = []
+        for j in range(end + 1, len(src_lines)):
+            s = src_lines[j].strip()
+            if s == '' or s.startswith('```') or s.startswith('$ ') or s.startswith('('):
+                break
+            jm = JSON_TAIL.search(s)
+            if not jm:
+                break
+            outs.append((j + 1, jm.group(1)))
+        out_blocks.append((start + 1, m.group(1), outs))
+    return out_blocks
+
+blocks = scan_blocks(lines)
 
 pf("J1 the contract contains `gh api ... --jq '{...}'` transcripts for this check to read (a search that finds nothing is a broken search)",
    len(blocks) > 0, "found %d" % len(blocks))
@@ -1341,6 +1537,41 @@ for lineno, filt, outs in blocks:
             check_order(pairs, "", problems)
         pf("J5 line %d: %s is output the filter %s could really produce" % (outno, raw, filt),
            not problems, "; ".join(problems))
+
+# --- J6: THE POSITIVE CONTROL FOR THE SCANNER ITSELF (fix round 5, review-round-4 finding 3) ---
+# The finding was not a wrong verdict, it was a transcript the scanner never looked at: a
+# backslash continuation made `gh api users/ghost \ --jq '{type,login,id}'` invisible, and the
+# impossible key order under it shipped at 147 PASS / exit 0. A scanner that silently skips its
+# subject is the "search that finds nothing is a broken search" defect (2c rule 1) one level up,
+# and the round-4 J checks could not detect it because there was nothing to detect: no block, no
+# check, no FAIL. So the fixture is a synthetic transcript, written in the continuation style,
+# run through the REAL `scan_blocks` and the REAL keyset/order checks -- not a copy of either.
+# Remove the continuation folding from `scan_blocks` and J6a reddens; remove the key-order check
+# and J6b reddens. Three sub-checks, because the label names three things (2c rule 3).
+FIXTURE_LINES = [
+    "```",
+    "$ gh api users/ghost \\",
+    "    --jq '{type,login,id}'",
+    '{"type":"User","login":"ghost","id":10137}',
+    "```",
+]
+fx_blocks = scan_blocks(FIXTURE_LINES)
+pf("J6a the scanner sees a `gh api --jq` command written with a backslash continuation (the style this document already uses for its three curl transcripts; round-4 finding 3 shipped a fabricated transcript behind exactly one backslash)",
+   len(fx_blocks) == 1, "scan_blocks found %d block(s) in the fixture, expected 1" % len(fx_blocks))
+pf("J6b the scanner reads the output line that follows a continued command, rather than stopping at the continuation",
+   bool(fx_blocks) and len(fx_blocks[0][2]) == 1,
+   "outputs found: %s" % ([b[2] for b in fx_blocks],))
+if fx_blocks and fx_blocks[0][2]:
+    fx_spec, _ = parse_filter(fx_blocks[0][1])
+    fx_pairs = json.loads(fx_blocks[0][2][0][1], object_pairs_hook=lambda q: q)
+    fx_problems = []
+    check_keyset(fx_pairs, fx_spec, "", fx_problems)
+    check_order(fx_pairs, "", fx_problems)
+    pf("J6c the same keyset/order checks the real transcripts get REJECT the fixture's fabricated `{\"type\":\"User\",\"login\":\"ghost\",\"id\":10137}` (gojq sorts constructed-object keys, so that order is unproducible) -- an inverted probe: this fixture must FAIL to be evidence",
+       bool(fx_problems), "the checks accepted an output gojq cannot emit")
+else:
+    pf("J6c the same keyset/order checks REJECT the fixture's fabricated output", False,
+       "the fixture transcript was never parsed, so the inverted probe could not run")
 
 sys.exit(1 if failures else 0)
 PY
