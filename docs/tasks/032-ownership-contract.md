@@ -4988,6 +4988,25 @@ re-run because they exercise the code path (`T13`/`T15`) this round did change.
   place, and the booked "merge task 042" item is marked resolved.
 - Fresh clone at final HEAD: see the block below.
 
+### Fresh clone, full verify (step 6 / step 7)
+
+```
+$ git clone /home/ludwig/wt/registry-task-032 c && cd c && git checkout 0f7256a   # all code and contract content of this round
+$ bash docs/tasks/032-verify.sh        # exit=0, 172 PASS, 0 FAIL, 0 bytes stderr
+PASS  S5 (lexical convention check, not a structural guarantee) this script contains no old.owner.id/new.owner.id equality logic (no ownership-gate implementation)
+
+== E -- this suite's own stderr (fix round 4, finding 5) ==
+PASS  E1 the deterministic part of this suite ran with completely clean stderr (0 bytes on fd 2)
+ADVISORY-PASS  E2 the advisory (live network/gh) sections wrote nothing to stderr
+
+== RESULT ==
+advisory (live, network/gh-auth dependent, informational only -- NEVER affects the verdict or exit code): 6 matched fixture/paste, 0 drifted, 1 not evaluated
+ALL CHECKS PASSED (deterministic verdict -- 0 network calls required to reach it)
+```
+
+The final commit after `0f7256a` adds only this block; the same run was repeated in a fresh clone
+at that final HEAD (result line in the fix round's report).
+
 ## Questions
 
 None blocking. Non-blocking, for the manager's `## For Ludwig` list: the pins are now five long
