@@ -1217,7 +1217,7 @@ expect_hits_in_para "P22 R11 says how many takedown mutations one authorised PR 
 expect_hits_in "P23 the scope note records that the widening was the manager's reading of Ludwig's ruling AND that Ludwig confirmed it on 2026-10-14 (D1, D2), so the decision's provenance stays visible" \
     'Takedown PRs' 'manager.s reading of it\*\*\s+\(manager, 2026-09-08; \*\*confirmed by Ludwig, 2026-10-14\*\*\)'
 expect_no_hits_in "P23b no 'pending Ludwig' marking is left on D1 or D2 anywhere in the takedown section (both confirmed 2026-10-14)" \
-    'pending Ludwig.s confirmation'
+    'Takedown PRs' 'pending Ludwig.s confirmation'
 
 # --------------------------------------------------------------------------------
 section "B1 (round 1) -- the document states the caller-dependent rule, the redirect hazard, and the Actions-token caveat"

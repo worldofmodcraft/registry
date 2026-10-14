@@ -49,9 +49,6 @@ precedence \`R3\` states above:" \
 precedence \`R3\` states above, and \`R9\` does not apply either:"
 
 # --- round 6, items 5: P17 / P22 / P23 must be able to fail on the CONFIRMED wording -----------
-mut "P17 R11 narrowed back to 'a namespace its author does not own'" \
-    "against **any** namespace, whether or not its author owns it" \
-    "against a namespace its author does not own"
 mut "P22 R11's cardinality weakened to 'exactly one' (D2)" \
     "any number, provided the diff contains nothing else" \
     "exactly one, and the diff contains nothing else"
