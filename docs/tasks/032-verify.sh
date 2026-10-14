@@ -821,14 +821,32 @@ for _, over, unders in pairs:
 
 # THE RATCHET. Every sentence below names another verdict rule WITHOUT disapplying it (a
 # cross-reference, not an exception), and no declared pair relates the two rules. They are
-# pinned by rule id plus the first 70 characters of the sentence, so a NEW cross-referencing
-# sentence -- which is what every one of the three re-landed attacks below is -- cannot appear
-# without a deliberate edit here, with its reason visible in the diff.
+# pinned by rule id plus the FULL TEXT of the sentence, so a NEW cross-referencing sentence --
+# which is what every one of the three re-landed attacks below is -- cannot appear, and no
+# existing one can be extended, without a deliberate edit here, with its reason visible in the
+# diff.
+#
+# FIX ROUND 6 (review round 5, blocking). Round 5 pinned rule id + the first 70 characters. A
+# pinned sentence takes the `if key in ALLOWED: ... continue` branch below BEFORE the EXC test,
+# so T13 and T15 skipped the whole sentence and anything appended after character 70 was
+# invisible: ", and `R9` does not apply either" added before the full stop of R3's or R7's
+# declaration sentence passed T13, T15 and T15b. The pin is now the whole sentence. Chosen over
+# (a) running EXC on pinned sentences too -- that is a vocabulary test again, the very thing
+# round 5 abandoned, and "is no longer bound by" slips past it -- and (b) a hash of the
+# sentence -- opaque in a diff, so a reviewer could not see WHAT was re-approved. The full text
+# is the boring option: any change to a pinned sentence, anywhere in it, turns T15 and T15b red
+# until a human edits the pin, and the old and new sentences are both visible in that diff.
+# Guarantee, stated exactly: a pinned sentence is accepted only byte-for-byte (after whitespace
+# normalisation); the check does not interpret what an edited sentence means.
 CROSSREF_ALLOWED = [
-    ("R3", "**R3 (MUST)** — for a namespace that already exists at the PR's merge-"),
-    ("R6", "**R6 (MUST)** — at that same first publish of a namespace **not** on t"),
-    ("R6", "no rule ever compares it to decide who may touch an existing namespace"),
-    ("R7", "**R7 (MUST)** — a PR touching a namespace on the reserved list is auth"),
+    ('R3',
+     "**R3 (MUST)** — for a namespace that already exists at the PR's merge-base and is not on the reserved list, the PR author's real `(provider, id)` pair MUST equal `old.owner.provider` and `old.owner.id`, **unless `R11` authorises the PR as a takedown** — the single exception to this rule, stated here at the point the ordinary rule is made, in the same form `R8`'s reserved-list exception takes, so that the two never have to be reconciled by a reader."),
+    ('R6',
+     "**R6 (MUST)** — at that same first publish of a namespace **not** on the reserved list, `new.owner.name_at_registration` MUST equal the PR author's username as the PR object reports it (`pulls.user.login`), compared case-insensitively per `R4`'s folding rule;"),
+    ('R6',
+     'no rule ever compares it to decide who may touch an existing namespace — `R3` compares `owner.id`, and only `owner.id`.'),
+    ('R7',
+     "**R7 (MUST)** — a PR touching a namespace on the reserved list is authorised only if the PR author is a **current member** of the organisation `reserved-namespaces.json` records as that namespace's owner, **unless `R11` authorises the PR as a takedown**, on exactly the terms and with exactly the precedence `R3` states above:"),
     # REMOVED in fix round 5: R7's sentence "The exception is stated here for completeness of the
     # reconciliation rather than because it changes many verdicts -- the platform's own identity
     # is the organisation that owns every reserved namespace today, so such a PR normally
@@ -836,7 +854,8 @@ CROSSREF_ALLOWED = [
     # organisation is not a member of itself, so the platform's own identity fails R7 outright.
     # The sentence is deleted from the contract rather than caveated (guardrail 6c), so its pin
     # is deleted here -- and T15b is what forces this line to be touched at all.
-    ("R8", "Authorisation for such a PR is `R7`, organisation membership, from the"),
+    ('R8',
+     'Authorisation for such a PR is `R7`, organisation membership, from the first publish onward.'),
 ]
 ALLOWED = set(CROSSREF_ALLOWED)
 
@@ -854,7 +873,7 @@ for rid, flat in sorted(para_of_rule.items()):
         others = {x for x in re.findall(r'\bR\d+\b', s) if x != rid and x in declared}
         if not others:
             continue
-        key = (rid, s[:70])
+        key = (rid, s)   # the FULL sentence (fix round 6): a 70-character prefix left everything after it unchecked
         uncovered = sorted(o for o in others if (rid, o) not in related)
         if not uncovered:
             continue
@@ -1662,7 +1681,8 @@ else
 docs/contracts/README.md
 docs/tasks/032-ownership-contract.md
 docs/tasks/032-verify.sh
-docs/tasks/032-b1-fixtures.json"
+docs/tasks/032-b1-fixtures.json
+docs/tasks/032-mutations.sh"
     OUT_OF_SCOPE=$(printf '%s\n' "$CHANGED" | grep -v '^$' | grep -vxF "$DECLARED_SCOPE" || true)
     if [ -z "$OUT_OF_SCOPE" ]; then
         pass "S3 every path changed since the merge-base with $SCOPE_REF is inside task 032's declared file scope (subset test, survives the merge)"
