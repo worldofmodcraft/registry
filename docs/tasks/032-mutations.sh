@@ -63,5 +63,5 @@ mut "P23 scope note's 'confirmed by Ludwig, 2026-10-14' removed" \
     "(manager, 2026-09-08)"
 mut "P23b a 'pending Ludwig's confirmation' marking re-introduced" \
     "Ludwig confirmed that reading on 2026-10-14, so" \
-    "Pending Ludwig's confirmation, so"
+    "pending Ludwig's confirmation, so"
 exit $BAD
