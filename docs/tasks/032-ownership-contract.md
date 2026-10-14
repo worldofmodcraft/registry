@@ -4047,7 +4047,7 @@ paragraph, rather than carrying it forward: the file is in this repository and h
 **Branch** `task/032-ownership-contract`, worktree `/home/ludwig/wt/registry-task-032`, starting
 at `60c7b66`. Nothing pushed; PR #4 untouched; `/home/ludwig/registry` cloned read-only for the
 §2c rule-4 proof and never written to. Files changed: `contracts/ownership.md`,
-`docs/tasks/032-verify.sh`, `docs/contracts/README.md`, this log. Staged by path, three commits.
+`docs/tasks/032-verify.sh`, `docs/contracts/README.md`, this log. Staged by path, six commits (corrected in fix round 6: this line said "three"; the "Commits on the branch this round" list below shows only the last three of them).
 
 **Headline:** **171 PASS / 0 FAIL / exit 0 / 0 bytes on stderr**, up from round 4's 147, with
 **23 checks added** and **none weakened or deleted**. Every one of the three blocking findings has
@@ -4099,7 +4099,8 @@ the contract, in a paragraph immediately below `R7`, so the verification travels
   under-reaches rather than carving anything out, so **`R11` authorises the platform's own
   identity to open a takedown regardless of whether it owns the namespace**, and both the `R3`
   and the `R7` half of `Precedence: R11 over R3, R7` now fire on real PRs. **Recorded in the
-  contract itself as the manager's reading of Ludwig's ruling and pending his confirmation**, in
+  contract itself as the manager's reading of Ludwig's ruling and pending his confirmation** (confirmed by
+  Ludwig, 2026-10-14, in fix round 6), in
   a "Scope note" paragraph directly under the ruling — `P23` fails if that marking leaves.
 - **Reasoning, as the contract now states it:** `R8` binds every reserved namespace's owner to the
   organisation; the organisation is not a member of itself; so under the narrow scope `R11` never
@@ -4200,7 +4201,7 @@ taken: *an exception-shaped sentence must carry its `Precedence:` declaration to
   shape `T8b` and `V5` already use, auditable in a diff. "Overridden by", "notwithstanding",
   "takes precedence over" and every phrasing nobody has thought of yet are caught identically,
   because the check never looks at the words.
-- **`T15b`** fails if a pin stops matching, so the allow-list cannot silently widen — and it is
+- **`T15b`** fails if a pin stops matching (**overstated, corrected in fix round 6**: a pin was only the first 70 characters of a sentence, so text appended after character 70 was never checked; pins are now the full sentence) — and it is
   what forced the deleted false sentence's pin to be removed by hand, with its reason in the diff.
 - **`T16`** closes the additive attack, which names no other rule and which `T13`/`T15` therefore
   cannot see: inside `R3`'s and `R7`'s own paragraphs — the two rules whose only exception is the
@@ -4296,7 +4297,7 @@ and `P16c` respectively.
 | 3 | `T8b` pins 60-character prefixes, so an allowed paragraph can grow | **Booked, unchanged.** The reviewer recorded it rather than charging it, and closing it needs the per-sentence attribution convention no round has decided. `T15`'s sentence-level ratchet is the first half of that machinery, and is now on disk for whoever decides it. |
 | 4 | `T10`'s label said "at least one"; the code tests `>= 2` | **Closed.** The label now states the threshold the code tests. The threshold was not weakened. |
 | 5 | The `R11` taxonomy row was broader than `R11` | **Closed.** Widening `R11` reconciles them, and `T17` is what keeps them reconciled (M18 reddens it). `T5`/`T6` still only check that a row exists — a general row-vs-rule equivalence check is not something a text comparison can honestly claim, and is **booked** as such. |
-| 6 | How many takedown mutations may one authorised PR carry? | **Closed, and marked.** `R11` now states: any number, provided the diff contains nothing else — "the takedown mutation" names a *kind*, matching `append-only.rules.md`'s own heading. **Marked in the contract as the manager's decision of 2026-09-08 pending Ludwig's confirmation**, because the strict reading is equally faithful and the choice is his. `P22` fails if the marking leaves. |
+| 6 | How many takedown mutations may one authorised PR carry? | **Closed, and marked.** `R11` now states: any number, provided the diff contains nothing else — "the takedown mutation" names a *kind*, matching `append-only.rules.md`'s own heading. **Marked in the contract as the manager's decision of 2026-09-08 pending Ludwig's confirmation** (confirmed by Ludwig, 2026-10-14, in fix round 6), because the strict reading is equally faithful and the choice is his. `P22` fails if the marking leaves. |
 | 7 | `R11` stated a necessary condition only | **Closed.** `R11` now states the two conditions are "not merely necessary but jointly **sufficient**", with no third condition held back elsewhere. `P21`; M13 reddens it. |
 | 8 | `I4` binds only reserved-list *membership* to `old` | **Closed.** `R11` now names the revision it reads the platform identity from — the PR's merge-base, never the revision the PR proposes, "exactly as `I4` requires". `P20`; M12 reddens it. |
 | 9 | A whitespace-only reformat rides through "nothing but" | **Booked, unchanged.** The parsed `old`/`new` model is the stated one and the reading is harmless either way; recorded as a checker choice the text leaves open, exactly as the reviewer framed it. |
@@ -4455,10 +4456,10 @@ merge status does not change that — but two consequences belong on the record:
 
 - `contracts/ownership.md` cites "CLAUDE.md rule 11, MANAGER.md guardrail 10" as the authority for
   refusing to settle the `pulls.user.id` question by reading a credential. That citation is
-  accurate against `task/042-credential-rule` and **dangling against `main` today**. It is left
+  accurate against `task/042-credential-rule` and was **dangling against `main` when this was written — no longer: task 042 is merged on platform `main`, where CLAUDE.md rule 11 and MANAGER.md §3.10 exist (corrected in fix round 6)**. It is left
   as-is deliberately: task 042 is the merge that makes it true, and editing the contract to cite a
   rule by its content instead of its number would be inventing a second numbering. **Booked for
-  the manager:** either merge task 042, or the citation needs revisiting.
+  the manager:** either merge task 042, or the citation needs revisiting — **resolved: task 042 is merged, nothing to revisit.**
 - A reader of `main` alone cannot find the rule this round was told binds it. That is worth one
   line in the mission log.
 
@@ -4478,8 +4479,8 @@ task's declared file scope): MANAGER.md §2c says "Four rules follow" and then l
 
 1. **The one decision that is not yet Ludwig's own words** is `R11`'s widened scope, and the
    second is the cardinality of takedown mutations per PR. Both are marked in the contract as the
-   manager's decisions of 2026-09-08 pending his confirmation, and `P22`/`P23` fail if either
-   marking leaves. Neither widens the exception surface; both are about reach, not permission.
+   manager's decisions of 2026-09-08 pending his confirmation **(both confirmed by Ludwig,
+   2026-10-14; see fix round 6)**, and `P22`/`P23` fail if either marking leaves. Neither widens the exception surface; both are about reach, not permission.
 2. **Attack `T15` first.** It is this round's central claim: that an exception cannot land without
    a `Precedence:` declaration or a visible allow-list edit. Try a cross-reference in a rule
    paragraph phrased in a way nobody has used yet — `T15` consults no vocabulary, so it should
@@ -4875,3 +4876,121 @@ ADVISORY-PASS  E2 the advisory (live network/gh) sections wrote nothing to stder
 advisory (live, network/gh-auth dependent, informational only -- NEVER affects the verdict or exit code): 6 matched fixture/paste, 0 drifted, 1 not evaluated
 ALL CHECKS PASSED (deterministic verdict -- 0 network calls required to reach it)
 ```
+
+---
+
+## Review round 5 (adversarial, 2026-10-14) — fix round 6
+
+**Scope of this round.** `contracts/ownership.md`, `docs/tasks/032-verify.sh`,
+`docs/tasks/032-mutations.sh` (new, added to `S3`'s declared scope), `docs/tasks/032-ownership-contract.md`.
+`docs/contracts/README.md` needed no change. Approved by Ludwig in session, 2026-10-14
+(MANAGER.md §3.4). Nothing pushed. Credential files untouched; no live credential used (CLAUDE.md
+rule 11) — every check here is a text comparison on committed files.
+
+### The blocking finding, and why it was real
+
+`T15` pinned a rule id plus the first 70 characters of a sentence. A pinned sentence took the
+`if key in ALLOWED: ... continue` branch **before** the `EXC` test, so `T13` and `T15` skipped the
+whole sentence, and anything appended after character 70 was invisible. The contract's claim
+("pinned by name … cannot silently widen", `ownership.md` "How to read this document") and this
+log's own round-5 claim for `T15b` overstated that.
+
+### Step 1 — fixtures FIRST, shown GREEN against the round-5 script (the defect)
+
+The two mutations (`docs/tasks/032-mutations.sh`, names `TA-R3`, `TA-R7`) append
+`, and \`R9\` does not apply either` before the full stop (R3) / colon (R7) of the pinned
+declaration sentence. Run against `dc221eb`'s verify script, extracted with
+`git show dc221eb:docs/tasks/032-verify.sh`, with `EXPECT_GREEN=1` (the one run where green is the
+expected, defective, outcome):
+
+```
+$ ONLY=TA EXPECT_GREEN=1 VERIFY=/tmp/old-verify-r5.sh bash 032-mutations.sh
+TA-R3 tail appended to R3's pinned declaration sentence        exit=0  171 PASS 0 FAIL  red: (none)
+TA-R7 tail appended to R7's pinned declaration sentence        exit=0  171 PASS 0 FAIL  red: (none)
+```
+
+The whole suite, `T13`, `T15` and `T15b` included, accepted a contract in which `R3` and `R7`
+each carried "and `R9` does not apply either". (An earlier attempt of this run showed one red,
+`S4`; that was only the new, not-yet-declared mutation script tripping the scope check, and says
+nothing about `T13`/`T15`. The run above removes that artefact.)
+
+### Step 2 — the fix, and why this option
+
+`CROSSREF_ALLOWED` entries are now `(rule id, FULL sentence text)`; the lookup key is the full
+sentence. Options weighed:
+
+- **Run `EXC` on pinned sentences too.** Rejected: it is a vocabulary test again, the thing round 5
+  abandoned deliberately. "…and `R9` is no longer bound by this rule" contains none of the words.
+- **Pin a hash of the normalised sentence.** Rejected: robust, but opaque in a diff — a reviewer
+  approving a pin edit would see two hex strings and could not see *what* was re-approved.
+- **Pin the full text.** Chosen: the simplest and strongest. No new mechanism; any byte changed
+  anywhere in a pinned sentence turns `T15` and `T15b` red until a human edits the pin, and the
+  old and new sentence both appear in that diff. Cost: five long literals.
+
+### Step 3 — RED with the fix
+
+```
+$ ONLY=TA bash docs/tasks/032-mutations.sh
+TA-R3 tail appended to R3's pinned declaration sentence        exit=1  169 PASS 4 FAIL  red: T13 T15 T15b T0
+TA-R7 tail appended to R7's pinned declaration sentence        exit=1  169 PASS 4 FAIL  red: T13 T15 T15b T0
+```
+
+(`T13` fires too: with the full-text key the edited sentence no longer matches its pin, so it is
+treated as an unpinned sentence and the `EXC` vocabulary test, which does contain "does not apply",
+also runs on it.) No existing check was removed or loosened; the only edits to existing checks are
+`P17`, `P22`, `P23` (step 5) and the pins.
+
+### Step 4 — the overstated claims, corrected to what is guaranteed
+
+`ownership.md` "How to read this document" now says: a pin is the rule id plus the **full text** of
+one sentence; any edit to it anywhere turns `T15`/`T15b` red until a human edits the pin; a pinned
+sentence is accepted only verbatim and a new sentence naming another verdict rule is rejected
+unless pinned or covered by a declared pair. It also states the limit: the check does **not**
+interpret meaning, a sentence naming no other verdict rule is outside `T15` (only `T16`, for
+takedowns in `R3`/`R7`, looks at those), and the reviewer approving a pin edit is the control for
+what the new sentence says. The round-5 log lines that overstated `T15b` are annotated in place.
+
+### Step 5 — D1 and D2 are Ludwig's, 2026-10-14
+
+Ludwig confirmed both ("Stjärna på allt"): **D1** `R11`'s scope is every namespace, owned or not;
+**D2** an authorised takedown PR may carry any number of takedown mutations, provided the diff
+contains nothing else. Both "pending Ludwig's confirmation" markings in the contract now read
+"confirmed by Ludwig, 2026-10-14", and the scope note keeps the provenance (manager's reading,
+then his confirmation). `P17` checks the scope sentence *and* its confirmation marking; `P22`
+checks the "any number, provided the diff contains nothing else" wording *and* its confirmation;
+`P23` checks the scope note's provenance; new `P23b` fails if any "pending Ludwig's confirmation"
+marking returns. Each can fail:
+
+```
+$ bash docs/tasks/032-mutations.sh
+P22 R11's cardinality weakened to 'exactly one' (D2)           exit=1  171 PASS 1 FAIL  red: P22
+P22 R11's D2 confirmation marking removed                      exit=1  171 PASS 1 FAIL  red: P22
+P17 R11's D1 confirmation marking removed from its paragraph   exit=1  171 PASS 1 FAIL  red: P17
+P23 scope note's 'confirmed by Ludwig, 2026-10-14' removed     exit=1  171 PASS 1 FAIL  red: P23
+P23b a 'pending Ludwig's confirmation' marking re-introduced   exit=1  171 PASS 1 FAIL  red: P23b
+M2 'overridden by R3' sentence added to R10                    exit=1  170 PASS 3 FAIL  red: T13 T15 T0
+M3 'unless R9' added to R5's declaration                       exit=1  170 PASS 3 FAIL  red: T13 T15 T0
+```
+
+(`P23b` was first written with a missing section argument, which made the script stop early with
+exit 1; it was caught by reading the PASS count drop from 172 to 99, fixed, and its mutation first
+used a capital "Pending" that the lowercase pattern did not match, so it stayed green until the
+fixture was corrected — recorded because the mutation set is what found both.) The round-5
+mutations M1, M4-M18 were not re-run: they exercise checks this round did not touch; M2 and M3 were
+re-run because they exercise the code path (`T13`/`T15`) this round did change.
+
+### Step 6 — non-blocking items
+
+- "three commits" in the round-5 log: round 5 had **six** (`8cd4180`, `8924b40`, `3eb013d`,
+  `caadf22`, `2bb4678`, `dc221eb`). Corrected in place.
+- Task 042 **is** merged on platform `main` (CLAUDE.md rule 11 and MANAGER.md §3.10 exist there).
+  The "dangling against `main`" note in round 5's "An environment conflict" section is corrected in
+  place, and the booked "merge task 042" item is marked resolved.
+- Fresh clone at final HEAD: see the block below.
+
+## Questions
+
+None blocking. Non-blocking, for the manager's `## For Ludwig` list: the pins are now five long
+literals; if more cross-reference sentences accumulate, a per-sentence attribution convention
+(round-4's booked item 3, `T8b`) is the natural next step. Lean: leave as is until a sixth pin is
+wanted.

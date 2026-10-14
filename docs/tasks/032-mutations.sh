@@ -64,4 +64,12 @@ mut "P23 scope note's 'confirmed by Ludwig, 2026-10-14' removed" \
 mut "P23b a 'pending Ludwig's confirmation' marking re-introduced" \
     "Ludwig confirmed that reading on 2026-10-14, so" \
     "pending Ludwig's confirmation, so"
+
+# --- regression: the round-5 exception mutations M2/M3 stay red (unchanged paths) -------------
+mut "M2 'overridden by R3' sentence added to R10" \
+    "that namespace exists at the merge-base, and none is created in the same diff, MUST be rejected." \
+    "that namespace exists at the merge-base, and none is created in the same diff, MUST be rejected. This rule is overridden by \`R3\`."
+mut "M3 'unless R9' added to R5's declaration" \
+    "**R5 (MUST)** — at a first publish of a namespace **not** on the reserved list," \
+    "**R5 (MUST)** — unless \`R9\` has already rejected the PR, at a first publish of a namespace **not** on the reserved list,"
 exit $BAD
