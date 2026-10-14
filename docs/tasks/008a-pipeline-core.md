@@ -394,3 +394,14 @@ all re-verified by the reference verifier; AC14 above; AC15 `grep` of eight head
   variant; Windows reserved-name behaviour; git versions other than 2.53.0; the assumed limits).
 - Q (SSRF) booked above for Ludwig. Merge authority: Ludwig approves the merge (signing involved, §7); an independent reviewer with full tools is required by the task.
 - Temp dirs: every test dir is `wom008a-*` under `/tmp`, removed in `tearDownClass`; the verify script fails if any is left behind.
+- 2026-10-15 manager:
+  - Fresh-clone re-run at 96296ac: `008a-verify.sh` rc=0, `SUMMARY failed=0`. No .pyc tracked.
+  - Independent security review (blind order): **PASS**, no blocking findings. `mutate.py`: 47 mutations, 0 not red.
+  - Booked non-blocking findings:
+    - (1) The test-only flags are gated by convention only, and `--clone-timeout nan` never times out. Reject
+      non-finite values; 008c's workflow tests must assert the flags are absent.
+    - (2) Case-collision and Unicode-normalisation of archive names belongs to the client task.
+    - (5) Add mutations for killpg, the post-exit size recheck, O_NOFOLLOW and the extraction realpath guard.
+    - (7) SSRF is handled by 008b's job split, per the implementer's lean. Ludwig's question is booked.
+    - (8) Consumers must extract relative symlinks safely.
+  - **Merge waits for Ludwig** (signing, §7).
