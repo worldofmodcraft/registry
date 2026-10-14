@@ -9,7 +9,8 @@ platform repository) already named but nobody had written yet; task 032 wrote th
 edge E16 — added to the graph by amendment after task 006's review found it had no contract at
 all. None of the three tasks implements checking logic —
 task 007 builds the CI gates and diff checker, task 008 the build pipeline, task 009 the site
-build, all reading these files. See `docs/tasks/006-contracts.md`, `docs/tasks/
+build, all reading these files. Task 008a's pipeline core is built: see `docs/pipeline/build-pipeline.md` (E7 naming,
+E9 signing, E11 archive interior) and `docs/validation/manifest-reader.md` (E1). See `docs/tasks/006-contracts.md`, `docs/tasks/
 025-boundary-contracts.md` and `docs/tasks/032-ownership-contract.md` for the full task logs.
 
 ## Files
