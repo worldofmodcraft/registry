@@ -122,7 +122,7 @@ def archive_to_tar(repo: str, commit: str, tar_path: str, *, allow_local: bool, 
         ["git", "-C", repo, "archive", "--format=tar", f"--prefix={ROOT_PREFIX}/", commit],
         git_env(allow_local), timeout=timeout, what="git archive", stdout_path=tar_path,
         watch_path=tar_path, max_bytes=max_tar_bytes,
-        size_rule="archive-uncompressed-size-limit",
+        size_rule="archive-limits/uncompressed-size",
         size_message=f"git archive output exceeds the {max_tar_bytes} byte uncompressed size limit",
         size_remedy="reduce the size of the repository tree at this commit",
     )
@@ -135,9 +135,33 @@ def gzip_deterministic(tar_path: str, out_path: str, *, timeout: float, max_byte
     res = run_bounded(
         ["gzip", "-n", "-c", tar_path], {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LC_ALL": "C"},
         timeout=timeout, what="gzip", stdout_path=out_path, watch_path=out_path, max_bytes=max_bytes,
-        size_rule="archive-compressed-size-limit",
+        size_rule="archive-limits/compressed-size",
         size_message=f"the compressed tarball exceeds the {max_bytes} byte limit",
         size_remedy="reduce the size of the repository tree at this commit",
     )
     if res.returncode != 0:
         raise PipelineError(f"gzip failed (exit {res.returncode}): {res.stderr.strip()[:500]}")
+
+
+def tree_paths(repo: str, commit: str, *, allow_local: bool, timeout: float) -> list[str]:
+    """Paths of blobs (files and symlinks) in the commit's tree; submodule links excluded."""
+    if not _HEX40.fullmatch(commit):
+        raise ValueError("commit must be 40 lowercase hex")
+    import subprocess
+    try:
+        res = subprocess.run(
+            ["git", "-C", repo, "ls-tree", "-r", "-z", commit], env=git_env(allow_local),
+            capture_output=True, stdin=subprocess.DEVNULL, timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise PipelineError(f"git ls-tree failed: {exc}")
+    if res.returncode != 0:
+        raise PipelineError(f"git ls-tree failed (exit {res.returncode}): {res.stderr.decode('utf-8', 'replace')[:500]}")
+    paths = []
+    for rec in res.stdout.split(b"\0"):
+        if not rec:
+            continue
+        meta, _, name = rec.partition(b"\t")
+        if meta.split(b" ")[1] == b"blob":
+            paths.append(name.decode("utf-8", "surrogateescape"))
+    return paths

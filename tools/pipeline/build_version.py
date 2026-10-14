@@ -224,10 +224,20 @@ def execute(args, log: Log, plan: dict) -> dict:
 
     aplan = archive.inspect_archive(tgz_path, limits)
     log(f"archive inspected: {aplan.count} entries, {aplan.total_bytes} bytes uncompressed, single root {aplan.root!r}")
+    in_commit = gitops.tree_paths(clone_dir, plan["commit"], allow_local=args.allow_local_source, timeout=60)
+    in_archive = {"/".join(e.rel) for e in aplan.entries if e.kind != "dir"}
+    dropped = sorted(p for p in in_commit if p not in in_archive)
+    if dropped:
+        log(f"note: {len(dropped)} path(s) in the commit are absent from the archive (.gitattributes export-ignore in the archived tree): " + ", ".join(dropped[:10]) + (" ..." if len(dropped) > 10 else ""))
     extract_parent = os.path.join(work, "extract")
     os.makedirs(extract_parent)
     root_dir = archive.extract(tgz_path, aplan, extract_parent)
 
+    ga = os.path.join(root_dir, ".gitattributes")
+    if os.path.isfile(ga) and not os.path.islink(ga) and os.path.getsize(ga) < 1 << 20:
+        with open(ga, "rb") as f:
+            if re.search(rb"\bexport-subst\b", f.read()):
+                log("note: .gitattributes uses export-subst: git archive expanded $Format:...$ placeholders; the expanded archive is what is scanned and signed")
     validate_manifest(root_dir, plan["mod_id"], version)
     log("manifest: mod.lua read statically, schema-valid, id and version match the entry")
     report = run_scan(extract_parent, archive.ROOT, os.path.join(work, "scan-report.json"), args.scanner)

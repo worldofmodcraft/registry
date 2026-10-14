@@ -156,12 +156,12 @@ def inspect_archive(path: str, limits: Limits | None = None, expected_root: str 
                 m = tf.next()
                 if m is None:
                     break
-                plan.count += 1
-                if plan.count > limits.max_entries:
-                    raise _reject("archive-limits/entry-count", f"more than {limits.max_entries} entries", "reduce the number of files in the repository")
                 t = m.type
                 if t == tarfile.XGLTYPE:
                     continue   # pax global header (git archive writes one); carries no file
+                plan.count += 1
+                if plan.count > limits.max_entries:
+                    raise _reject("archive-limits/entry-count", f"more than {limits.max_entries} entries", "reduce the number of files in the repository")
                 if t in (tarfile.REGTYPE, tarfile.AREGTYPE):
                     kind = "file"
                 elif t == tarfile.DIRTYPE:
