@@ -1,6 +1,6 @@
 # Task 032: The ownership check is an unwritten edge contract — registry half
 
-- **Mission:** SITE-V1 — **Status:** spec-approved (Ludwig, in session, 2026-09-05, option A)
+- **Mission:** SITE-V1 — **Status:** done (Ludwig, in session, 2026-09-05, option A)
 - **Agent / model:** doc-writer / sonnet
 - **Budget:** small
 - **Branch / worktree:** `task/032-ownership-contract` / `~/wt/registry-task-032`
@@ -5013,3 +5013,14 @@ None blocking. Non-blocking, for the manager's `## For Ludwig` list: the pins ar
 literals; if more cross-reference sentences accumulate, a per-sentence attribution convention
 (round-4's booked item 3, `T8b`) is the natural next step. Lean: leave as is until a sixth pin is
 wanted.
+
+## Review round 6 and merge (2026-10-14, manager)
+- Independent review of `dc221eb..cb18fbe` (blind order): **PASS**. All 9 mutations in `032-mutations.sh` went red on
+  their target check, and none of the §2c founding failures was found.
+- Manager re-run in a fresh clone at `cb18fbe`: `032-verify.sh` exited 0 with 0 bytes on stderr and printed `ALL CHECKS
+  PASSED`. `032-mutations.sh` exited 0, each mutation red as targeted.
+- Booked, non-blocking (reviewer note 1): a sentence appended to R3 or R7 that names only a declared-pair partner and
+  avoids the word "takedown" (for example " `R11` is void here.") passes unseen. This is the same class as the documented
+  limit. "How to read this document" should say explicitly that pair-related sentences are not checked either. Booked
+  for a follow-up, not fixed here.
+- Merge authority: Ludwig's overnight §7 waiver of 2026-10-14 (mission log, session 8), review PASS, verify green.
