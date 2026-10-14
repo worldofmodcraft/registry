@@ -101,8 +101,8 @@ preserved (`contracts/signature-format.md`, "What `entry.json`'s `signature` fie
    downloader's ceiling (task 055); the three limits are this spec's assumed constants in
    `tools/pipeline/archive.py` (`MAX_UNCOMPRESSED_BYTES`, `MAX_COMPRESSED_BYTES`, `MAX_ENTRIES`).
    **The contract is silent on these.** `grep -n -i -E 'hardlink|hard link|device|fifo|special|size|limit|count' contracts/archive-layout.md`
-   matches only lines 150 ("accounted"), 179 ("encountered") and 232 ("meanwhile"... "counts"): none
-   concerns hard links, devices, FIFOs, special modes, sizes or counts. `git archive` itself cannot
+   matches only line 150 ("accounted"), line 179 ("encountered") and line 232 ("README.md counts"):
+   none concerns hard links, devices, FIFOs, special modes, sizes or counts. `git archive` itself cannot
    emit hard links, devices or FIFOs (git's object model stores neither; *stated from git's design,
    not verified here*), so these checks are defence in depth over a tarball the tool did not
    hand-build; the fixtures hand-build the hostile tars. The same gap exists in the site's
