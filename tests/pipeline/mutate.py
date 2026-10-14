@@ -84,7 +84,7 @@ mut("root-check-off", "tools/pipeline/archive.py", [('                if segs[0]
 # --- AC5-AC8, AC2, AC12 ----------------------------------------------------------------------------
 mut("manifest-loaders-allowed", "tools/validation/manifest.py", [('            elif val in _FORBIDDEN_LOADERS:', '            elif False:'), ('        if kind == "NAME" and val in _FORBIDDEN_LOADERS:', '        if False:')],
     ["test_ac5_rejects_require", "test_ac5_rejects_dofile"])
-mut("manifest-concat-allowed", "tools/validation/manifest.py", [('        if nk == "SYM" and nv == "..":', '        if False:')], ["test_ac5_rejects_string_concatenation"])
+mut("manifest-concat-allowed", "tools/validation/manifest.py", [('        if nk == "SYM" and nv == "..":', '        if False:'), ('        if kind == "SYM" and val == "..":', '        if False:')], ["test_ac5_rejects_string_concatenation"])
 mut("schema-validation-off", "tools/pipeline/build_version.py", [('        sc.validate(projected, _load_schema("manifest.schema.json"))', '        pass')],
     ["test_ac6_non_osi_licences_rejected_osi_accepted", "test_ac5_missing_required_field_rejected"])
 mut("id-crosscheck-off", "tools/pipeline/build_version.py", [('    if projected["id"] != mod_id:', '    if False:')], ["test_ac5_id_mismatch_rejected_separately"])
