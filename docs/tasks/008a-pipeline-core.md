@@ -1,6 +1,6 @@
 # Task 008a: Pipeline core — clone, validate, scan, archive, hash, sign (offline)
 
-- **Mission:** SITE-V1, deliverable **D2** (first half; umbrella `docs/tasks/008-build-pipeline.md`) — **Status:** spec-approved (manager, 2026-10-14, after independent spec review round 2: PASS) 
+- **Mission:** SITE-V1, deliverable **D2** (first half; umbrella `docs/tasks/008-build-pipeline.md`) — **Status:** review (implementer, 2026-10-15; spec-approved by manager 2026-10-14 after independent spec review round 2: PASS) 
 - **Agent / model:** implementer / sonnet (the signing and verifier parts get an independent reviewer at the same tier or higher with full tools — OPERATIONS.md, "The reviewer agent cannot run this project's verify artefacts")
 - **Budget:** large (≤ 6 agent-sessions)
 - **Branch / worktree:** `task/008a-pipeline-core` / `~/wt/registry-task-008a` — **registry** repo (`worldofmodcraft/registry`)
@@ -269,6 +269,7 @@ covered; the log pastes its output. Fix rounds, if any, add the found break as a
 Code + tests + docs + verify script + this file's log section current.
 
 ## Questions  (agent-maintained; see MANAGER.md 8b)
+- Q (A-3, SSRF; BOOKED FOR LUDWIG, 8b): an `https://` `source_url` may name an internal address (127.0.0.1, 10.x, 169.254.169.254). The tool does not filter addresses (a hostname check is bypassed by DNS rebinding, an address check by redirects). Options: A) leave it to 008b, where the clone runs in a job without the signing secret (docs/pipeline/build-pipeline.md, "SSRF note") * lean / B) add an IP-literal/localhost deny-list now (cheap, partial, gives false confidence) / C) clone through an egress-restricted runner. | assumed: A | built on: the SSRF note only; no code depends on it.
 - Q: root directory literal `src/` vs `<name>-<version>/` | options: A) `src/` / B) per-version
   name | assumed: A (ADR-0103; archive-layout says any non-empty value is valid) | built on: criterion 4.
 - (umbrella Q1/Q2 are decided: Q-B, Q-C, Ludwig 2026-10-14 — see `008-build-pipeline.md`; nothing in this file is built on an assumption about them any more.)
@@ -287,3 +288,109 @@ Code + tests + docs + verify script + this file's log section current.
   duplicate entry names, and for setuid/setgid modes. Add a documented note on https URLs aimed at internal addresses
   (SSRF). The runner context decides whether it is in scope, and the spec records the answer.
 - Merge authority: signing is involved, so **Ludwig approves the merge** (§7). The overnight waiver does not cover signing.
+
+## Implementation log (implementer, 2026-10-15; head `97a675e`, then log-only commits)
+
+Branch `task/008a-pipeline-core` in `~/wt/registry-008a`, from registry `4d4a204`. Not pushed.
+
+### What was built (file scope held; `008a-verify.sh` checks it against the pinned base `4d4a204`)
+- `tools/pipeline/`: `build_version.py` (CLI), `gitops.py` (clone/archive/gzip, transport rules, env), `procutil.py`
+  (timeout + size-cap runner), `archive.py` (inspect-then-extract), `signing.py`, `reference_verify.py`, `naming.py`
+  (tag, assets, reserved names, `release_asset_url`), `pipeline_errors.py`.
+- `tools/validation/manifest.py` (Q-C static reader). Nothing else in `tools/validation/` touched.
+- `tests/pipeline/` (114 checks + `mutate.py` with 47 mutations + `run_checks.py`), `docs/pipeline/build-pipeline.md`,
+  `docs/validation/manifest-reader.md`, a pointer in `docs/contracts/README.md`, `docs/tasks/008a-verify.sh`.
+
+### Decisions I made that the spec left open (flag for the reviewer)
+1. **Compress from a named file, not a pipe.** `gzip -n -c source.tar`. I tested: GNU gzip reading **stdin** stores mtime 0
+   even without `-n`, so the spec's "break `-n`" mutation would not redden a determinism check on a pipe. From a file, `-n` is
+   load-bearing (name + mtime otherwise stored); the `gzip-without-n` mutation reddens two checks.
+2. **Exit mapping of the A-2 bounds:** clone wall-clock timeout -> exit 2 (looks like an outage, not the author's fault);
+   clone-size cap -> exit 1 (the repository is too big).
+3. **Pre-flight rejections leave `--out` untouched** (criterion 8 demands an empty `--out` for reserved names; I applied the
+   same rule to every rejection decidable before the clone and report them on stderr only). After the clone starts, a failure
+   leaves `build.log` only.
+4. **Rule 5 is also delegated to `minisign -V`.** The spec says the reference verifier implements rules 1-3 and 5-11 itself, but rule 5
+   (global signature) is Ed25519 arithmetic, which the Forbidden list bars me from hand-rolling. minisign reports "Comment signature
+   verification failed" separately, so the verifier maps that text to rule 5 and every other failure to rule 4.
+5. **Extra rejections beyond the spec text:** empty/`.` path segments; a file/dir name conflict (`src/a` then `src/a/b`); entry
+   beneath a symlink declared *later*; `--version`/`commit`/`id` matched with `fullmatch` (the validator's `re.search` lets `$`
+   accept a trailing newline: fixtures `commit+"\n"` and `"1.0.0\n"`); more than one version object with the same version;
+   `mod.lua` that is a symlink or over 1 MiB; the tool refuses to emit a signature its own reference verifier rejects (exit 2).
+6. **Test-only CLI knobs** (hidden from `--help`): `--clone-timeout`, `--max-clone-bytes`, `--max-compressed-bytes`,
+   `--max-uncompressed-bytes`, `--max-entries`, `--scanner`. Defaults are the documented constants; a test pins them.
+7. **Hostile tars reach the real CLI** through a stub `git` earlier on PATH whose `archive` subcommand prints the hand-built tar;
+   all other subcommands run real git. That is how every AC17/A-3 fixture gets an end-to-end exit 1.
+8. `git archive`'s pax global header (type `g`) is skipped and not counted as an entry.
+
+### Evidence per criterion (all produced by `docs/tasks/008a-verify.sh`, run in a FRESH CLONE at `97a675e`)
+Fresh clone: `git clone --branch task/008a-pipeline-core ~/wt/registry-008a /tmp/wom008a-fresh-XXXX/clone`.
+```
+$ ./docs/tasks/008a-verify.sh            # rc=0
+suite: 114 passed, 0 failed
+ok    suite ran at least 100 checks (114)
+ok    test_ac1_*: 5 passing, 0 failing        ok    test_ac10_*: 13 passing, 0 failing
+ok    test_ac2_*: 6 passing, 0 failing        ok    test_ac11_*: 2 passing, 0 failing
+ok    test_ac3_*: 2 passing, 0 failing        ok    test_ac12_*: 2 passing, 0 failing
+ok    test_ac4_*: 11 passing, 0 failing       ok    test_ac13_*: 1 passing, 0 failing
+ok    test_ac5_*: 21 passing, 0 failing       ok    test_ac16_*: 7 passing, 0 failing
+ok    test_ac6_*: 1 passing, 0 failing        ok    test_ac17_*: 11 passing, 0 failing
+ok    test_ac7_*: 5 passing, 0 failing        ok    test_a1_*: 2 / test_a2_*: 5 / test_a3_*: 7 passing, 0 failing
+ok    test_ac8_*: 3 passing, 0 failing
+ok    test_ac9_*: 6 passing, 0 failing
+ok    every changed path is within the declared file scope
+ok    untouched: contracts / reserved-namespaces.json / scan_assets.py / magic.py
+ok    no wom008a-* temp dirs left behind by the suite
+SUMMARY failed=0
+$ ./docs/tasks/008a-verify.sh --mutate   # rc=0
+MUTATION gzip-without-n: RED (good)  [test_ac3_two_builds_at_different_times_are_byte_identical=FAIL; test_ac3_gzip_header_carries_no_name_and_no_timestamp=FAIL]
+MUTATION no-prefix: RED (good)  [test_ac4_every_entry_has_the_single_root_src=FAIL; test_ac1_exit_0_clean_build=FAIL]
+MUTATION keyid-no-reversal-in-verifier: RED (good)  [...test_ac9_reference_verifier_accepts_it=FAIL...]
+MUTATION trusted-comment-grammar: RED (good)  [...grammar=FAIL; ...reference_verifier_accepts_it=FAIL]
+MUTATION symlink-check-off: RED (good)  [absolute=FAIL; dotdot=FAIL; entries_escaping=FAIL]
+MUTATION scheme-check-off / env-allow-protocol-off / dash-c-protocol-flags-off / all-git-level-guards-off / no-double-dash /
+         clone-timeout-off / clone-size-cap-off / git-config-isolation-off: all RED (good)
+MUTATION uncompressed-limit-infinite / compressed-limit-infinite / entry-limit-infinite: RED (good)
+MUTATION accept-hardlink / accept-chardev / accept-blockdev / accept-fifo / accept-unknown-type: RED (good), each its own fixture
+MUTATION setuid-check-off / duplicate-check-off / write-through-check-off / dotdot-check-off / absolute-check-off / root-check-off: RED (good)
+MUTATION verifier-rule-{6,7,8,9,10,11}-off, verifier-crypto-off, log-the-key-contents: RED (good)
+MUTATION SUMMARY mutations=47 not_red=0
+```
+(The full 47 lines are in the verify output; the list above compresses names, not verdicts.)
+
+Per criterion: AC1 `test_ac1_*` (0 / 1 / 2 each shown, 2 for missing `--key`, unreadable entry, clone failure); AC2 `test_ac2_*`
+(branch-moved-on tarball holds `old.txt` not `new.txt`; absent commit names it; uppercase / short / `+"\n"` commit, bad / unknown
+version all exit 1 with an empty workdir = no clone); AC3 `test_ac3_*` (1.2 s apart, byte-identical, `sha256sum` cross-check, gzip
+header flags 0 and mtime 0); AC4 `test_ac4_*` (symlink absolute and `..` rejected whole citing `archive-layout.md`, `export-ignore` on
+`mod.lua` -> "manifest missing in the produced archive" + the log lists the dropped path, `export-subst` **observed: `$Format:%H$`
+becomes the commit hash, build accepted, log notes it**); AC5 21 checks (reader + CLI; `os.execute` in `mod.lua` never runs, canary
+file absent); AC6 five licences incl. positive controls; AC7 DBC/MPQ/BLP/M2 named `innocent.png`, GLB with embedded BLP, clean PNG+OGG+GLB+text,
+scanner exit 2 -> tool exit 2 (stub scanner and the real one pointed at a file); AC8 `com1 aux nul con prn lpt9 com0` rejected with `--out`
+empty and workdir empty, `comet console com10 auxiliary` accepted; AC9 4 lines, 74/64 bytes, `ED`, comment equals the grammar built
+from the OS `sha256sum`, `minisign -V` accepts, reference verifier accepts, `key_id` = pubkey comment line = reversed bytes (and the
+unreversed form differs and is rule 6); AC10 a, b, b2, c, d, e1, e2, f1, f2 plus rules 1, 2, 3, 8 each in its own test with the exact rule number;
+the deliberately naive verifier (in `test_signature.py`) **accepts (d), (e1), (e2)** — shown by the same tests, which call it before asserting
+the reference verifier's rule 11 / 10 / 9 — and rejects a, b, c, f1 on cryptography alone; AC11 canary in
+`MINISIGN_SECRET_KEY`, in the key file's comment line and the key payload line: absent from stdout, stderr, `build.log`, `result.json`, tarball
+(and its decompressed tar), signature; failure path too; mutation `log-the-key-contents` reddens it; AC12 `result.json` fields, `built_at`
+pattern, `signature` verbatim with 4 newlines, `release_asset_url` pinned to literals; AC13 first build, second version, text-only mod,
+all re-verified by the reference verifier; AC14 above; AC15 `grep` of eight headings + seven design points + manifest-reader headings; AC16, AC17, A-1..A-3 as named.
+
+### Honest notes on §2c rule 5 ("show each hostile fixture failing against a naive implementation first")
+- For the **verifier**: done literally (naive verifier, fixture (d) accepted by it).
+- For the **pipeline guards** I wrote the guards before the fixtures, so I could not show a fixture red "before" the fix in time order.
+  The equivalent evidence is the mutation run: each guard is replaced by its naive form (check removed, limit infinite, type accepted,
+  `--` dropped, ...) in a scratch copy of the committed tree and the named fixture goes red (47/47). One mutation was **initially not red**
+  (`manifest-concat-allowed`): the concatenation is caught at two independent sites of the parser, so removing one did nothing; the
+  mutation now removes both and is red. Another (`all-git-level-guards-off`) was initially NOT red because my `ext::` canary used shell quoting
+  that git's ext helper does not honour (the shell got a mangled argument and never ran `touch`); the canary now uses git's `% ` escape
+  (`ext::sh -c touch% <marker>`), which creates the marker when every guard is removed under a hostile `~/.gitconfig`, so that check is real.
+- Removing exactly **one** of {env var, `-c` flags, config isolation} does not redden the behavioural `ext::` check (each alone suffices; belt and
+  braces). The per-guard mutations are red through the checks that read the spawned command line and environment (stub `git` capture) instead.
+
+### Open / not done / not verified
+- Nothing touches the network. The https path is verified only up to the spawned command line. A live clone over https: not run (not needed by any criterion).
+- All items in `docs/pipeline/build-pipeline.md`, "What is NOT verified" (minisign on a runner; process-substitution key under the CI shell; the legacy `Ed`
+  variant; Windows reserved-name behaviour; git versions other than 2.53.0; the assumed limits).
+- Q (SSRF) booked above for Ludwig. Merge authority: Ludwig approves the merge (signing involved, §7); an independent reviewer with full tools is required by the task.
+- Temp dirs: every test dir is `wom008a-*` under `/tmp`, removed in `tearDownClass`; the verify script fails if any is left behind.
