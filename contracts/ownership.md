@@ -50,7 +50,15 @@ revision of this paragraph claimed more than the check delivered (review round 4
 declared pair relating those two specific rules, or be pinned by name in the check's
 `CROSSREF_ALLOWED` list.** No vocabulary is consulted — there is no list of exception-sounding
 words to phrase around, and being party to one pair exempts a rule from nothing with respect to any
-other rule. `T15b` fails if a pin stops matching, so the list cannot silently widen, and `T16`
+other rule. `T15b` fails if a pin stops matching. A pin is the rule id plus the **full text** of one sentence
+(fix round 6; round 5 pinned only the first 70 characters, so anything appended after character 70
+of a pinned sentence went unchecked): any edit to a pinned sentence, anywhere in it, turns `T15`
+and `T15b` red until a human edits the pin, with the old and new sentence both visible in that
+diff. What this guarantees is exactly that, and no more: a pinned sentence is accepted only
+verbatim, and a new sentence naming another verdict rule is rejected unless it is pinned or a
+declared pair relates the two rules. It does **not** interpret meaning, so a sentence that names
+no other verdict rule is outside `T15` (only `T16`, for takedowns in `R3` and `R7`, looks at
+those), and a reviewer approving a pin edit is the control for what the new sentence says. `T16`
 fails if `R3`'s or `R7`'s own paragraph says anything about a takedown without naming `R11`, which
 is what stops the correct exception and a contradicting one from sitting side by side in the same
 paragraph. This
@@ -982,14 +990,15 @@ and booked it for Ludwig.
 the human gate sits on the merge, not on the opening.**
 
 **Scope note — what in `R11` below is Ludwig's ruling and what is the manager's reading of it**
-(manager, 2026-09-08, **pending Ludwig's confirmation**). Ludwig ruled on the case in front of him
+(manager, 2026-09-08; **confirmed by Ludwig, 2026-10-14**). Ludwig ruled on the case in front of him
 and phrased it "against a namespace it does not own". Review round 4 (finding 1) showed that
 reading that phrase as the rule's scope disables the power entirely for `mc:` and `test:` — the
 namespaces the platform's own content lives in — because a GitHub organisation is not a member of
 itself, so `R7` rejects the platform's own identity there and `R11`, scoped away from owned
 namespaces, never reaches it. The manager decided on 2026-09-08 that the narrow phrasing
 under-reaches rather than carving anything out, so `R11` below authorises the platform's own
-identity regardless of whether it owns the namespace. What is **not** in question either way: the
+identity regardless of whether it owns the namespace. Ludwig confirmed that reading on 2026-10-14, so
+the scope below is his decision and no longer only the manager's. What is **not** in question: the
 exception surface is unchanged — `R11` authorises nothing but the takedown mutation itself, exactly
 as narrowly as before — and MANAGER.md §7's written-approval gate on the **merge** is untouched by
 this or by anything else in this document.
@@ -999,7 +1008,7 @@ owns it, is authorised only when its author is the platform's own identity: the 
 `reserved-namespaces.json` records — at the PR's merge-base revision of that file, never the
 revision the PR itself proposes, exactly as `I4` requires for every other reading of that file —
 as the reserved namespaces' owner: `provider: "github"`, `id: 324218296`, the `worldofmodcraft`
-organisation. The scope is every namespace deliberately, and not only the ones the platform does
+organisation. The scope is every namespace, owned or not (confirmed by Ludwig, 2026-10-14), deliberately, and not only the ones the platform does
 not own: the platform owns `mc:` and `test:` through that same account, a GitHub organisation is
 not a member of itself, and `R7` therefore rejects the platform's own identity for precisely the
 namespaces the platform's own content lives in — so a rule scoped to namespaces its author does
@@ -1019,9 +1028,9 @@ may carry**: any number, provided the diff contains nothing else — "the takedo
 mutation: takedown", so a legal notice covering three versions of one entry is one PR and not
 three. That reading enlarges nothing about what may be done to any single version, and it does not
 touch the merge gate: MANAGER.md §7's written approval is given per PR and names every version the
-PR removes. It is **the manager's decision of 2026-09-08, pending Ludwig's confirmation**, because
-the strict reading (one version per PR) is equally faithful to the words this rule already had, and
-the choice of which is meant belongs to him. **`R11` does not merely narrow who may open a
+PR removes. This is **confirmed by Ludwig, 2026-10-14**: the strict reading (one version per PR)
+was equally faithful to the words this rule already had, the manager chose the wider one on
+2026-09-08, and Ludwig confirmed that choice. **`R11` does not merely narrow who may open a
 takedown; it is what makes one openable at all, and the rules it lifts are named here rather than
 left for a reader to infer — Precedence: R11 over R3, R7.** For the one PR `R11` authorises, `R3`
 and `R7` do not apply, so `I7`'s "every rule that applies to it" is satisfied without them; for

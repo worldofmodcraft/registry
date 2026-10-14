@@ -52,10 +52,19 @@ precedence \`R3\` states above, and \`R9\` does not apply either:"
 mut "P17 R11 narrowed back to 'a namespace its author does not own'" \
     "against **any** namespace, whether or not its author owns it" \
     "against a namespace its author does not own"
-mut "P22 R11's cardinality clause weakened to 'exactly one'" \
-    "any number of takedown mutations" \
-    "exactly one takedown mutation"
-mut "P23 'confirmed by Ludwig, 2026-10-14' marking removed from scope note" \
-    "**Scope note — what in \`R11\` below is Ludwig's ruling and what is the manager's reading of it** (manager, 2026-09-08, **confirmed by Ludwig, 2026-10-14**)" \
-    "**Scope note — what in \`R11\` below is Ludwig's ruling and what is the manager's reading of it** (manager, 2026-09-08)"
+mut "P22 R11's cardinality weakened to 'exactly one' (D2)" \
+    "any number, provided the diff contains nothing else" \
+    "exactly one, and the diff contains nothing else"
+mut "P22 R11's D2 confirmation marking removed" \
+    "2026-10-14**: the strict reading (one version per PR)" \
+    "2026-09-08**: the strict reading (one version per PR)"
+mut "P17 R11's D1 confirmation marking removed from its paragraph" \
+    "owned or not (confirmed by Ludwig, 2026-10-14), deliberately" \
+    "owned or not, deliberately"
+mut "P23 scope note's 'confirmed by Ludwig, 2026-10-14' removed" \
+    "(manager, 2026-09-08; **confirmed by Ludwig, 2026-10-14**)" \
+    "(manager, 2026-09-08)"
+mut "P23b a 'pending Ludwig's confirmation' marking re-introduced" \
+    "Ludwig confirmed that reading on 2026-10-14, so" \
+    "Pending Ludwig's confirmation, so"
 exit $BAD

@@ -1202,8 +1202,8 @@ expect_hits_in_para "P16b the transcript shows the SAME endpoint answering 404 f
     '\*\*The membership test, run rather than reasoned about\*\*' 'members/worldofmodcraft -i \| head -1 HTTP/2\.0 404 Not Found'
 expect_hits_in_para "P16c the transcript shows the organisation's whole member list, and the organisation is not in it" \
     '\*\*The membership test, run rather than reasoned about\*\*' '.count.:1,.id.:324089373,.login.:.womcraft.'
-expect_hits_in_para "P17 R11's scope is EVERY namespace, owned or not, so the R7 half of its precedence has something to fire on (manager decision 2026-09-08 on round-4 finding 1, pending Ludwig's confirmation)" \
-    '\*\*R11 \(MUST\)\*\*' 'against \*\*any\*\* namespace, whether or not its author'
+expect_hits_in_para "P17 R11's scope is EVERY namespace, owned or not, so the R7 half of its precedence has something to fire on (manager decision 2026-09-08 on round-4 finding 1, confirmed by Ludwig 2026-10-14: D1)" \
+    '\*\*R11 \(MUST\)\*\*' 'against \*\*any\*\* namespace, whether or not its author.*The scope is every namespace, owned or not \(confirmed by Ludwig, 2026-10-14\)'
 expect_no_hits_in_para "P18 R11 is no longer scoped away from namespaces its author owns -- the narrow phrasing that made the R7 half of the precedence unreachable is gone" \
     '\*\*R11 \(MUST\)\*\*' 'takedown against a namespace its author does not own'
 expect_hits_in_para "P19 R11 names the platform identity's numeric id, and it is the id reserved-namespaces.json actually records ($ORG_ID, read from the data file, never from a literal here)" \
@@ -1212,10 +1212,12 @@ expect_hits_in_para "P20 R11 says which revision of reserved-namespaces.json it 
     '\*\*R11 \(MUST\)\*\*' 'merge-base revision of that file'
 expect_hits_in_para "P21 R11 states the SUFFICIENT condition in its own paragraph, not only the necessary one (round-4 non-blocking 7: a reader opening at R11 could not derive it)" \
     '\*\*R11 \(MUST\)\*\*' 'jointly \*\*sufficient\*\*'
-expect_hits_in_para "P22 R11 says how many takedown mutations one authorised PR may carry, and marks the choice as pending Ludwig's confirmation (round-4 non-blocking 6)" \
-    '\*\*R11 \(MUST\)\*\*' 'How many takedown mutations one authorised PR.*pending Ludwig.s confirmation'
-expect_hits_in "P23 the widening of R11's scope is marked as the MANAGER's reading of Ludwig's ruling, pending his confirmation, rather than presented as his words" \
-    'Takedown PRs' 'manager.s reading of it.*pending Ludwig.s confirmation|pending Ludwig.s confirmation.*manager decided'
+expect_hits_in_para "P22 R11 says how many takedown mutations one authorised PR may carry, as any number provided the diff contains nothing else, confirmed by Ludwig 2026-10-14 (D2; round-4 non-blocking 6)" \
+    '\*\*R11 \(MUST\)\*\*' 'How many takedown mutations one authorised PR.*any number, provided the diff contains nothing else.*confirmed by Ludwig, 2026-10-14'
+expect_hits_in "P23 the scope note records that the widening was the manager's reading of Ludwig's ruling AND that Ludwig confirmed it on 2026-10-14 (D1, D2), so the decision's provenance stays visible" \
+    'Takedown PRs' 'manager.s reading of it\*\*\s+\(manager, 2026-09-08; \*\*confirmed by Ludwig, 2026-10-14\*\*\)'
+expect_no_hits_in "P23b no 'pending Ludwig' marking is left on D1 or D2 anywhere in the takedown section (both confirmed 2026-10-14)" \
+    'pending Ludwig.s confirmation'
 
 # --------------------------------------------------------------------------------
 section "B1 (round 1) -- the document states the caller-dependent rule, the redirect hazard, and the Actions-token caveat"
