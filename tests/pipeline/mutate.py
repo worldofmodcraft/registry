@@ -55,7 +55,7 @@ mut("no-double-dash", "tools/pipeline/gitops.py", [('["--", url, dest]', '[url, 
     ["test_a1_double_dash_precedes_the_url_on_the_spawned_command_line"])
 mut("clone-timeout-off", "tools/pipeline/procutil.py", [('if time.monotonic() > deadline:', 'if False:')],
     ["test_a2_wall_clock_timeout_kills_the_clone"])
-mut("clone-size-cap-off", "tools/pipeline/procutil.py", [('path_size(watch_path) > max_bytes', 'False')],
+mut("clone-size-cap-off", "tools/pipeline/procutil.py", [('path_size(watch_path) > max_bytes', 'False', 2)],
     ["test_a2_clone_size_cap_rejects_an_oversized_repository"])
 mut("git-config-isolation-off", "tools/pipeline/gitops.py", [
     ('        "GIT_CONFIG_GLOBAL": "/dev/null",\n', ''), ('        "GIT_CONFIG_NOSYSTEM": "1",\n', '')],
@@ -117,10 +117,12 @@ mut("log-the-key-contents", "tools/pipeline/build_version.py", [('    signing.si
 def apply(root, file, edits):
     path = os.path.join(root, file)
     text = open(path).read()
-    for old, new in edits:
+    for edit in edits:
+        old, new = edit[0], edit[1]
+        want = edit[2] if len(edit) > 2 else 1
         n = text.count(old)
-        if n != 1:
-            raise SystemExit(f"MUTATION ANCHOR BROKEN in {file}: found {n} times (need exactly 1): {old!r}")
+        if n != want:
+            raise SystemExit(f"MUTATION ANCHOR BROKEN in {file}: found {n} times (need exactly {want}): {old!r}")
         text = text.replace(old, new)
     open(path, "w").write(text)
 

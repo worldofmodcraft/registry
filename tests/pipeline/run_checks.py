@@ -55,7 +55,12 @@ def main():
     stream = open(os.devnull, "w")
     runner = unittest.TextTestRunner(stream=stream, resultclass=Result, verbosity=0)
     res = runner.run(s)
-    for line in res.lines:
+    ran = {l.split()[1] for l in res.lines}
+    for t in tests:
+        name = t.id().split(".", 1)[-1]
+        if name not in ran:   # e.g. setUpClass failed: nothing ran, which is a failure, never a pass
+            res.lines.append(f"CHECK {name} FAIL")
+    for line in sorted(res.lines):
         print(line)
     for _, tb in res.failures + res.errors:
         print(tb, file=sys.stderr)

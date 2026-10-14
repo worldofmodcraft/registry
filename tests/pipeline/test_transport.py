@@ -33,7 +33,9 @@ class Transport(Base):
 
     def test_ac16_ext_command_is_never_run(self):
         marker = os.path.join(self.tmp, "ext-marker")
-        for url in (f"ext::sh -c 'touch {marker}'", f"ext::sh${{IFS}}-c${{IFS}}touch${{IFS}}{marker}", f"ext::touch {marker}"):
+        # the first is the spec's literal form; the second uses git's own '% ' space escape, which
+        # really does run `sh -c "touch <marker>"` when nothing blocks it (proved by the all-guards-off mutation)
+        for url in (f"ext::sh -c 'touch {marker}'", f"ext::sh -c touch% {marker}", f"ext::sh${{IFS}}-c${{IFS}}touch${{IFS}}{marker}", f"ext::touch {marker}"):
             self.hostile(url)
         self.assertFalse(os.path.exists(marker))
 
@@ -49,7 +51,7 @@ class Transport(Base):
         os.environ["HOME"] = home
         try:
             with self.assertRaises(PipelineError):
-                gitops.clone(f"ext::sh -c 'touch {marker}'", os.path.join(self.fresh("c"), "clone"), allow_local=False, timeout=20, max_bytes=10**9, log=lambda m: None)
+                gitops.clone(f"ext::sh -c touch% {marker}", os.path.join(self.fresh("c"), "clone"), allow_local=False, timeout=20, max_bytes=10**9, log=lambda m: None)
         finally:
             os.environ["HOME"] = old if old is not None else ""
         self.assertFalse(os.path.exists(marker), "git ran the ext:: helper")
