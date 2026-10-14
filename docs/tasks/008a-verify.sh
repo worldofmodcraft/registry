@@ -74,8 +74,11 @@ TMP_AFTER=$(ls -d /tmp/wom008a-* 2>/dev/null | wc -l)
 # no key material tracked
 if git ls-files | grep -E '\.(key|pem)$|minisign\.key' >/dev/null; then fail "a key-like file is tracked"; else ok "no key-like file tracked"; fi
 # file scope: every changed path is inside the declared scope (needs the base ref; missing base = failure, not skip)
-BASE=$(git merge-base HEAD origin/main 2>/dev/null || true)
-if [ -z "$BASE" ]; then fail "cannot resolve origin/main: file-scope check cannot run"; else
+# The branch was cut from registry origin/main at 4d4a204. A pinned base (not a moving origin/main, which a
+# fresh clone resolves differently) keeps the check portable; the pin must be an ancestor of HEAD.
+BASE=4d4a204
+if ! git merge-base --is-ancestor "$BASE" HEAD 2>/dev/null; then BASE=""; fi
+if [ -z "$BASE" ]; then fail "base commit 4d4a204 is not an ancestor of HEAD: file-scope check cannot run"; else
   BAD=$(git diff --name-only "$BASE" HEAD | grep -v -E '^(tools/pipeline/|tools/validation/manifest\.py$|tests/pipeline/|docs/pipeline/build-pipeline\.md$|docs/validation/manifest-reader\.md$|docs/contracts/README\.md$|docs/tasks/008a-pipeline-core\.md$|docs/tasks/008a-verify\.sh$)' || true)
   [ -z "$BAD" ] && ok "every changed path is within the declared file scope" || { fail "paths outside the declared scope:"; echo "$BAD"; }
 fi
