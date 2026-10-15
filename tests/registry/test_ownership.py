@@ -161,9 +161,10 @@ class OwnedNamespaceSibling(unittest.TestCase):
 
     def test_r3_reject_owners_are_not_read_from_the_prs_own_files(self):
         """A PR cannot declare its own namespace unowned by omission or owned by itself: only the injected mapping counts."""
-        files = dict(first_publish("alice", "new", owner=own(MALLORY_ID, "alice")), **add_version("alice", "cooltool"))
+        files = dict(first_publish("alice", "new", owner=own(MALLORY_ID, "alice")),
+                     **first_publish("alice", "other", owner=own(MALLORY_ID, "alice")))
         v = run(MALLORY, files, login="alice", namespace_owners={"alice": ALICE})
-        self.assertIn("R3", rules(v))
+        self.assertEqual(rules(v), ["R3", "R3"])  # one per new entry, each against the injected owner, not the PR's
 
 
 class R4R5R6FirstPublish(unittest.TestCase):
