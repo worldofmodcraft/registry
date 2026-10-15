@@ -198,3 +198,28 @@ PASS  AC6.10 restored: new tests green again
   064-verify.sh accepts that single line only when it lists nothing beyond this task's declared files.
 - Q3 (note): there is no pytest in this environment; "pytest over tests/" was run as `python3 -m unittest discover -s tests/<dir>`
   for contracts, registry, validation and pipeline, as the closed scripts do.
+
+## Amendment 1 (manager, 2026-10-15, session 10) — replaces "compile with `re.ASCII`" in the approach
+The original approach was a spec defect (manager's): a global `re.ASCII` also makes `\S` ASCII-only, so
+`^https://\S+$` now accepts U+00A0, which ECMA rejects and the code before this task rejected too (found by this task's
+Q1). Replacement, applied identically in all three pattern paths (the two `schema_check.py` copies and
+`tools/registry/schema.py`'s `ecma_pattern`):
+- **No `re.ASCII` anywhere.** Each ECMA character-class escape is translated to an explicit class instead:
+  `\d` → `[0-9]`, `\D` → `[^0-9]`, `\w` → `[A-Za-z0-9_]`, `\W` → `[^A-Za-z0-9_]`, `\s` / `\S` → the ECMA-262
+  WhiteSpace + LineTerminator set and its negation (`\t\n\v\f\r    -     　﻿`),
+  and `.` outside a class → `[^\n\r  ]`. Inside a character class, `\d` / `\w` / `\s` expand to their ranges;
+  a negated escape (`\D`, `\W`, `\S`) inside a class raises an explicit unsupported-pattern error (no pattern here uses one).
+  Unescaped `$` outside a class → `\Z` as before. Any escape or construct the translator does not handle and that differs
+  between Python and ECMA → explicit error, never a silent pass.
+- **Red first for the new break:** the U+00A0 case (and `"a\rb"` / U+2028 for `.`) move from `@expectedFailure` to normal
+  tests in a commit before the change, shown red on that commit; then fixed. `KnownEcmaGaps` keeps only gaps that truly
+  remain, each named; if none remain it is removed.
+- **007a's logic:** this amendment explicitly authorises extending `ecma_pattern` in `tools/registry/schema.py` with the
+  same translation (and removing the one-line `re.ASCII`), nothing else in 007a's modules.
+- **Mutations:** replace the three ASCII-flag mutations by one mutation per translation entry actually used by a schema
+  pattern (`\d`, `\S`, `.`), in each path, plus the existing `$` and reject-everything mutations.
+- **Message deviation accepted** (the validator appends the ECMA-semantics note so 007a's `test_hardening.py` phrase pin
+  holds), provided the new red-first tests also assert it.
+- **Q2 (062 AC6.034) and the 007a scope line:** not fixed in this task. Task 069 amends `062-verify.sh` and
+  `007a-verify.sh` and fixes the 008a temp-dir race; 064 rebases on `main` after 069 merges and must then be fully green.
+- 2026-10-15 manager: amendment 1 appended (session 10); fix round dispatched to the same agent. Log baseline recounted below.
