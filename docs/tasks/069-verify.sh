@@ -100,8 +100,88 @@ if [ "$rc" = 0 ]; then pass "AC1.4 HEAD: 008a-verify.sh exits 0 while a foreign 
 else fail "AC1.4 HEAD: 008a-verify.sh exit $rc under the race; failing: $(grep '^FAIL' "$TMP/h.out" | head -n3 | tr '\n' '|')"; fi
 grep -q '^ok    no wom008a-\* temp dirs left behind by the suite' "$TMP/h.out" && pass "AC1.5 HEAD: the temp-dir check itself ran and passed" || fail "AC1.5 HEAD: the temp-dir check did not report ok"
 
+# --------------------------------------------------------------------------------------------------
+section "AC3 -- 007a-verify.sh measures 007a's own pinned range, so it is green on a later branch"
+MERGE10="3c94cf2"            # registry PR #10, the merge of task 007a
+mk_later() {   # mk_later DEST : HEAD plus two new source files under tools/registry (007b's shape); origin/main = the 069 base
+    new_clone "$1" "$HEADREV" || return 1
+    git -C "$1" update-ref refs/remotes/origin/main "$BASE069"
+    git -C "$1" checkout -q -b later-007b
+    echo "# probe one" > "$1/tools/registry/probe_one.py"; echo "# probe two" > "$1/tools/registry/probe_two.py"
+    git -C "$1" add tools/registry/probe_one.py tools/registry/probe_two.py
+    git -C "$1" "${GITID[@]}" commit -q -m "later branch adds two registry source files"
+}
+run007a() { ( cd "$1" && bash docs/tasks/007a-verify.sh ) > "$2" 2>&1; echo $?; }
+lb=$(sed -n 's/^BASE=\([0-9a-f]\{7,\}\).*/\1/p' "$ROOT/docs/tasks/007a-verify.sh" | head -n1)
+lf=$(sed -n 's/^FINAL=\([0-9a-f]\{7,\}\).*/\1/p' "$ROOT/docs/tasks/007a-verify.sh" | head -n1)
+if [ -z "$lb" ] || [ -z "$lf" ]; then fail "AC3.0 cannot read BASE/FINAL from 007a-verify.sh (a search that finds nothing is broken)"
+else
+    [ "$(git -C "$ROOT" rev-parse "$lf^{commit}" 2>/dev/null)" = "$(git -C "$ROOT" rev-parse "$MERGE10^2")" ] && pass "AC3.1 FINAL=$lf is the last commit of PR #10 (git rev-parse $MERGE10^2)" || fail "AC3.1 FINAL=$lf is not $MERGE10^2"
+    [ "$(git -C "$ROOT" rev-parse "$lb^{commit}" 2>/dev/null)" = "$(git -C "$ROOT" merge-base "$MERGE10^1" "$MERGE10^2")" ] && pass "AC3.2 BASE=$lb is PR #10's fork point (git merge-base $MERGE10^1 $MERGE10^2)" || fail "AC3.2 BASE=$lb is not the fork point of PR #10"
+fi
+mk_later "$TMP/later" || fail "AC3.0 cannot build the later branch"
+git -C "$TMP/later" show "$BASE069:docs/tasks/007a-verify.sh" > "$TMP/old007a.sh"
+cp "$TMP/old007a.sh" "$TMP/later/docs/tasks/007a-verify.sh"
+rc=$(run007a "$TMP/later" "$TMP/old007a.out")
+if [ "$rc" != 0 ] && grep -q '^FAIL  size:' "$TMP/old007a.out" && grep -q '^FAIL  files outside the declared scope' "$TMP/old007a.out"; then
+    pass "AC3.3 red first: the OLD 007a-verify.sh on a branch adding two tools/registry files fails size and scope (exit $rc)"
+else fail "AC3.3 the old script was not red on the later branch as expected (exit $rc)"; fi
+git -C "$TMP/later" checkout -q -- docs/tasks/007a-verify.sh
+rc=$(run007a "$TMP/later" "$TMP/new007a.out")
+if [ "$rc" = 0 ]; then pass "AC3.4 HEAD's 007a-verify.sh exits 0 on the later branch"
+else fail "AC3.4 HEAD's 007a-verify.sh exit $rc on the later branch; failing: $(grep '^FAIL' "$TMP/new007a.out" | head -n3 | tr '\n' '|')"; fi
+
+# --------------------------------------------------------------------------------------------------
+section "AC4 -- 062-verify.sh runs 007a on HEAD and on a later branch"
+if [ -z "$NM" ] || [ ! -d "$NM/ajv" ]; then fail "AC4.0 a node_modules directory with ajv is required to run 062-verify.sh: pass NODE_MODULES_DIR"
+else
+    new_clone "$TMP/h062" "$HEADREV" || fail "AC4.0 cannot clone HEAD"
+    ( cd "$TMP/h062" && bash docs/tasks/062-verify.sh "$NM" ) > "$TMP/062.out" 2>&1; rc=$?
+    grep -E '^(PASS|FAIL)  AC3\.(head|later)\.007a' "$TMP/062.out" | cut -c1-110
+    grep -q '^PASS  AC3.head.007a' "$TMP/062.out" && pass "AC4.1 062-verify.sh reports 007a green on HEAD" || fail "AC4.1 062-verify.sh has no passing AC3.head.007a line"
+    grep -q '^PASS  AC3.later.007a' "$TMP/062.out" && pass "AC4.2 062-verify.sh reports 007a green on a later branch" || fail "AC4.2 062-verify.sh has no passing AC3.later.007a line"
+    [ "$rc" = 0 ] && pass "AC4.3 062-verify.sh exits 0 on HEAD" || fail "AC4.3 062-verify.sh exit $rc on HEAD: $(grep '^FAIL' "$TMP/062.out" | head -n3 | tr '\n' '|')"
+fi
+
 # ==================================================================================================
 else
+section "AC3 mutations -- the pinned-range checks can fail"
+mk_later "$TMP/m3" || fail "AC3.m0 cannot build the later branch"
+S=docs/tasks/007a-verify.sh
+cp "$TMP/m3/$S" "$TMP/007a.orig"
+run007a() { ( cd "$1" && bash docs/tasks/007a-verify.sh ) > "$2" 2>&1; echo $?; }
+mut007a() {   # mut007a OLD NEW LABEL EXPECT_REGEX : apply one textual mutation to the clone's 007a script, run it, demand red
+    if [ "$(grep -cF -- "$1" "$TMP/m3/$S")" != 1 ]; then fail "$3: the mutation did not apply (pattern not found exactly once)"; return; fi
+    python3 -I - "$TMP/m3/$S" "$1" "$2" <<'PY'
+import sys
+p, old, new = sys.argv[1:4]
+s = open(p).read()
+open(p, "w").write(s.replace(old, new, 1))
+PY
+    local rc; rc=$(run007a "$TMP/m3" "$TMP/mut.out")
+    if [ "$rc" != 0 ] && grep -Eq "$4" "$TMP/mut.out"; then pass "$3 turns red: exit $rc, $(grep -E "$4" "$TMP/mut.out" | head -n1)"
+    else fail "$3 stayed green or missed /$4/: exit $rc"; fi
+    cp "$TMP/007a.orig" "$TMP/m3/$S"
+}
+mut007a 'FINAL=aaf4260' 'FINAL=HEAD' "AC3.m1 range widened to HEAD (the later branch's two extra files come into range)" '^FAIL  (size:|files outside)'
+mut007a 'FINAL=aaf4260' 'FINAL=deadbee' "AC3.m2 unreachable FINAL pin must FAIL, never skip" '^FAIL  pinned commit deadbee'
+mut007a 'BASE=e009ef0' 'BASE=deadbee' "AC3.m3 unreachable BASE pin must FAIL, never skip" '^FAIL  pinned commit deadbee'
+mut007a 'tests/registry/|' '' "AC3.m4 declared-scope regex loses tests/registry/" '^FAIL  files outside the declared scope'
+rc=$(run007a "$TMP/m3" "$TMP/mut.out"); [ "$rc" = 0 ] && pass "AC3.m5 restored: exit 0 on the later branch" || fail "AC3.m5 restored but exit $rc"
+
+section "AC4 -- 062-verify.sh --mutate carries the 007a mutations"
+if [ -z "$NM" ] || [ ! -d "$NM/ajv" ]; then fail "AC4.0 a node_modules directory with ajv is required to run 062-verify.sh --mutate"
+else
+    new_clone "$TMP/m062" "$HEADREV" || fail "AC4.0 cannot clone HEAD"
+    ( cd "$TMP/m062" && bash docs/tasks/062-verify.sh --mutate "$NM" ) > "$TMP/062m.out" 2>&1; rc=$?
+    grep -E '^(PASS|FAIL)  AC4\.007a' "$TMP/062m.out" | cut -c1-120
+    for k in drop-path bad-pin; do
+        grep -q "^PASS  AC4.007a.$k" "$TMP/062m.out" && pass "AC4.m.$k 062 --mutate shows the 007a $k mutation red" || fail "AC4.m.$k 062 --mutate has no passing AC4.007a.$k line"
+    done
+    grep -q '^PASS  AC4.007a restored' "$TMP/062m.out" && pass "AC4.m.restored 062 --mutate shows 007a green after restore" || fail "AC4.m.restored no passing AC4.007a restored line"
+    [ "$rc" = 0 ] && pass "AC4.m.exit 062-verify.sh --mutate exits 0" || fail "AC4.m.exit 062-verify.sh --mutate exit $rc: $(grep '^FAIL' "$TMP/062m.out" | head -n3 | tr '\n' '|')"
+fi
+
 section "AC2 -- the leak check still bites: a test that really leaks a wom008a-* dir reddens 008a-verify.sh"
 new_clone "$TMP/m" "$HEADREV" || fail "AC2.0 cannot clone HEAD"
 H=tests/pipeline/helpers.py
