@@ -140,3 +140,101 @@ After 007a (merged). Blocks 039. Task 008b later amends `ownership.md` and this 
 - 2026-10-15 manager: spec review rounds 1-3 (FAIL, FAIL, PASS); spec-approved.
 - 2026-10-15 manager (session 10): worktree `~/wt/registry-task-007b` cut from registry `origin/main` `ac22c8f` (007a, 062, 067 merged); dispatched to implementer. Log-entry baseline recorded below.
 - 2026-10-15 manager: check-log-entry baseline = 4 (before dispatch).
+- 2026-10-15 implementer: built `tools/registry/ownership.py` (check(); 007a's classify/append_only/report imported, not
+  changed) and `ownership_cli.py`; tests `tests/registry/test_ownership.py` (73) and `test_ownership_mutations.py` (5
+  coverage tests plus the 50-entry mutation table and runner); `docs/tasks/007b-verify.sh`; README (criterion 12).
+  Design points: the fail-closed key runs first on the raw old/new pair (`_fail_closed`); R11 authority is
+  `r11_identity is not None and author == r11_identity and _takedown_shape(files)` where the shape uses 007a's
+  `check_entry` classification (T2 only, id/owner/count unchanged, no finding, every touched path an existing
+  entry.json); R1 and unrecognised paths come from 007a's `classify.classify`; membership is asked once per reserved
+  namespace through the injected oracle.
+- 2026-10-15 implementer: `docs/tasks/007b-verify.sh` output on the committed tree (per-test lines elided, `grep -v '^test_'`):
+```
+ok    tool present: git
+ok    tool present: python3
+Ran 228 tests in 1.893s   OK
+ok    unittest: Ran 228 tests in 1.893s, OK
+ok    ownership tests ran: 78 (floor 75)
+ok    umbrella 11: fresh clone of HEAD runs the whole suite OK
+ok    umbrella 4   id differs / username matches rejected; rename accepted: 1 passing, 0 failing
+ok    umbrella 5   first publish binds; binding is not a bypass: 8 passing, 0 failing
+ok    umbrella 6   reserved namespaces by org membership, naming ADR-0119: 13 passing, 0 failing
+ok    umbrella 9   positive controls accepted: 11 passing, 0 failing
+ok    umbrella 10  messages name the problem and the rule: 5 passing, 0 failing
+ok    umbrella 14  fail-closed T1/T3, every author, ADR-0121 named: 6 passing, 0 failing
+ok    B1           fail-closed matrix (6 kinds x 5 authors = 30 cells): 1 passing, 0 failing
+ok    B2           takedown authority (R3/R7/R11): 9 passing, 0 failing
+ok    B3           every rule has accept+reject tests and a reddening mutation: 4 passing, 0 failing
+ok    B4           the required mutations are all present: 1 passing, 0 failing
+ok    B5           seam: no network / environ / open; bad inputs are errors: 3 passing, 0 failing
+ok    B6           truncation and composition cells: 3 passing, 0 failing
+ok    I1..I8       checker invariants: 17 passing, 0 failing
+ok    R1..R10      verdict rules: 30 passing, 0 failing
+ok    CLI          ownership_cli exit codes in unittest: 1 passing, 0 failing
+ok    size: 2 ownership source files (cap 2: ownership.py, ownership_cli.py)
+info  ownership source lines: 318
+ok    no real account or App id hard-coded in tools/ownership*
+ok    ownership.py imports no os/socket/subprocess/urllib/http
+ok    ownership source reads no actor/credential state
+ok    CLI help documents that accepted is never a merge signal (I8)
+ok    CLI help documents the three exit codes
+ok    CLI help documents that r11_identity None authorises nobody
+ok    criterion 12: docs/contracts/README.md names the ownership checker as built and 039 as owed
+ok    README no longer lists the ownership checker as still to come
+ok    CLI exit codes owner/stranger/usage = 0 1 2
+ok    changed files all inside the declared scope
+ok    007a's modules are untouched
+SUMMARY failed=0
+```
+- 2026-10-15 implementer: `docs/tasks/007b-verify.sh --mutate` (clone of the committed tree): baseline green, then
+  `SUMMARY 50 mutations, not_red=0` / `ok every mutation turned its named tests red` / `SUMMARY failed=0`. Every B4
+  mutation is in the table (owner from new, provider ignored, reserved list from new, logins not ids, 302 as member and
+  as not-member, oracle exception as member, page-only accepted, joint namespaces, fail-closed skipped, fail-closed
+  keyed on 007a's classification, pipeline_app_id bypass, any author uses R11, R11 admits non-takedown changes
+  (appended version, owner edit, page edit), shape-based precedence, binding PR rebinds, reject-everything), plus B6's
+  three and one to two per rule R1-R11 and I1-I7. One first-run NOT RED (`i7-namespaces-pooled...` named an accept test
+  the mutation cannot redden) was corrected by removing that name from its `red` list, not by weakening anything.
+- 2026-10-15 implementer: the verify script itself can fail: with the fail-closed call deleted from the WORKING tree,
+  the default run printed `FAILED (failures=40, errors=2)`, `FAIL unittest not OK`, `FAIL umbrella 14 ... 1 passing,
+  4 failing`, `FAIL B1 ... 0 passing, 1 failing`, `SUMMARY failed=4` (file then restored with `git checkout`).
+- 2026-10-15 implementer: closed tasks' verify scripts on this branch. `007a-verify.sh`: rc=2, exactly two FAILs, both
+  structural to its own branch and unfixable inside 007b's scope: `size: 7 source files in tools/registry (cap 5)`
+  (its cap counts every file in tools/registry; ownership.py and ownership_cli.py are the 6th and 7th) and `files
+  outside the declared scope` (it lists 007b's own files). Its test, parity, mutation-coverage and CLI checks are
+  green. FINDING for the manager: 007a-verify.sh needs its size/scope checks re-based by a later maintenance task
+  (062-style); the same trap awaits 008b and 039. `062-verify.sh` without a node_modules argument: `FAIL AC0
+  prerequisite: a node_modules directory with ajv ... required` (finding: no ajv 8 on the default path). Re-run with
+  the existing read-only `/tmp/fc041/node_modules` (ajv 8.20.0), nothing installed: see the next entry.
+- 2026-10-15 implementer: no network, credential or environment read happened; the tests assert this (B5).
+
+## Findings and deviations (implementer, for the manager)
+- `login` IS compared, in R4/R6 only (first publish; the contract defines them on `pulls.user.login`). The spec text "a
+  login ... is never compared" is honoured for R3/R7/R8 and every existing-namespace decision; mutation
+  `i6-login-alone-authorises` proves a login never authorises.
+- `base_entries` (new optional input): the spec's inputs give no way to know an UNCHANGED sibling `entry.json` for a
+  `page.json`-only PR (R10 needs "exists at the merge-base"). The caller passes the merge-base entries; a missing key
+  means "no entry" and is R10's closed rejection. The CLI fills it from `--old-root`.
+- An owner or an org member submitting a pure-T2 PR is rejected by an `R11` finding (the contract's R11 taxonomy row),
+  because they pass R3/R7 on their own merits; a stranger gets R11 plus R3. B2 says "rejected (R3/R7)"; the verdict is
+  the same, the rule id for owner and member is R11.
+- First-publish detection is per `entry.json` path (old absent), because the inputs carry no other entry of the
+  namespace. A second entry in an existing namespace by a different id still has to pass R4 (login equals the
+  namespace) and R5/R6.
+- The CLI's `--membership-status` is one recorded status for any org; a missing value is R9 (exit 1, closed), not exit 2.
+- A PR touching `reserved-namespaces.json` is always rejected (unrecognised path, via 007a's classifier), on top of
+  whatever else it triggers; the reserved list it carries never reaches any decision (tested).
+
+## Questions booked by the implementer
+- Q (Ludwig, inherited from the spec, not blocking): the concrete `pulls.user.id` of the platform's takedown PRs.
+  Unchanged; production keeps `r11_identity = None`.
+- Q (manager, non-blocking): should first-publish rules consider the whole namespace (all its entries) instead of the
+  single entry path? Assumption taken: per path (above).
+- Q (manager, non-blocking): 007a-verify.sh's size and scope checks fail on every later branch (finding above).
+- 2026-10-15 implementer: `062-verify.sh /tmp/fc041/node_modules` (existing read-only ajv 8.20.0): `RESULT 4 CHECK(S) FAILED`,
+  all four on one script: `AC1.main.008a`, `AC1.probe.008a` (the base commit e009ef0, which contains none of this
+  branch's code: expected failing ids [changed,paths], got [changed,paths,suite]), `AC3.head.008a` and `AC3.later.008a`
+  (008a-verify.sh "failing: suite" inside 062's temporary clones). Run directly on this branch,
+  `docs/tasks/008a-verify.sh` gives rc=0, `suite: 114 passed, 0 failed`. Because the same failure appears at the
+  untouched base commit, it is not caused by 007b; it looks environmental to 062's clone harness (finding for the
+  manager; not investigated further, out of scope). Every other 062 check (006, 032, 034, 057 on HEAD and on a later
+  branch, AC5-AC7, self-scope) passed.
