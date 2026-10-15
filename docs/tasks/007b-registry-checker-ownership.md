@@ -238,3 +238,27 @@ SUMMARY failed=0
   untouched base commit, it is not caused by 007b; it looks environmental to 062's clone harness (finding for the
   manager; not investigated further, out of scope). Every other 062 check (006, 032, 034, 057 on HEAD and on a later
   branch, AC5-AC7, self-scope) passed.
+
+## Amendment 1 (manager, 2026-10-15, session 10) — fix round after review round 1 (FAIL)
+**F1 (blocking, security): a new `entry.json` in an already-owned namespace is treated as a first publish.** Reviewer probe:
+stranger id 999 with current login `alice` adds `mods/alice.new/entry.json`; merge-base namespace `alice` is owned by
+another id → `accepted`. This is `ownership.md` Attack 4 (recycled username) and contradicts "namespaces are never
+reassigned" (R3 is defined on the namespace existing at the merge-base). Deviation 4 (per-path first publish) is rejected.
+Required:
+- A new injected input, `namespace_owners`: the mapping namespace → owner `(provider, id)` read from **every**
+  `mods/*/entry.json` at the PR's **merge-base** (the CLI builds it from `--old-root`; never from the PR's own files).
+  A namespace is "first published" by a PR only if it is absent from `namespace_owners` **and** from the reserved list.
+- A new `entry.json` (old absent) in a namespace present in `namespace_owners` is judged by R3 against that recorded
+  owner's id — never by R4/R6's login comparison. (This also fixes the fail-safe side effect: a renamed owner adding a
+  second mod is no longer rejected.)
+- `namespace_owners` absent (None) → fail closed: every PR adding a new `entry.json` is rejected with a message naming the
+  missing input. An empty mapping is a legitimate value (empty registry) and is distinct from None (tested).
+- **Red first (§2c rule 5):** the reviewer's probe becomes a test — "matching login, different id, sibling entry in an
+  owned namespace" — committed before the fix and shown red (accepted) on that commit; plus the renamed-owner case.
+- Mutations (added to the runner, shown red): ignore `namespace_owners` (per-path first publish again); read it from the
+  PR's new files; treat None as empty; judge a sibling entry by login instead of id.
+- `docs/tasks/007b-verify.sh --mutate` output pasted into the log.
+**F2 (non-blocking here): mixed PR with a T2 by the owner.** 007b implements `ownership.md` R11 as written ("judged in full
+by the ordinary rules"). No code change in this task; the contract gap is booked for Ludwig and gates task 039.
+**F3:** no change required; the `--mutate` paste in the log is the demonstration.
+- 2026-10-15 manager: amendment 1 appended; fix round sent to the implementer. Log baseline recounted below.
