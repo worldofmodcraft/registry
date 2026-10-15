@@ -297,6 +297,70 @@ class ReservedNamespacesTests(unittest.TestCase):
                 self.assertTrue(entry["reason"].strip())
 
 
+class OneOfKeywordTests(unittest.TestCase):
+    """Task 057: `oneOf` support in the test validator, and the version-lifecycle
+    shapes it lets entry.schema.json express (one branch per version status)."""
+
+    ONE = {"oneOf": [{"type": "string", "pattern": "^a"}, {"type": "string", "pattern": "b$"}]}
+
+    def test_exactly_one_matching_branch_passes(self) -> None:
+        validate("ax", self.ONE)
+        validate("xb", self.ONE)
+
+    def test_zero_matching_branches_fails(self) -> None:
+        with self.assertRaises(SchemaValidationError):
+            validate("xx", self.ONE)
+
+    def test_two_matching_branches_fails(self) -> None:
+        with self.assertRaises(SchemaValidationError):
+            validate("ab", self.ONE)
+
+    def test_other_composition_keywords_still_fail_loudly(self) -> None:
+        for kw in ("anyOf", "allOf", "not", "if", "const", "$ref"):
+            with self.subTest(keyword=kw):
+                with self.assertRaises(NotImplementedError):
+                    validate("x", {kw: {}})
+
+    def _entry(self, version: dict) -> dict:
+        return {
+            "id": "kelsi:housing",
+            "owner": {"provider": "github", "id": 1, "name_at_registration": "kelsi"},
+            "versions": [version],
+        }
+
+    def test_each_status_accepts_only_its_own_key_set(self) -> None:
+        pending = {"version": "1.0.0", "commit": "a" * 40, "source_url": "https://example.org/r.git", "status": "pending"}
+        five = {
+            "source_archive": "https://archive.example.org/x.tar.gz",
+            "source_sha256": "0" * 64,
+            "signature": "sig",
+            "key_id": "k",
+            "published_at": "2026-10-15T09:00:00Z",
+        }
+        published = {**pending, **five, "status": "published"}
+        removed = {**published, "status": "removed", "reason": "legal"}
+        rejected = {**pending, "status": "rejected", "reason": "build failed", "build_log_url": "https://logs.example.org/1"}
+        for name, v in (("pending", pending), ("published", published), ("removed", removed), ("rejected", rejected)):
+            with self.subTest(accepts=name):
+                validate(self._entry(v), SCHEMAS["entry"])
+        cross = {
+            "pending+signature": {**pending, "signature": "sig"},
+            "published+reason": {**published, "reason": "x"},
+            "published+build_log_url": {**published, "build_log_url": "https://logs.example.org/1"},
+            "removed-no-reason": {k: x for k, x in removed.items() if k != "reason"},
+            "removed+build_log_url": {**removed, "build_log_url": "https://logs.example.org/1"},
+            "rejected-no-reason": {k: x for k, x in rejected.items() if k != "reason"},
+            "rejected-no-log": {k: x for k, x in rejected.items() if k != "build_log_url"},
+            "rejected+source_sha256": {**rejected, "source_sha256": "0" * 64},
+            "rejected-http-log": {**rejected, "build_log_url": "http://logs.example.org/1"},
+            "unknown-status": {**pending, "status": "yanked"},
+        }
+        for name, v in cross.items():
+            with self.subTest(rejects=name):
+                with self.assertRaises(SchemaValidationError):
+                    validate(self._entry(v), SCHEMAS["entry"])
+
+
 class DeterminismTests(unittest.TestCase):
     """Acceptance criterion 8: two runs produce identical results. Re-runs
     validation over every example in this process and checks the pass/fail

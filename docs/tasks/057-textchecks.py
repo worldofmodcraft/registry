@@ -53,7 +53,7 @@ REQUIRED = {
     "t1-condition-4": "`new.versions[i]` has exactly the nine keys of the `published` row of the shape table, so no key outside them, and in particular no `reason` and no `build_log_url`.",
     "t3-condition-4": "`new.versions[i]` has exactly the keys of the `rejected` row of the shape table: none of the five pipeline-written fields of T1, and nothing else.",
     "t3-terminal": "`rejected` is terminal and one-way: `rejected -> anything` is a violation of rule 1, and so is `rejected -> rejected` with any change, `reason` included.",
-    "t2-only-from-published": "This is the only status transition this document permits on an element whose old status is `published`.",
+    "t2-only-from-published": "From an element whose old status is `published`, this document permits exactly one status transition: T2.",
     "authority-not-defined": "Authority for T1 and T3 is therefore not defined by this document.",
     "shape-legal-mixed": "A PR holding a T1 on one version and a T2 or T3 on another is shape-legal.",
     "rule1-four-branch": "with exactly three permitted exceptions: the transitions T1, T2 and T3 defined in \"The permitted in-place mutations\" below.",
@@ -111,6 +111,8 @@ def main(argv):
     if "--old-present" in argv:
         for cid, s in OLD_RULES.items():
             report(norm(s) in text, f"old-present/{cid}", "old sentence is FOUND in this (pre-change) file")
+        hits0 = re.findall(r"one permitted|only status transition", text)
+        report(len(hits0) > 0, "old-present/grep-zero", f"the grep pattern finds {len(hits0)} hit(s) in the pre-change file (positive control)")
         if "--schema" in argv:
             sch0 = json.loads(schema_p.read_text())
             strs = []
@@ -132,6 +134,8 @@ def main(argv):
 
     for cid, s in OLD_RULES.items():
         report(norm(s) not in text, f"old-gone/{cid}", "old sentence no longer appears in append-only.rules.md")
+    hits = re.findall(r"one permitted|only status transition", text)
+    report(not hits, "old-gone/grep-zero", f'grep "one permitted\\|only status transition" returns zero (found {len(hits)})')
     for cid, s in REQUIRED.items():
         report(norm(s) in text, f"required/{cid}", "full sentence present")
 

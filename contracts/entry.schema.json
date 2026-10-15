@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://worldofmodcraft.com/schemas/entry.schema.json",
   "title": "Registry entry",
-  "description": "Contract for edges E2 (author -> N2, registry entry shape written by a publish PR, ADR-0058 Section 2), E8 (N5 -> N4 -- write-back: build-pipeline N5 writes source_archive, source_sha256, signature, key_id, published_at, status into an already-accepted version object) and E10 (N2 -> N7, the site build's read side) in docs/architecture/depgraph.md. One instance of this schema is the full registry entry for one mod namespace:name, stored at mods/<namespace>.<name>/entry.json in this repository (see README.md). Ownership and version-object shape follow ADR-0058 Section 2 exactly; reserved namespaces (mc, test) use the identical owner shape bound to the organisation's numeric id instead of an individual's (ADR-0119 Section 2) -- this schema does not distinguish the two cases, by design. Mutability rules for this document are NOT expressed here (JSON Schema validates one snapshot, not a diff between two): see contracts/append-only.rules.md, edge E4, for what a PR may change.",
+  "description": "Contract for edges E2 (author -> N2, registry entry shape written by a publish PR, ADR-0058 Section 2), E8 (N5 -> N4 -- write-back: build-pipeline N5 writes source_archive, source_sha256, signature, key_id, published_at, status into a `pending` version object (transition T1, ADR-0121)) and E10 (N2 -> N7, the site build's read side) in docs/architecture/depgraph.md. One instance of this schema is the full registry entry for one mod namespace:name, stored at mods/<namespace>.<name>/entry.json in this repository (see README.md). Ownership and version-object shape follow ADR-0058 Section 2 exactly; reserved namespaces (mc, test) use the identical owner shape bound to the organisation's numeric id instead of an individual's (ADR-0119 Section 2) -- this schema does not distinguish the two cases, by design. Mutability rules for this document are NOT expressed here (JSON Schema validates one snapshot, not a diff between two): see contracts/append-only.rules.md, edge E4, for what a PR may change.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -46,22 +46,11 @@
     "versions": {
       "type": "array",
       "minItems": 1,
-      "description": "Append-only (ADR-0041: \"Versions are immutable; existing hashes can never be updated, only new versions added\"). Every element is a single published version; at least one exists once the entry is created, because the first publish PR (ADR-0058 Section 1) carries id, version, commit hash and source URL together -- an entry with zero versions is not a state this schema admits. Ordering and what a later PR may change to this array: contracts/append-only.rules.md.",
+      "description": "Append-only (ADR-0041: \"Versions are immutable; existing hashes can never be updated, only new versions added\", as amended by ADR-0121: a version is born `pending` and changes in place only by the transitions T1 `pending -> published`, T2 `published -> removed` and T3 `pending -> rejected`). Every element is one version in one of four states (`pending`, `published`, `removed`, `rejected`), each with an exact key set: see the `oneOf` below. At least one element exists once the entry is created, because the first publish PR (ADR-0058 Section 1) carries id, version, commit hash and source URL together -- an entry with zero versions is not a state this schema admits. Ordering and what a later PR may change to this array: contracts/append-only.rules.md.",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "version",
-          "commit",
-          "source_url",
-          "source_archive",
-          "source_sha256",
-          "signature",
-          "key_id",
-          "published_at",
-          "status"
-        ],
-        "description": "ADR-0058 Section 2's version-object fields, exactly as named in this task's acceptance criterion 1. version/commit/source_url are supplied by the author's publish PR (edge E2); source_archive/source_sha256/signature/key_id/published_at/status are written back by the build pipeline once the PR is accepted and built (edge E8, ADR-0041). `reason` is optional and used only when status is \"removed\" -- see its own description; a required-9-field version object without `reason` remains valid at every other status.",
+        "description": "ADR-0121's version object. The four states and their exact key sets (enforced by `oneOf`, one branch per `status`): `pending` = version, commit, source_url, status (what the author's PR can know, edge E2); `published` = those four plus source_archive, source_sha256, signature, key_id, published_at (written back once by the pipeline, edge E8, transition T1); `removed` = the nine published keys plus `reason` (takedown, transition T2); `rejected` = the four pending keys plus `reason` and `build_log_url` and none of the five pipeline-written fields (transition T3). Item-level `properties` below state every pattern once; each branch picks its keys. A schema validates one snapshot, not a transition: which state may follow which is contracts/append-only.rules.md.",
         "properties": {
           "version": {
             "type": "string",
@@ -81,7 +70,7 @@
           "source_archive": {
             "type": "string",
             "pattern": "^https://\\S+$",
-            "description": "URL of the pipeline's own archived copy of the exact built commit -- platform storage, not the author's repo (ADR-0041: \"the registry points at our copy\"; depgraph N6 artifact-store). Written back by the pipeline (edge E8); absent until the pipeline runs."
+            "description": "URL of the pipeline's own archived copy of the exact built commit -- platform storage, not the author's repo (ADR-0041: \"the registry points at our copy\"; depgraph N6 artifact-store). Written back by the pipeline (edge E8, transition T1); present only in `published` and `removed` versions."
           },
           "source_sha256": {
             "type": "string",
@@ -101,22 +90,141 @@
           "published_at": {
             "type": "string",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
-            "description": "RFC 3339 timestamp of when the pipeline wrote this version back into the registry."
+            "description": "RFC 3339 timestamp of when the pipeline wrote this version back into the registry (transition T1)."
           },
           "status": {
             "type": "string",
             "enum": [
+              "pending",
               "published",
-              "removed"
+              "removed",
+              "rejected"
             ],
-            "description": "Closed enum, ADR-0041: a version starts \"published\"; the only other state a version can reach is \"removed\" (\"Only legal grounds ... lead to removed: artefacts pulled, registry entry kept with status and reason\"). Whole-mod \"deprecated\" is a separate, page-level flag (ADR-0059 Section 2, see page.schema.json) -- not a value of this field, because deprecation marks the mod, not one version, and remains editable without touching immutable version objects."
+            "description": "Closed enum of four states (ADR-0041 as amended by ADR-0121): a version is born \"pending\" (not installable, no artefacts); the pipeline's write-back makes it \"published\" (T1) or, if its build is rejected, \"rejected\" (T3, terminal, never installable); a takedown makes a published version \"removed\" (T2, terminal) (\"Only legal grounds ... lead to removed: artefacts pulled, registry entry kept with status and reason\"). Whole-mod \"deprecated\" is a separate, page-level flag (ADR-0059 Section 2, see page.schema.json) -- not a value of this field, because deprecation marks the mod, not one version, and remains editable without touching immutable version objects."
           },
           "reason": {
             "type": "string",
             "minLength": 1,
-            "description": "Optional. ADR-0041: a removed version's \"registry entry [is] kept with status and reason\". Present only when status is \"removed\"; this schema does not enforce that conditional requirement (no if/then support in the validator subset used by this repository's tests -- see tests/contracts/schema_check.py), so its presence/absence at other statuses is not itself a schema violation. Booked as a question: acceptance criterion 1's exact field list does not name `reason`, but ADR-0041 names it explicitly for the removed case, so it is included here as optional rather than dropped."
+            "description": "Required exactly when status is \"removed\" (ADR-0041: a removed version's \"registry entry [is] kept with status and reason\") or \"rejected\" (ADR-0121 Q-J: why the build failed); forbidden at \"pending\" and \"published\". The `oneOf` below enforces that presence and absence by status. That the text is non-empty after trimming whitespace is not expressible here (`\"   \"` satisfies minLength 1) and is checked by the transition rules in contracts/append-only.rules.md."
+          },
+          "build_log_url": {
+            "type": "string",
+            "pattern": "^https://\\S+$",
+            "description": "ADR-0121 Q-J: a link to the full build log of the rejected build. Present only when status is \"rejected\"; an https URL."
           }
-        }
+        },
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "commit",
+              "source_url",
+              "status"
+            ],
+            "properties": {
+              "version": {},
+              "commit": {},
+              "source_url": {},
+              "status": {
+                "enum": [
+                  "pending"
+                ]
+              }
+            },
+            "description": "pending: exactly version, commit, source_url, status."
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "commit",
+              "source_url",
+              "status",
+              "source_archive",
+              "source_sha256",
+              "signature",
+              "key_id",
+              "published_at"
+            ],
+            "properties": {
+              "version": {},
+              "commit": {},
+              "source_url": {},
+              "source_archive": {},
+              "source_sha256": {},
+              "signature": {},
+              "key_id": {},
+              "published_at": {},
+              "status": {
+                "enum": [
+                  "published"
+                ]
+              }
+            },
+            "description": "published: the pending keys plus the five pipeline-written fields; no reason."
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "commit",
+              "source_url",
+              "status",
+              "source_archive",
+              "source_sha256",
+              "signature",
+              "key_id",
+              "published_at",
+              "reason"
+            ],
+            "properties": {
+              "version": {},
+              "commit": {},
+              "source_url": {},
+              "source_archive": {},
+              "source_sha256": {},
+              "signature": {},
+              "key_id": {},
+              "published_at": {},
+              "reason": {},
+              "status": {
+                "enum": [
+                  "removed"
+                ]
+              }
+            },
+            "description": "removed: the nine published keys plus reason."
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "commit",
+              "source_url",
+              "status",
+              "reason",
+              "build_log_url"
+            ],
+            "properties": {
+              "version": {},
+              "commit": {},
+              "source_url": {},
+              "reason": {},
+              "build_log_url": {},
+              "status": {
+                "enum": [
+                  "rejected"
+                ]
+              }
+            },
+            "description": "rejected: the pending keys plus reason and build_log_url; none of the five pipeline-written fields."
+          }
+        ]
       }
     }
   }

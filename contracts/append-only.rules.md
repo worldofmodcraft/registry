@@ -59,8 +59,8 @@ forgotten. **A rename or move is not a fifth state** — it is two of these
 four states occurring at two different paths, and it is treated below after
 them. Task 007's checker must classify each mod directory into one of these
 states *before* any rule above can be applied, because rules 1, 3, the
-takedown carve-out and the ordering sections all presume the
-`present -> present` case implicitly.
+in-place mutation carve-outs (T1, T2, T3) and the ordering sections all
+presume the `present -> present` case implicitly.
 
 - **`absent -> absent`.** The file exists on neither side of the PR. There is
   nothing to compare and nothing to validate; no rule in this document
@@ -74,8 +74,8 @@ takedown carve-out and the ordering sections all presume the
   - **Rule 1 is vacuous**: `new.versions[0:0]` and `old.versions[0:0]` are
     both the empty list, so the prefix comparison succeeds trivially.
     **Rule 3 is vacuous**: `len(new.versions) < 0` is impossible. **The
-    takedown carve-out is vacuous**: it is defined only for indices
-    `i < n`, and there are none. **"Ordering of `versions[]` is part of what
+    takedown carve-out is vacuous**, and so are T1 and T3: all three are
+    defined only for indices `i < n`, and there are none. **"Ordering of `versions[]` is part of what
     is frozen" and "A version removed and then re-added identically" are
     vacuous**: both are consequences of rule 1's positional comparison over
     a prefix that is empty here. Read *vacuous*, not *waived* — the
@@ -96,10 +96,12 @@ takedown carve-out and the ordering sections all presume the
     depends on `old` existing:
 
     - **Rule 2** — every element must satisfy the version-object shape in
-      `entry.schema.json`, **and any element whose `status` is `"removed"`
-      must carry a `reason` that is present and non-empty after stripping
-      leading and trailing whitespace**. A first publish is not exempt from
-      the status-and-reason pairing ADR-0041 requires.
+      `entry.schema.json`, **and every element must be born `pending`** with
+      exactly the four keys rule 2 below names (ADR-0121 Q-L). A first
+      publish is not exempt from the born-`pending` rule: the author's PR
+      can know only a version's `version`, `commit` and `source_url`, so a
+      first publish never carries a `published`, `removed` or `rejected`
+      element.
     - **Rule 4** — `version` must be **pairwise-unique across
       `new.versions` as a whole**, compared by exact string equality. (Only
       the half of rule 4 that compares against `old.versions` is vacuous
@@ -110,15 +112,16 @@ takedown carve-out and the ordering sections all presume the
     in exactly this place: **a first publish is not exempt from rules 2 and
     4, and `new` validating against `entry.schema.json` is necessary here
     but not sufficient.** `entry.schema.json` has no cross-element
-    uniqueness keyword and no `if`/`then`, so it accepts both of the shapes
-    rules 4 and 2 reject — a duplicate `version` string across two elements,
-    and an element born `status: "removed"` with a missing or
-    whitespace-only `reason`. If creation were exempt, identical content
+    uniqueness keyword and validates one snapshot, never a birth, so it
+    accepts both of the shapes rules 4 and 2 reject — a duplicate `version`
+    string across two elements, and an element that is well-formed but not
+    `pending` (a `published` object carrying hashes the author invented, for
+    example). If creation were exempt, identical content
     could be laundered in through a namespace's *first* PR that would be
     rejected twice over as a later append: same end state, opposite verdict,
     with the guarantee depending only on which PR the data arrived in.
 - **`present -> present`.** The `old`-dependent parts of this document —
-  rule 1, rule 3, the takedown carve-out, the `id`/`owner` freeze, and the
+  rule 1, rule 3, the T1/T2/T3 carve-outs, the `id`/`owner` freeze, and the
   "Ordering of `versions[]`", "A version removed and then re-added
   identically" and "Malformed edits" sections — govern this case, and only
   this case. Rules 2 and 4 govern it as well, but are **not** confined to
@@ -156,7 +159,7 @@ takedown carve-out and the ordering sections all presume the
 `owner` (with `owner`'s three subfields `provider`, `id`, `name_at_registration`).
 
 **Both are frozen. Besides `versions` — whose permitted changes (appending,
-and the one takedown transition below) are the entire subject of this
+and the transitions T1, T2 and T3 below) are the entire subject of this
 document — `entry.json` currently has no other mutable top-level field.**
 Concretely: `new.id != old.id`, or `new.owner` not deep-equal to
 `old.owner` (any of its three subfields changed), is a violation, full stop —
@@ -177,54 +180,76 @@ allowed to permit it.** Silently loosening this rule to accommodate a new
 feature is exactly the kind of undocumented exception ADR-0119's own context
 section warns against.
 
+## The version object: four states (ADR-0121)
+
+A version object is in exactly one of four states, selected by its `status`,
+and each state has an exact key set: no key may be missing and no other key
+may be present. `entry.schema.json` enforces these key sets for a snapshot
+(one `oneOf` branch per status); this document says which state may follow
+which.
+
+| `status` | exact keys (no others) | created or changed by |
+|---|---|---|
+| `pending` | `version`, `commit`, `source_url`, `status` | the author's PR, as a newly appended element only |
+| `published` | the four `pending` keys plus `source_archive`, `source_sha256`, `signature`, `key_id`, `published_at` (nine keys) | transition T1 only |
+| `removed` | the nine `published` keys plus `reason` (non-empty after trimming) | transition T2 (the takedown) only |
+| `rejected` | the four `pending` keys plus `reason` (non-empty after trimming) and `build_log_url` (an `https://` URL); none of `source_archive`, `source_sha256`, `signature`, `key_id`, `published_at` | transition T3 only |
+
+`deprecated` is not a version status: it is a mod-level flag in `page.json`
+(ADR-0059 Section 2). A `pending` or `rejected` version has no archive, so a
+consumer must treat it as not resolvable and say "exists but is not yet
+published", never "not found" (ADR-0121 Consequences; that behaviour belongs
+to the launcher, the site and the resolver, not to this document).
+
 ## `versions[]`: append-only, order-preserving
 
 Let `n = len(old.versions)`. The check is:
 
 1. **`new.versions[0:n]` must be deep-equal, element-for-element and in the
-   same order, to `old.versions[0:n]`, with exactly one permitted exception:
-   the takedown transition defined in "The one permitted in-place mutation:
-   takedown" below.** Every version object that existed before this PR must
-   appear unchanged at the same index in the PR's version, unless that
-   element is undergoing the takedown transition, in which case the rules in
-   that section apply to that one element instead of plain deep-equality.
-   This is a two-branch mechanism (unchanged, or takedown) rather than a
-   single unconditional equality; everything below is a consequence of it,
-   spelled out because each one is a place a diff checker could reasonably
-   get it wrong.
+   same order, to `old.versions[0:n]`, with exactly three permitted exceptions:
+   the transitions T1, T2 and T3 defined in "The permitted in-place mutations" below.**
+   Every version object that existed before this PR must appear unchanged at
+   the same index in the PR's version, unless that element is undergoing one
+   of the three transitions, in which case the rules in that transition's
+   section apply to that one element instead of plain deep-equality. This is
+   a four-branch mechanism (unchanged, T1, T2 or T3) rather than a single
+   unconditional equality, and each element is classified independently;
+   everything below is a consequence of it, spelled out because each one is a
+   place a diff checker could reasonably get it wrong.
 2. **`new.versions` may be longer than `old.versions`** (`len(new.versions)
    >= n`); every element from index `n` onward is a newly added version
    object and must itself satisfy the version-object shape
    `entry.schema.json` defines for `versions[]` items (the file as a whole
-   must of course validate too). **In addition, any
-   newly added element whose `status` is `"removed"` must carry a `reason`
-   that is present and non-empty after stripping leading and trailing
-   whitespace** — ADR-0041 pairs `status: "removed"` with a reason
-   ("registry entry kept with status **and reason**") regardless of whether
-   the element arrives already-removed (an append) or reaches `"removed"`
-   by the takedown transition on an existing element (see "The one
-   permitted in-place mutation" below); this document does not treat "born
-   removed" as exempt from the pairing just because it is not a transition.
-   `entry.schema.json` cannot express this conditional requirement — its
-   `reason` property is unconditionally optional, because the validator
-   subset this repository uses has no `if`/`then` support — so enforcing it
-   for newly appended elements is entirely task 007's checker's job, not
-   the schema's.
+   must of course validate too). **In addition, the born state is fixed
+   (ADR-0121 Q-L).** Every newly appended element must be `pending` and carry exactly the four keys `version`, `commit`, `source_url` and `status`. An
+   element appended already `published`, `removed` or `rejected`, or
+   `pending` with a fifth key, is a violation, although
+   `entry.schema.json` alone accepts a well-formed `published`, `removed` or
+   `rejected` object as a snapshot. Without this rule an author could write
+   their own hashes and skip the pipeline (attack 1 below); `published` is
+   reached only by T1, `removed` only by T2 and `rejected` only by T3, never at
+   birth. No registry entry exists to migrate (`git ls-tree origin/main mods`
+   printed nothing when this rule was written). That a `reason` is non-empty
+   after trimming whitespace is checked by the transition rules (T2, T3);
+   `entry.schema.json` cannot see it, because `"   "` satisfies its
+   `minLength`.
 3. **`new.versions` must never be shorter than `old.versions`**
    (`len(new.versions) < n` is always a violation) — a version object can
-   never be **deleted from the array**. Note the two senses of "remove" that
-   sit twenty lines apart in this document: rule 3 is about *array
-   membership*, whereas a takedown (below) sets an existing element's
-   `status` to the string `"removed"` while leaving that element in the
-   array, at the same index, with the same `version`. A takedown is
-   therefore not a deletion and never engages rule 3.
+   never be **deleted from the array**, whatever its status: a `pending`
+   version cannot be withdrawn and a `rejected` version is kept as the
+   record that it was proposed and why it failed (ADR-0121). Note the
+   two senses of "remove" in this document: rule 3 is about *array membership*,
+   whereas a takedown (T2, below) sets an existing element's `status` to the
+   string `"removed"` while leaving that element in the array, at the same
+   index, with the same `version`. A takedown is therefore not a deletion
+   and never engages rule 3.
 4. **Every newly added version's `version` field must be unique across
    `new.versions` as a whole** — distinct from every existing version's
    `version` field (i.e. from every value in `old.versions`; `version` is
-   frozen even under the takedown transition below, so every
+   frozen even under the transitions T1, T2 and T3 below, so every
    `new.versions[0:n]` element's `version` field is always identical to the
-   corresponding `old.versions[i].version`, even on the one index where
-   rule 1's exception permits `status`/`reason` to differ — `new.versions[0:n]`
+   corresponding `old.versions[i].version`, even on an index where
+   rule 1's exceptions permit other fields to differ — `new.versions[0:n]`
    is therefore not deep-equal to `old.versions` in general, but it is
    always equal to it field-by-field on `version` specifically) **and**
    pairwise-distinct from every other newly added version's `version` field
@@ -263,16 +288,95 @@ Let `n = len(old.versions)`. The check is:
    separate, not-yet-written decision — booked under Questions in
    `docs/tasks/006-contracts.md`.
 
-### The one permitted in-place mutation: takedown (ADR-0041)
+### The permitted in-place mutations
 
-Rule 1 above has exactly one exception, stated here at field level so a
-checker can implement it without inference. For an index `i < n` (an element
-that existed in `old.versions`), `new.versions[i]` is permitted to differ
-from `old.versions[i]` if, and only if, **all** of the following hold:
+Rule 1 has exactly three exceptions, the transitions T1, T2 and T3, stated
+here at field level so a checker can implement each without inference. Each
+applies to one existing element at a fixed index `i < n`, is defined by that
+element's old and new `status` and by exact key sets, and happens at most once
+per element. Every other change to an existing element is a violation of
+rule 1. None of them changes array length or ordering: they never permit
+removing an element, adding one at a non-final position, or reordering, and
+rules 2 and 3 above and "Ordering of `versions[]`" below are untouched by them.
+
+#### T1: `pending -> published`, the pipeline's write-back (ADR-0121)
+
+For an index `i < n`, `new.versions[i]` is permitted to differ from
+`old.versions[i]` under T1 if, and only if, **all** of the following hold:
+
+1. `old.versions[i].status == "pending"` and
+   `new.versions[i].status == "published"`.
+2. `version`, `commit` and `source_url` are deep-equal to the old values: the
+   fields the author supplied are frozen.
+3. Each of `source_archive`, `source_sha256`, `signature`, `key_id` and
+   `published_at` is present in `new.versions[i]`, absent from
+   `old.versions[i]`, and satisfies its pattern (or, for `signature` and
+   `key_id`, its minimum length) in `entry.schema.json`.
+4. `new.versions[i]` has exactly the nine keys of the `published` row of the
+   shape table, so no key outside them, and in particular no `reason` and no
+   `build_log_url`.
+5. The array is otherwise untouched: rules 1 to 3 and "Ordering of
+   `versions[]`" apply to every other element.
+
+T1 happens exactly once, by structure: it requires
+`old.versions[i].status == "pending"`, and a `pending` element has none of the
+five pipeline-written fields. After T1 the element is `published`, and a
+`published` element is covered by plain deep-equality under rule 1 (or by T2),
+so the five fields can never be written a second time. `published -> pending`
+and `pending -> pending` with any change are violations of rule 1.
+
+Nothing else changes under T1: `id` and `owner` stay frozen, `page.json` is
+not part of this document, and no element is added, removed or reordered.
+
+T1 is checked for shape only. This document cannot check that
+`source_sha256` is the hash of the archive or that `signature` verifies,
+because no checker built from it has the tarball or the key; that is the job
+of the verifiers of `signature-format.md`, the site's verification and the
+launcher. A wrong but well-formed write-back is also never corrected by
+rewriting (T1 happens once); the remedy is a new version or a takedown.
+
+**Worked example — permitted T1.** `old.versions[0]`:
+
+```json
+{
+  "version": "1.0.0",
+  "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "source_url": "https://github.com/example/mod",
+  "status": "pending"
+}
+```
+
+`new.versions[0]` (same index; the author keys unchanged, five keys added,
+`status` changed):
+
+```json
+{
+  "version": "1.0.0",
+  "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "source_url": "https://github.com/example/mod",
+  "source_archive": "https://cdn.worldofmodcraft.org/archives/example-mod-1.0.0.tar.gz",
+  "source_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "signature": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "key_id": "platform-2026-01",
+  "published_at": "2026-10-15T09:00:00Z",
+  "status": "published"
+}
+```
+
+**Worked counter-example.** The same `new.versions[0]` with `commit` changed
+to `dddd…`, or with `source_sha256` missing, or with an extra `reason` key,
+is a violation: the author-supplied fields are frozen, all five pipeline-written
+fields are required, and the key set is exact.
+
+#### T2: `published -> removed`, the takedown (ADR-0041)
+
+T2 is the transition ADR-0041 defined, unchanged by ADR-0121 except that it is
+now one of three. For an index `i < n` (an element that existed in
+`old.versions`), `new.versions[i]` is permitted to differ from
+`old.versions[i]` under T2 if, and only if, **all** of the following hold:
 
 - `old.versions[i].status == "published"` **and**
-  `new.versions[i].status == "removed"`. This is the only status transition
-  this document permits on an existing element. (`published` staying
+  `new.versions[i].status == "removed"`. From an element whose old status is `published`, this document permits exactly one status transition: T2. (`published` staying
   `published`, i.e. no change at all, is not a transition and is covered by
   plain deep-equality under rule 1, not by this section.)
 - `new.versions[i].reason` is present, and **non-empty after stripping
@@ -308,12 +412,6 @@ already-removed version's `reason` is therefore exactly as much a violation
 as editing its `commit`. This is deliberately conservative (ADR-0103): a
 correction to a takedown's reason text is a decision no ADR has made, not a
 hole this document leaves open by default.
-
-This carve-out changes nothing about array length or ordering: it applies
-only to an existing element at a fixed index `i < n`. It never permits
-removing an element, adding one at a non-final position, or reordering —
-rules 2 and 3 above, and "Ordering of `versions[]`" below, are untouched by
-it.
 
 **This document defines the shape of a legal takedown, not who may perform
 one.** A field-level diff checker built from this document cannot, by
@@ -437,6 +535,104 @@ this element because "`status` changed to `removed`, that's allowed"
 without separately diffing every other field would silently let a takedown
 PR also rewrite which artefact a version's hash points at.
 
+#### T3: `pending -> rejected`, a build that will never succeed (ADR-0121 Q-J)
+
+For an index `i < n`, `new.versions[i]` is permitted to differ from
+`old.versions[i]` under T3 if, and only if, **all** of the following hold:
+
+1. `old.versions[i].status == "pending"` and
+   `new.versions[i].status == "rejected"`.
+2. `version`, `commit` and `source_url` are deep-equal to the old values.
+3. `reason` is present in `new.versions[i]`, absent from `old.versions[i]`, a
+   string, and non-empty after stripping leading and trailing whitespace;
+   `build_log_url` is present in `new.versions[i]`, absent from
+   `old.versions[i]`, and matches `^https://\S+$`.
+4. `new.versions[i]` has exactly the keys of the `rejected` row of the shape table: none of the five pipeline-written fields of T1, and nothing else.
+5. The array is otherwise untouched: rules 1 to 3 and "Ordering of
+   `versions[]`" apply to every other element.
+
+`rejected` is terminal and one-way: `rejected -> anything` is a violation of rule 1, and so is `rejected -> rejected` with any change, `reason` included. A changed `reason` is not a correction mechanism; the fix for a failed build is a new version. A `rejected` element is never deleted (rule 3) and its `version` string stays occupied (rule 4). A `rejected` version is never installable or resolvable.
+
+T3 is checked for shape only, like T1: whether the build really failed, and
+whether `build_log_url` points at a true log, cannot be checked by this
+document. Consumers treat `pending` and `rejected` as not resolvable and say
+"exists but is not yet published" rather than "not found" (ADR-0121
+Consequences); that behaviour belongs to the launcher, the site and the
+resolver and is recorded here only as a dependency.
+
+**Worked example — permitted T3.** `old.versions[1]`:
+
+```json
+{
+  "version": "1.1.0",
+  "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "source_url": "https://github.com/example/mod",
+  "status": "pending"
+}
+```
+
+`new.versions[1]`:
+
+```json
+{
+  "version": "1.1.0",
+  "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "source_url": "https://github.com/example/mod",
+  "status": "rejected",
+  "reason": "Build failed: the manifest declares a dependency that does not exist.",
+  "build_log_url": "https://builds.worldofmodcraft.org/logs/example-mod-1.1.0.txt"
+}
+```
+
+**Worked counter-example.** The same element with `reason` set to `"   "`, or
+with `build_log_url` starting `http://`, or carrying a `signature` key, is a
+violation.
+
+#### Coexistence of T1, T2 and T3
+
+- T1 and T3 start from `pending`, T2 starts from `published`, and each ends in
+  a different state, so one element cannot undergo two of them in one PR.
+  `pending -> removed` is a violation (nothing was archived, so there is
+  nothing to pull), and so is `published -> rejected`. A T1 element carrying a
+  `reason` or a `build_log_url` is a violation, and so is a T3 element carrying
+  any of the five pipeline-written fields (the key sets above are exact).
+- **Shape layer and authority layer.** This document classifies each element
+  independently. A PR holding a T1 on one version and a T2 or T3 on another is shape-legal. Who may carry which
+  belongs to `ownership.md`: its `R11` takedown PR must contain nothing but
+  takedown mutations, which excludes T1 and T3 in the same PR, and the
+  pipeline's carve-out (a sibling task) must be keyed on the pipeline identity
+  and on T1 or T3 mutations only.
+- **Fail closed.** Until `ownership.md` carries the pipeline-identity carve-out for T1 and T3, a checker implementing T1 or T3 must reject every PR that contains a T1 or T3 mutation, whoever authors it. Without this default an author could write their own `published` or `rejected` fields.
+- Authority for T1 and T3 is therefore not defined by this document. It defines the shape of the transitions, as the T2 section says of the takedown.
+
+#### Attack attempts the contract must answer
+
+1. **Author self-publishes.** A PR appends a version already `published`
+   with invented hashes. Answer: rule 2 and the shape table reject a
+   born-`published` element. Were that rule absent, only `ownership.md` and the
+   verification on install would stand between a forged object and users.
+2. **Garbage write-back by the pipeline identity.** A compromised or buggy
+   pipeline PR writes a well-formed but wrong `source_sha256`. This document
+   cannot reject it, because T1 is shape only. The defences are the
+   pipeline-identity carve-out keyed on "exactly T1", the fresh hash and
+   signature verification on install (`signature-format.md`), and the fact
+   that a wrong hash cannot be rewritten: the remedy is a new version or a
+   takedown. This is a known limit, not a hidden one.
+3. **Splicing a takedown into the pipeline PR** so a version vanishes
+   unnoticed. Shape-legal per element, rejected at the authority layer (`R11`
+   "nothing but takedown mutations"; the carve-out "exactly T1 or T3"). The tests
+   belong to the sibling tasks; this document records the dependency.
+4. **Pending squatting.** An author appends `pending` versions that will never
+   build, burning version strings. Rule 4 makes the squat permanent; T3 turns
+   each such version into a recorded, explained terminal state but does not
+   prevent the squat (ADR-0121 Consequences). The cost falls on the
+   squatter's own namespace.
+5. **Forged rejection.** An author marks their own `pending` version
+   `rejected` with a self-chosen reason, to skip the pipeline and retry the
+   same string. Shape-legal here (T3 is shape only), rejected by the
+   fail-closed rule and later by the ownership carve-out keyed on the pipeline
+   identity; this is why that carve-out covers T3 as well as T1.
+
 ### Ordering of `versions[]` is part of what is frozen
 
 Because rule 1 compares `new.versions[0:n]` to `old.versions[0:n]`
@@ -480,21 +676,22 @@ prefix-stability is.
 `i < n` (an in-place edit that keeps the array the same length, e.g.
 rewriting `versions[1].source_sha256` to point at different bytes) is a
 violation under rule 1 exactly the same way a shorter array is, **unless**
-the difference at that index is exactly the takedown transition described
-in "The one permitted in-place mutation: takedown" above, field by field. A
+the difference at that index is exactly one of the transitions T1, T2 or T3
+described in "The permitted in-place mutations" above, field by field. A
 checker does not need, and should not have, a separate "was this a resize or
 an edit" branch to decide *that* something changed at index `i`; it does
-need the takedown check above to decide, for each `i < n` where a
-difference is found, whether that specific difference is the one permitted
-shape or a violation. Rewriting `versions[1].source_sha256` while leaving
+need the T1, T2 and T3 checks above to decide, for each `i < n` where a
+difference is found, whether that specific difference is one of the three
+permitted shapes or a violation. Rewriting `versions[1].source_sha256` while leaving
 `status` alone is still a violation; transitioning `status` to `"removed"`
 while *also* rewriting `source_sha256` is still a violation too — only the
-exact shape spelled out in the takedown section is exempt from this
+exact shapes spelled out in the T1, T2 and T3 sections are exempt from this
 paragraph's rule.
 
 ## What this document does not cover
 
 - **`page.json`** — see "Scope" above; not append-only at all.
+- **Who may perform T1, T2 or T3.** This document defines shapes, not authority (see "Coexistence of T1, T2 and T3"); authority is `ownership.md`'s, and until its pipeline carve-out exists every T1 or T3 mutation is rejected.
 - **Manifest content (`mod.lua` / `manifest.schema.json`) as archived per
   version.** ADR-0059 Section 2 calls "the technical manifest fields" of a
   given version "frozen forever" as part of *version-bound* content, but

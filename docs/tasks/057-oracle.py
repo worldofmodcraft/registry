@@ -34,6 +34,7 @@ MUTATIONS = [
     "allow_rejected_published", "allow_rejected_rewrite", "t3_no_reason", "t3_no_log",
     "allow_delete_rejected", "allow_published_pending", "raw_text_compare", "t1_keys_atleast",
     "allow_pending_rewrite", "skip_owner_freeze", "t2_ws_reason", "allow_rule4_dup",
+    "reject_all",
 ]
 
 
@@ -73,6 +74,8 @@ def classify(old, new, mut=frozenset()):
             return json.dumps(a) == json.dumps(b)
         return a == b
 
+    if M("reject_all"):
+        return "reject", "mutation: a suite that rejects everything"
     if new is None:
         return "reject", "present -> absent"
     nv = new.get("versions")
