@@ -1,0 +1,19 @@
+{
+  "_comment": "ADR-0121 / task 057: the author's publish PR creates the entry with one version born `pending`: exactly the four keys `version`, `commit`, `source_url`, `status`. No archive, hash, signature, key id or timestamp exists yet; the pipeline's write-back PR (T1) adds them later.",
+  "example": {
+    "id": "kelsi:housing",
+    "owner": {
+      "provider": "github",
+      "id": 4831207,
+      "name_at_registration": "kelsi"
+    },
+    "versions": [
+      {
+        "version": "1.0.0",
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_url": "https://github.com/kelsi/housing",
+        "status": "pending"
+      }
+    ]
+  }
+}

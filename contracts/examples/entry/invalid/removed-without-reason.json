@@ -1,0 +1,24 @@
+{
+  "_comment": "VIOLATES the `removed` key set (ADR-0041, ADR-0121): a removed version must carry `reason`. Before task 057 this shape validated, because the schema could not express the conditional.",
+  "example": {
+    "id": "kelsi:housing",
+    "owner": {
+      "provider": "github",
+      "id": 4831207,
+      "name_at_registration": "kelsi"
+    },
+    "versions": [
+      {
+        "version": "1.0.0",
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_url": "https://github.com/kelsi/housing",
+        "status": "removed",
+        "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+        "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+        "key_id": "E7A1B2C3D4E5F607",
+        "published_at": "2026-10-15T09:00:00Z"
+      }
+    ]
+  }
+}

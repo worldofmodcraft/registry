@@ -1,0 +1,20 @@
+{
+  "_comment": "VIOLATES the `pending` key set (ADR-0121): a pending version carries exactly four keys; `signature` belongs to the pipeline's T1 write-back, which also sets `status` to `published`.",
+  "example": {
+    "id": "kelsi:housing",
+    "owner": {
+      "provider": "github",
+      "id": 4831207,
+      "name_at_registration": "kelsi"
+    },
+    "versions": [
+      {
+        "version": "1.0.0",
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_url": "https://github.com/kelsi/housing",
+        "status": "pending",
+        "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64=="
+      }
+    ]
+  }
+}
