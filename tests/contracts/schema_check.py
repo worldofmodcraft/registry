@@ -52,6 +52,7 @@ _SUPPORTED_KEYWORDS = {
     "properties",
     "additionalProperties",
     "items",
+    "oneOf",
     # Annotation-only keywords: never change validation outcome, only
     # documentation. Explicitly listed so an unrecognised keyword still
     # fails loudly rather than being confused with one of these.
@@ -153,6 +154,23 @@ def validate(instance: Any, schema: dict, path: str = "$") -> None:
             allowed = set(properties.keys())
             for key in set(instance.keys()) - allowed:
                 validate(instance[key], schema["additionalProperties"], f"{path}.{key}")
+
+    if "oneOf" in schema:
+        # Task 057: exactly one branch must match. Zero matches and two or more matches
+        # are both failures (never "first match wins"). Branches may use only the keywords
+        # supported above; an unsupported keyword inside a branch still raises
+        # NotImplementedError rather than counting as a non-match.
+        matched, errors = [], []
+        for index, branch in enumerate(schema["oneOf"]):
+            try:
+                validate(instance, branch, path)
+                matched.append(index)
+            except SchemaValidationError as exc:
+                errors.append(f"branch {index}: {exc.message}")
+        if len(matched) != 1:
+            if not matched:
+                raise SchemaValidationError(path, "matched none of the oneOf branches: " + "; ".join(errors))
+            raise SchemaValidationError(path, f"matched {len(matched)} oneOf branches {matched}, exactly one is required")
 
     if isinstance(instance, list) and "items" in schema:
         for i, item in enumerate(instance):

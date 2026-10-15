@@ -1,5 +1,5 @@
 {
-  "_comment": "VIOLATES the version object's `status` closed enum (ADR-0041): 'yanked' is not one of 'published' or 'removed'.",
+  "_comment": "VIOLATES the version object's `status` closed enum (ADR-0041): 'yanked' is not one of the four states pending, published, removed or rejected (ADR-0041 as amended by ADR-0121).",
   "example": {
     "id": "kelsi:housing",
     "owner": {

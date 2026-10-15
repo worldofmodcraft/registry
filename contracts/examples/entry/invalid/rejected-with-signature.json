@@ -1,0 +1,22 @@
+{
+  "_comment": "VIOLATES the `rejected` key set (ADR-0121 Q-J): a rejected version has no archive, so none of the five pipeline-written T1 fields may be present.",
+  "example": {
+    "id": "kelsi:housing",
+    "owner": {
+      "provider": "github",
+      "id": 4831207,
+      "name_at_registration": "kelsi"
+    },
+    "versions": [
+      {
+        "version": "1.0.0",
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_url": "https://github.com/kelsi/housing",
+        "status": "rejected",
+        "reason": "Build failed: manifest declares an undeclared dependency.",
+        "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt",
+        "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64=="
+      }
+    ]
+  }
+}

@@ -1,0 +1,2980 @@
+[
+ {
+  "name": "first-publish-one-pending",
+  "old": null,
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "expect": "accept",
+  "rule": "the author's PR is legal (born pending, four keys)"
+ },
+ {
+  "name": "first-publish-born-published",
+  "old": null,
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "D-2/Q-L: forged published object"
+ },
+ {
+  "name": "first-publish-born-removed",
+  "old": null,
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "removed",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z",
+     "reason": "Contained a Blizzard-derived asset reported after publish; artefacts pulled per ADR-0041."
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "D-2/Q-L: born removed"
+ },
+ {
+  "name": "first-publish-born-rejected",
+  "old": null,
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "D-2/Q-L: rejected only via T3"
+ },
+ {
+  "name": "first-publish-pending-with-reason",
+  "old": null,
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending",
+     "reason": "x"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "Q-L: exactly four keys"
+ },
+ {
+  "name": "first-publish-pending-with-build-log-url",
+  "old": null,
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "Q-L: exactly four keys"
+ },
+ {
+  "name": "first-publish-pending-bad-commit",
+  "old": null,
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "abc",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "shape: commit pattern"
+ },
+ {
+  "name": "first-publish-duplicate-version-strings",
+  "old": null,
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    },
+    {
+     "version": "1.0.0",
+     "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "rule 4"
+ },
+ {
+  "name": "entry-deleted",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": null,
+  "expect": "reject",
+  "rule": "present -> absent is always a violation"
+ },
+ {
+  "name": "append-second-pending-after-published",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    },
+    {
+     "version": "1.1.0",
+     "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "expect": "accept",
+  "rule": "later versions are appended pending"
+ },
+ {
+  "name": "append-second-pending-after-rejected",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    },
+    {
+     "version": "1.0.1",
+     "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "expect": "accept",
+  "rule": "a new version after a rejection"
+ },
+ {
+  "name": "append-born-published-later",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    },
+    {
+     "version": "1.1.0",
+     "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.1.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "D-2/Q-L at any position"
+ },
+ {
+  "name": "rejected-version-reappended-as-pending",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    },
+    {
+     "version": "1.0.0",
+     "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "string stays occupied, rule 4"
+ },
+ {
+  "name": "delete-pending-version",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    },
+    {
+     "version": "1.1.0",
+     "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "rule 3"
+ },
+ {
+  "name": "rejected-deleted",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": []
+  },
+  "expect": "reject",
+  "rule": "Q-J never deletion, rule 3"
+ },
+ {
+  "name": "unchanged-mixed-states",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    },
+    {
+     "version": "1.1.0",
+     "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "removed",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.1.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z",
+     "reason": "Contained a Blizzard-derived asset reported after publish; artefacts pulled per ADR-0041."
+    },
+    {
+     "version": "1.2.0",
+     "commit": "cccccccccccccccccccccccccccccccccccccccc",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    },
+    {
+     "version": "1.3.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    },
+    {
+     "version": "1.1.0",
+     "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "removed",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.1.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z",
+     "reason": "Contained a Blizzard-derived asset reported after publish; artefacts pulled per ADR-0041."
+    },
+    {
+     "version": "1.2.0",
+     "commit": "cccccccccccccccccccccccccccccccccccccccc",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    },
+    {
+     "version": "1.3.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "expect": "accept",
+  "rule": "no change is not a transition"
+ },
+ {
+  "name": "t1-exact",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "accept",
+  "rule": "T1"
+ },
+ {
+  "name": "t1-two-elements-two-transitions",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    },
+    {
+     "version": "1.1.0",
+     "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "removed",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z",
+     "reason": "Contained a Blizzard-derived asset reported after publish; artefacts pulled per ADR-0041."
+    },
+    {
+     "version": "1.1.0",
+     "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.1.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "accept",
+  "rule": "shape layer classifies each element independently (T2 + T1)"
+ },
+ {
+  "name": "t1-and-t3-different-elements",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    },
+    {
+     "version": "1.1.0",
+     "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    },
+    {
+     "version": "1.1.0",
+     "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "expect": "accept",
+  "rule": "shape layer classifies each element independently (T1 + T3)"
+ },
+ {
+  "name": "t1-extra-changed-field-commit",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "frozen author field commit"
+ },
+ {
+  "name": "t1-source-url-changed",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/evil/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "frozen author field source_url"
+ },
+ {
+  "name": "t1-version-changed",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.1",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "frozen author field version"
+ },
+ {
+  "name": "t1-missing-source_archive",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "all five pipeline fields required"
+ },
+ {
+  "name": "t1-missing-source_sha256",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "all five pipeline fields required"
+ },
+ {
+  "name": "t1-missing-signature",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "all five pipeline fields required"
+ },
+ {
+  "name": "t1-missing-key_id",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "all five pipeline fields required"
+ },
+ {
+  "name": "t1-missing-published_at",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "all five pipeline fields required"
+ },
+ {
+  "name": "t1-extra-key",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z",
+     "extra": "x"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "key set is exactly nine"
+ },
+ {
+  "name": "t1-with-reason",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z",
+     "reason": "x"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "key set / coexistence: no reason on T1"
+ },
+ {
+  "name": "t1-published-at-not-rfc3339",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "yesterday"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "pattern"
+ },
+ {
+  "name": "t1-sha256-wrong-length",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "abc123",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "pattern"
+ },
+ {
+  "name": "t1-source-archive-http",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "http://archive.worldofmodcraft.com/x.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "pattern"
+ },
+ {
+  "name": "t1-empty-signature",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "signature non-empty"
+ },
+ {
+  "name": "t1-empty-key-id",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "key_id non-empty"
+ },
+ {
+  "name": "t1-plus-owner-change",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 1,
+    "name_at_registration": "evil"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "owner frozen"
+ },
+ {
+  "name": "t1-plus-id-change",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "evil:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "id frozen"
+ },
+ {
+  "name": "t1-reorders-versions",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    },
+    {
+     "version": "1.1.0",
+     "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.1.0",
+     "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.1.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    },
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "ordering frozen"
+ },
+ {
+  "name": "t1-plus-whitespace-and-key-order-change-elsewhere",
+  "old": null,
+  "new": null,
+  "expect": "accept",
+  "rule": "comparison is over parsed values: whitespace and key order carry no meaning",
+  "old_text": "{\n  \"id\": \"kelsi:housing\",\n  \"owner\": {\n    \"provider\": \"github\",\n    \"id\": 4831207,\n    \"name_at_registration\": \"kelsi\"\n  },\n  \"versions\": [\n    {\n      \"version\": \"1.0.0\",\n      \"commit\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n      \"source_url\": \"https://github.com/kelsi/housing\",\n      \"status\": \"published\",\n      \"source_archive\": \"https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz\",\n      \"source_sha256\": \"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\n      \"signature\": \"untrusted comment: signature from minisign secret key\\nRWQAAAAA_placeholder_signature_bytes_base64==\",\n      \"key_id\": \"E7A1B2C3D4E5F607\",\n      \"published_at\": \"2026-10-15T09:00:00Z\"\n    },\n    {\n      \"version\": \"1.1.0\",\n      \"commit\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\n      \"source_url\": \"https://github.com/kelsi/housing\",\n      \"status\": \"pending\"\n    }\n  ]\n}",
+  "new_text": "{\n        \"id\": \"kelsi:housing\",\n        \"owner\": {\n                \"provider\": \"github\",\n                \"id\": 4831207,\n                \"name_at_registration\": \"kelsi\"\n        },\n        \"versions\": [\n                {\n                        \"published_at\": \"2026-10-15T09:00:00Z\",\n                        \"key_id\": \"E7A1B2C3D4E5F607\",\n                        \"signature\": \"untrusted comment: signature from minisign secret key\\nRWQAAAAA_placeholder_signature_bytes_base64==\",\n                        \"source_sha256\": \"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\n                        \"source_archive\": \"https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz\",\n                        \"status\": \"published\",\n                        \"source_url\": \"https://github.com/kelsi/housing\",\n                        \"commit\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n                        \"version\": \"1.0.0\"\n                },\n                {\n                        \"version\": \"1.1.0\",\n                        \"commit\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\n                        \"source_url\": \"https://github.com/kelsi/housing\",\n                        \"status\": \"published\",\n                        \"source_archive\": \"https://archive.worldofmodcraft.com/kelsi/housing/1.1.0.tar.gz\",\n                        \"source_sha256\": \"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\n                        \"signature\": \"untrusted comment: signature from minisign secret key\\nRWQAAAAA_placeholder_signature_bytes_base64==\",\n                        \"key_id\": \"E7A1B2C3D4E5F607\",\n                        \"published_at\": \"2026-10-15T09:00:00Z\"\n                }\n        ]\n}"
+ },
+ {
+  "name": "pending-with-partial-writeback",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64=="
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "pending carrying a pipeline field"
+ },
+ {
+  "name": "pending-with-partial-writeback-born",
+  "old": null,
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64=="
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "born pending with a pipeline field"
+ },
+ {
+  "name": "pending-to-pending-changed-commit",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "pending is frozen until T1/T3"
+ },
+ {
+  "name": "pending-to-removed",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "removed",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z",
+     "reason": "Contained a Blizzard-derived asset reported after publish; artefacts pulled per ADR-0041."
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "nothing archived, nothing to pull"
+ },
+ {
+  "name": "published-to-pending",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "one-way"
+ },
+ {
+  "name": "published-rewritten-hashes",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "exactly once: second write-back"
+ },
+ {
+  "name": "published-to-rejected",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "coexistence"
+ },
+ {
+  "name": "t2-takedown-exact",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "removed",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z",
+     "reason": "Contained a Blizzard-derived asset reported after publish; artefacts pulled per ADR-0041."
+    }
+   ]
+  },
+  "expect": "accept",
+  "rule": "existing takedown"
+ },
+ {
+  "name": "t2-takedown-whitespace-reason",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "removed",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z",
+     "reason": "  \t "
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "existing: reason non-empty after trim"
+ },
+ {
+  "name": "t2-takedown-hash-changed",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "removed",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z",
+     "reason": "Contained a Blizzard-derived asset reported after publish; artefacts pulled per ADR-0041."
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "existing: every other field frozen"
+ },
+ {
+  "name": "t2-with-t1-same-element",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "removed",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z",
+     "reason": "Contained a Blizzard-derived asset reported after publish; artefacts pulled per ADR-0041."
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "coexistence: impossible start state"
+ },
+ {
+  "name": "removed-to-published",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "removed",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z",
+     "reason": "Contained a Blizzard-derived asset reported after publish; artefacts pulled per ADR-0041."
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "removed is terminal"
+ },
+ {
+  "name": "removed-reason-rewritten",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "removed",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z",
+     "reason": "Contained a Blizzard-derived asset reported after publish; artefacts pulled per ADR-0041."
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "removed",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z",
+     "reason": "Different words"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "removed is frozen completely"
+ },
+ {
+  "name": "t3-exact",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "expect": "accept",
+  "rule": "the rejection transition"
+ },
+ {
+  "name": "t3-version-changed",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.1",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "frozen author field version"
+ },
+ {
+  "name": "t3-commit-changed",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "frozen author field commit"
+ },
+ {
+  "name": "t3-source-url-changed",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/evil/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "frozen author field source_url"
+ },
+ {
+  "name": "t3-reason-not-a-string-number",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": 5,
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "Q-J: reason is a string"
+ },
+ {
+  "name": "t3-reason-not-a-string-null",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": null,
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "Q-J: reason is a string"
+ },
+ {
+  "name": "t3-reason-not-a-string-object",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": {
+      "a": 1
+     },
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "Q-J: reason is a string"
+ },
+ {
+  "name": "t3-missing-reason",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "Q-J: reason required"
+ },
+ {
+  "name": "t3-whitespace-only-reason",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": " \t\n ",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "Q-J: non-empty after trimming"
+ },
+ {
+  "name": "t3-missing-build-log-url",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency."
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "Q-J: link required"
+ },
+ {
+  "name": "t3-build-log-url-http",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "http://builds.worldofmodcraft.com/log.txt"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "pattern ^https://\\S+$"
+ },
+ {
+  "name": "t3-carries-source_archive",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "T3 key set is exactly the rejected row"
+ },
+ {
+  "name": "t3-carries-source_sha256",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "T3 key set is exactly the rejected row"
+ },
+ {
+  "name": "t3-carries-signature",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64=="
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "T3 key set is exactly the rejected row"
+ },
+ {
+  "name": "t3-carries-key_id",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt",
+     "key_id": "E7A1B2C3D4E5F607"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "T3 key set is exactly the rejected row"
+ },
+ {
+  "name": "t3-carries-published_at",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "T3 key set is exactly the rejected row"
+ },
+ {
+  "name": "t3-extra-key",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt",
+     "extra": "x"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "T3 key set"
+ },
+ {
+  "name": "rejected-unchanged",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "expect": "accept",
+  "rule": "no change is not a transition"
+ },
+ {
+  "name": "rejected-to-pending",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "pending"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "terminal"
+ },
+ {
+  "name": "rejected-to-published",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "published",
+     "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+     "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
+     "key_id": "E7A1B2C3D4E5F607",
+     "published_at": "2026-10-15T09:00:00Z"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "terminal"
+ },
+ {
+  "name": "rejected-reason-rewritten",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "A kinder reason",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "terminal, no correction by rewrite"
+ },
+ {
+  "name": "rejected-to-removed",
+  "old": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "rejected",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "new": {
+   "id": "kelsi:housing",
+   "owner": {
+    "provider": "github",
+    "id": 4831207,
+    "name_at_registration": "kelsi"
+   },
+   "versions": [
+    {
+     "version": "1.0.0",
+     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_url": "https://github.com/kelsi/housing",
+     "status": "removed",
+     "reason": "Build failed: manifest declares an undeclared dependency.",
+     "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+    }
+   ]
+  },
+  "expect": "reject",
+  "rule": "terminal"
+ }
+]

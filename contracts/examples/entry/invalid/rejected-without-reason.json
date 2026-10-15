@@ -1,0 +1,20 @@
+{
+  "_comment": "VIOLATES the `rejected` key set (ADR-0121 Q-J): `reason` is required.",
+  "example": {
+    "id": "kelsi:housing",
+    "owner": {
+      "provider": "github",
+      "id": 4831207,
+      "name_at_registration": "kelsi"
+    },
+    "versions": [
+      {
+        "version": "1.0.0",
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_url": "https://github.com/kelsi/housing",
+        "status": "rejected",
+        "build_log_url": "https://builds.worldofmodcraft.com/logs/kelsi/housing/1.0.0.txt"
+      }
+    ]
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "_comment": "VIOLATES the `build_log_url` pattern (^https://\\S+$): a plain http link is refused.",
+  "example": {
+    "id": "kelsi:housing",
+    "owner": {
+      "provider": "github",
+      "id": 4831207,
+      "name_at_registration": "kelsi"
+    },
+    "versions": [
+      {
+        "version": "1.0.0",
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_url": "https://github.com/kelsi/housing",
+        "status": "rejected",
+        "reason": "Build failed: manifest declares an undeclared dependency.",
+        "build_log_url": "http://builds.worldofmodcraft.com/log.txt"
+      }
+    ]
+  }
+}
