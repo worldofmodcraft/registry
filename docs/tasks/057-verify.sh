@@ -7,7 +7,10 @@
 #                     without node, criterion 4 prints SKIPPED and COUNTS AS A FAILURE: a skip never yields green.
 #   PLATFORM_REPO     env, default /home/ludwig/wom: the platform checkout that holds docs/decisions/0121-*.md
 #                     (criterion 1 reads it from that repo's main; the registry itself has no ADR directory).
-#   BASE_REF          env, default origin/main: the merge-base reference for the scope check.
+#   The scope and pre-change checks (T2, S1, S2, S4) measure this task's OWN commit range, pinned at both ends
+#   (task 062, D-1): BASE_COMMIT a50daac (the registry main this task was cut from) .. FINAL_COMMIT 3ab8f43 (the
+#   last commit on task/057-version-lifecycle before its merge, registry PR #8: `git rev-parse e009ef0^2`).
+#   The range never moves, so they answer the same on main, on any later branch and in a fresh clone.
 # Exit code: the number of failed checks. Every check that decides the verdict reads committed repository
 # content only and makes no network call.
 set -u
@@ -19,7 +22,8 @@ fail() { echo "FAIL  $1"; FAILURES=$((FAILURES + 1)); }
 PY="python3 -I"
 NM="${1:-}"
 PLATFORM_REPO="${PLATFORM_REPO:-/home/ludwig/wom}"
-BASE_REF="${BASE_REF:-origin/main}"
+BASE_COMMIT="a50daac"
+FINAL_COMMIT="3ab8f43"
 
 echo "== 1 authority (criterion 1)"
 ADR="$(git -C "$PLATFORM_REPO" show main:docs/decisions/0121-version-lifecycle-pending.md 2>/dev/null)"
@@ -32,8 +36,13 @@ grep -c '^PASS' /tmp/057-text.$$ | sed 's/^/  passing text checks: /'
 grep '^FAIL' /tmp/057-text.$$
 [ $rc -eq 0 ] && pass "T1 all text checks (old sentences gone, new sentences present, sections equal their full-text pins)" || fail "T1 $rc text check(s) failed"
 rm -f /tmp/057-text.$$
-MB="$(git merge-base HEAD "$BASE_REF" 2>/dev/null)"
-if [ -z "$MB" ]; then fail "T2 no merge-base with $BASE_REF"; else
+# An unreachable pin FAILS naming the commit; it never skips (MANAGER.md Section 2c rule 1).
+PINS_OK=1
+for pin in "$BASE_COMMIT" "$FINAL_COMMIT"; do
+  git merge-base --is-ancestor "$pin" HEAD 2>/dev/null || { fail "P0 pinned commit $pin is not an ancestor of HEAD: T2, S1, S2 and S4 cannot run"; PINS_OK=0; }
+done
+MB="$BASE_COMMIT"
+if [ "$PINS_OK" = 0 ]; then fail "T2 no usable pinned base commit"; else
   TMPD="$(mktemp -d)"
   git show "$MB:contracts/append-only.rules.md" > "$TMPD/rules.md"; git show "$MB:contracts/entry.schema.json" > "$TMPD/schema.json"
   OUT="$($PY docs/tasks/057-textchecks.py --old-present --rules "$TMPD/rules.md" --schema "$TMPD/schema.json")"; rc=$?
@@ -95,17 +104,17 @@ PYE
 fi
 
 echo "== 6 scope and test integrity (criterion 8, task 045 criterion 6)"
-if [ -n "$MB" ]; then
-  echo "  \$ git merge-base HEAD $BASE_REF -> $MB"
-  CHANGED="$({ git diff --name-only "$MB" ; git ls-files --others --exclude-standard ; } | grep -v __pycache__ | sort -u)"
+if [ "$PINS_OK" = 1 ]; then
+  echo "  \$ git diff --name-only $BASE_COMMIT $FINAL_COMMIT"
+  CHANGED="$(git diff --name-only "$BASE_COMMIT" "$FINAL_COMMIT" | grep -v __pycache__ | sort -u)"
   BAD="$(printf '%s\n' "$CHANGED" | grep -v -E '^(contracts/entry\.schema\.json|contracts/append-only\.rules\.md|contracts/examples/entry/.*|tests/contracts/schema_check\.py|tests/contracts/test_contracts\.py|docs/contracts/README\.md|docs/tasks/057-.*)$' | grep -v '^$')"
   printf '%s\n' "$CHANGED" | sed 's/^/  changed: /'
   [ -z "$BAD" ] && pass "S1 every changed file is inside task 057's declared scope" || { fail "S1 out of scope: $BAD"; }
-  DEL="$(git diff "$MB" -- tests/contracts/test_contracts.py tests/contracts/schema_check.py | grep -E '^-[^-]' )"
+  DEL="$(git diff "$BASE_COMMIT" "$FINAL_COMMIT" -- tests/contracts/test_contracts.py tests/contracts/schema_check.py | grep -E '^-[^-]' )"
   [ -z "$DEL" ] && pass "S2 tests/contracts changes are additions only (no line removed)" || fail "S2 lines removed from tests: $DEL"
   PYC="$(git ls-files | grep -c '\.pyc$')"
   [ "$PYC" = 0 ] && pass "S3 no .pyc is tracked" || fail "S3 $PYC .pyc tracked"
-  NONADD="$(git diff --name-status "$MB" -- contracts/examples/entry | grep -v '^A')"
+  NONADD="$(git diff --name-status "$BASE_COMMIT" "$FINAL_COMMIT" -- contracts/examples/entry | grep -v '^A')"
   [ "$NONADD" = "M	contracts/examples/entry/invalid/status-not-in-enum.json" ] && pass "S4 existing entry examples untouched except the _comment of status-not-in-enum.json" || fail "S4 existing examples changed: $NONADD"
 fi
 

@@ -74,16 +74,26 @@ TMP_AFTER=$(ls -d /tmp/wom008a-* 2>/dev/null | wc -l)
 # no key material tracked
 if git ls-files | grep -E '\.(key|pem)$|minisign\.key' >/dev/null; then fail "a key-like file is tracked"; else ok "no key-like file tracked"; fi
 # file scope: every changed path is inside the declared scope (needs the base ref; missing base = failure, not skip)
-# The branch was cut from registry origin/main at 4d4a204. A pinned base (not a moving origin/main, which a
-# fresh clone resolves differently) keeps the check portable; the pin must be an ancestor of HEAD.
+# Task 062 (D-1): the check measures this task's OWN commit range, pinned at both ends, so it gives the same
+# answer on main, on any later branch and in any fresh clone. BASE is the registry commit the branch was cut
+# from (4d4a204, the merge of task 032). FINAL is the last commit on task/008a-pipeline-core before its merge
+# (registry PR #7: the second parent of merge a50daac, from `git log --first-parent` then `git rev-parse a50daac^2`).
+# An unreachable pin is a FAILURE naming the commit, never a skip.
 BASE=4d4a204
-if ! git merge-base --is-ancestor "$BASE" HEAD 2>/dev/null; then BASE=""; fi
-if [ -z "$BASE" ]; then fail "base commit 4d4a204 is not an ancestor of HEAD: file-scope check cannot run"; else
-  BAD=$(git diff --name-only "$BASE" HEAD | grep -v -E '^(tools/pipeline/|tools/validation/manifest\.py$|tests/pipeline/|docs/pipeline/build-pipeline\.md$|docs/validation/manifest-reader\.md$|docs/contracts/README\.md$|docs/tasks/008a-pipeline-core\.md$|docs/tasks/008a-verify\.sh$)' || true)
-  [ -z "$BAD" ] && ok "every changed path is within the declared file scope" || { fail "paths outside the declared scope:"; echo "$BAD"; }
+FINAL=9ccb3ec
+PINS_OK=1
+for pin in "$BASE" "$FINAL"; do
+  if ! git merge-base --is-ancestor "$pin" HEAD 2>/dev/null; then
+    fail "pinned commit $pin is not an ancestor of HEAD: file-scope check cannot run"
+    PINS_OK=0
+  fi
+done
+if [ "$PINS_OK" = 1 ]; then
+  BAD=$(git diff --name-only "$BASE" "$FINAL" | grep -v -E '^(tools/pipeline/|tools/validation/manifest\.py$|tests/pipeline/|docs/pipeline/build-pipeline\.md$|docs/validation/manifest-reader\.md$|docs/contracts/README\.md$|docs/tasks/008a-pipeline-core\.md$|docs/tasks/008a-verify\.sh$)' || true)
+  [ -z "$BAD" ] && ok "every path changed in $BASE..$FINAL is within the declared file scope" || { fail "paths outside the declared scope:"; echo "$BAD"; }
 fi
 for f in contracts reserved-namespaces.json tools/validation/scan_assets.py tools/validation/magic.py; do
-  if [ -n "$BASE" ] && git diff --quiet "$BASE" HEAD -- "$f"; then ok "untouched: $f"; else fail "changed or unverifiable: $f"; fi
+  if [ "$PINS_OK" = 1 ] && git diff --quiet "$BASE" "$FINAL" -- "$f"; then ok "untouched in $BASE..$FINAL: $f"; else fail "changed or unverifiable: $f"; fi
 done
 
 echo "SUMMARY failed=$FAILS"
