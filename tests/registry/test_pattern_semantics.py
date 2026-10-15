@@ -248,26 +248,145 @@ class NonStringInstances(unittest.TestCase):
                 fn(None, sub)
 
 
-class KnownEcmaGaps(unittest.TestCase):
-    """Differences that remain after the mandated `\\Z` + re.ASCII fix; booked as a question in the task 064 log."""
+TRANSLATORS = [
+    ("tests/contracts/schema_check.py", CONTRACTS_CHECK._ecma_pattern),
+    ("tests/validation/schema_check.py", VALIDATION_CHECK._ecma_pattern),
+    ("tools/registry/schema.py", schema.ecma_pattern),
+]
 
-    @unittest.expectedFailure
-    def test_ecma_dot_excludes_cr_and_line_separators_python_dot_excludes_only_lf(self):
-        # Protects: documents task 064 Questions Q1 (BUG-064-Q1): ECMA `.` rejects \r, U+2028, U+2029; Python's `.` does not.
-        sub = {"type": "string", "pattern": "^(?!/).+$"}
-        for label, fn, exc in PATHS:
-            with self.subTest(path=label):
-                with self.assertRaises(exc):
-                    fn("a\rb", sub)
 
-    @unittest.expectedFailure
-    def test_ecma_backslash_s_matches_unicode_whitespace_python_ascii_does_not(self):
-        # Protects: documents task 064 Questions Q1 (BUG-064-Q1): with re.ASCII `\S` accepts U+00A0, ECMA `\S` does not.
+def _accepts(fn, exc, pattern, value):
+    """True if the validator path accepts `value` for `pattern`."""
+    try:
+        fn(value, {"type": "string", "pattern": pattern})
+        return True
+    except exc:
+        return False
+
+
+class EscapeTranslation(unittest.TestCase):
+    """Amendment 1: no re.ASCII; each ECMA-262 escape is translated explicitly, so `\\S` and `.` keep ECMA meaning."""
+
+    def test_backslash_s_rejects_unicode_whitespace(self):
+        # Protects: ECMA `\S` excludes U+00A0 and the other WhiteSpace code points (the regression a global re.ASCII caused).
         sub = {"type": "string", "pattern": "^https://\\S+$"}
         for label, fn, exc in PATHS:
+            for ws in (" ", " ", "　", "﻿", " ", " "):
+                with self.subTest(path=label, ws=hex(ord(ws))):
+                    with self.assertRaises(exc):
+                        fn("https://a" + ws + "b", sub)
+
+    def test_backslash_s_still_accepts_non_ascii_visible_characters(self):
+        # Protects: positive control; ECMA `\S` matches "é" and CJK, so the translation must not narrow it to ASCII.
+        sub = {"type": "string", "pattern": "^https://\\S+$"}
+        for label, fn, _exc in PATHS:
             with self.subTest(path=label):
-                with self.assertRaises(exc):
-                    fn("https://a b", sub)
+                fn("https://exämple.com/日本", sub)
+                fn("https://a​b", sub)  # U+200B is not WhiteSpace in ECMA-262
+
+    def test_dot_rejects_cr_and_line_separators_but_accepts_other_characters(self):
+        # Protects: ECMA `.` excludes \n \r U+2028 U+2029 (Python's excludes only \n); anything else still matches.
+        sub = {"type": "string", "pattern": "^(?!/).+$"}
+        for label, fn, exc in PATHS:
+            for bad in ("a\rb", "a b", "a b", "a\nb", "\r"):
+                with self.subTest(path=label, bad=repr(bad)):
+                    with self.assertRaises(exc):
+                        fn(bad, sub)
+            for good in ("shots/é.png", "a\x85b", "a b"):
+                with self.subTest(path=label, good=repr(good)):
+                    fn(good, sub)
+
+    def test_dot_translation_in_a_simple_pattern(self):
+        # Protects: `.` handling outside lookaheads, with quantifiers.
+        for label, fn, exc in PATHS:
+            with self.subTest(path=label):
+                self.assertTrue(_accepts(fn, exc, "^a.c$", "abc"))
+                self.assertFalse(_accepts(fn, exc, "^a.c$", "a\rc"))
+                self.assertTrue(_accepts(fn, exc, "^a[.]c$", "a.c"))
+                self.assertFalse(_accepts(fn, exc, "^a[.]c$", "abc"))
+                self.assertTrue(_accepts(fn, exc, "^a\\.c$", "a.c"))
+                self.assertFalse(_accepts(fn, exc, "^a\\.c$", "abc"))
+
+    def test_word_and_negated_escapes(self):
+        # Protects: `\w` is [A-Za-z0-9_], `\W` and `\D` are their exact complements (Unicode letters/digits are \W / \D).
+        for label, fn, exc in PATHS:
+            with self.subTest(path=label):
+                self.assertTrue(_accepts(fn, exc, "^\\w+$", "aZ_09"))
+                self.assertFalse(_accepts(fn, exc, "^\\w+$", "café"))
+                self.assertTrue(_accepts(fn, exc, "^\\W$", "é"))
+                self.assertFalse(_accepts(fn, exc, "^\\W$", "a"))
+                self.assertTrue(_accepts(fn, exc, "^\\D$", "５"))
+                self.assertFalse(_accepts(fn, exc, "^\\D$", "5"))
+
+    def test_whitespace_escape_is_the_ecma_set(self):
+        # Protects: `\s` includes U+FEFF and U+00A0 (ECMA) and excludes U+0085 (NEL), which Python's `\s` includes.
+        for label, fn, exc in PATHS:
+            with self.subTest(path=label):
+                for ws in (" ", "\t", "\n", "\v", "\f", "\r", " ", "﻿", " ", " ", "　", " "):
+                    self.assertTrue(_accepts(fn, exc, "^\\s$", ws), hex(ord(ws)))
+                    self.assertFalse(_accepts(fn, exc, "^\\S$", ws), hex(ord(ws)))
+                for notws in ("\x85", "​", "a", "᠎"):
+                    self.assertFalse(_accepts(fn, exc, "^\\s$", notws), hex(ord(notws)))
+                    self.assertTrue(_accepts(fn, exc, "^\\S$", notws), hex(ord(notws)))
+
+    def test_escapes_inside_character_classes_expand_to_ranges(self):
+        # Protects: `[\d]`, `[\w]`, `[\s]` carry ECMA meaning inside a class, next to other members.
+        for label, fn, exc in PATHS:
+            with self.subTest(path=label):
+                self.assertTrue(_accepts(fn, exc, "^[\\d.]+$", "1.5"))
+                self.assertFalse(_accepts(fn, exc, "^[\\d.]+$", "１.5"))
+                self.assertTrue(_accepts(fn, exc, "^[\\w-]+$", "a-b_1"))
+                self.assertFalse(_accepts(fn, exc, "^[\\w-]+$", "é"))
+                self.assertTrue(_accepts(fn, exc, "^[\\s,]+$", " ,﻿"))
+                self.assertFalse(_accepts(fn, exc, "^[\\s,]+$", "\x85"))
+                self.assertTrue(_accepts(fn, exc, "^[^\\d]$", "１"))
+                self.assertFalse(_accepts(fn, exc, "^[^\\d]$", "1"))
+
+    def test_unsupported_constructs_raise_not_silently_pass(self):
+        # Protects: a construct whose meaning differs between Python and ECMA-262 is an explicit error, never a guess.
+        cases = (
+            "^[\\D]$", "^[\\W]$", "^[\\S]$",  # negated escape inside a class
+            "^\\b$", "^a\\B$",  # \b / \B use Unicode \w in Python
+            "^\\A$", "^a\\Z",  # Python-only anchors (literal letters in ECMA)
+            "^(?P<n>a)$", "^(?<n>a)$", "^(?i)a$", "^(?#c)a$",  # named groups / inline flags / comments
+            "^[]a]$", "^[^]a]$",  # empty class vs literal ] first
+            "^\\cA$", "^\\k<n>$",  # control escape, named backref
+        )
+        for label, fn in TRANSLATORS:
+            for pattern in cases:
+                with self.subTest(translator=label, pattern=pattern):
+                    with self.assertRaises(NotImplementedError):
+                        fn(pattern)
+        for label, fn, _exc in PATHS[:2]:
+            with self.subTest(path=label):
+                with self.assertRaises(NotImplementedError):
+                    fn("a", {"type": "string", "pattern": "^[\\D]$"})
+
+    def test_supported_constructs_pass_through_unchanged_except_the_translations(self):
+        # Protects: groups, lookarounds, quantifiers, escaped punctuation and `\$` / `[$]` keep their text.
+        for label, fn in TRANSLATORS:
+            with self.subTest(translator=label):
+                for same in ("^(?:a|b)+?$".replace("$", "\\$"), "(?=a)(?!b)(?<=c)(?<!d)e{2,3}", "^a\\.b\\/c\\-d\\\\e", "[a-c\\]]", "[$]"):
+                    self.assertEqual(fn(same), same)
+                self.assertEqual(fn("^a$"), "^a\\Z")
+                self.assertEqual(fn("\\d"), "[0-9]")
+                self.assertEqual(fn("[\\d]"), "[0-9]")
+
+    def test_no_re_ascii_flag_remains_in_any_pattern_path(self):
+        # Protects: Amendment 1; a global flag would change `\S`, `\s`, `\w` behaviour that is translated explicitly.
+        for rel in ("tests/contracts/schema_check.py", "tests/validation/schema_check.py", "tools/registry/schema.py"):
+            with self.subTest(file=rel):
+                text = (REPO / rel).read_text()
+                self.assertNotIn("re.ASCII", text)
+
+    def test_rejection_message_names_the_ecma_reason_for_translated_cases(self):
+        # Protects: the accepted message deviation holds for `.`/`\S` rejections too, not only for a trailing newline.
+        for label, fn, exc in PATHS[:2]:
+            with self.subTest(path=label):
+                with self.assertRaises(exc) as ctx:
+                    fn("https://a b", {"type": "string", "pattern": "^https://\\S+$"})
+                self.assertIn("end of input", ctx.exception.message)
+                self.assertIn("ECMA-262", ctx.exception.message)
 
 
 if __name__ == "__main__":
