@@ -210,3 +210,29 @@ sees. Alternative: accept a named maintainer class here, which would be a new de
   README that the caller must diff with `--no-renames` (039 wires it). F3: reject duplicate JSON object keys in `_read` and
   schema.check's string path, with tests and a mutation. F5: 007a-verify.sh must FAIL when origin/main is missing. F4: no
   change (the contract does not require it); considered and recorded. Rule: each break first as a test shown red, then fixed.
+- 2026-10-15 implementer, fix round 1 DONE (status back to review; commits ed9cb67, c2babbc). Red first: the new
+  `tests/registry/test_hardening.py` (18 tests) against the unfixed code gave `FAILED (failures=25, errors=1)`, e.g.
+  `FAIL: test_f1_born_pending_commit_with_trailing_newline_is_rule_2`, `test_f1_t1_pipeline_fields_with_trailing_newline_are_rejected
+  (field='source_sha256')`, `test_f1_t3_build_log_url_with_trailing_newline_is_rejected`, `test_f1_schema_check_rejects_entry_strings_...`,
+  `test_f2_a_symlinked_entry_json_...`, `test_f3_schema_check_text_path_rejects_duplicate_keys`. After the fix: `Ran 150 tests ... OK`
+  (also under `python3 -W error`). Fixes: F1 `schema.validate()` = schema_check.validate plus a re-check of every string
+  pattern with unescaped `$` (outside classes) rewritten to `\Z` (`ecma_pattern`; documented in schema.py: `re.fullmatch`
+  differs for unanchored patterns, the rewrite changes only where `$` may match); used by `schema.check` and by append_only
+  `_field_ok`. F2 `cli._read` rejects symlinks (rule `symlink`, message and help/README say `git diff --no-renames`). F3
+  `schema.loads_strict` rejects duplicate keys (rule `duplicate-key`) in `cli._read` and the `schema.check` text path. F5
+  verify script now FAILS without origin/main; new criterion lines F1/F2/F3. F4 considered, no change (the contract does not
+  require it). Source files still 5. Mutations added (5): old `search`-`$` behaviour, `$` not rewritten, append_only on the
+  plain validator, symlink read-through, duplicate keys allowed; all red. Fresh clone of `c2babbc`: normal `Ran 150 tests ... OK`,
+  `SUMMARY failed=0`; `--mutate`: `baseline green on committed c2babbcf5`, `SUMMARY 78 mutations, not_red=0`, `SUMMARY failed=0`
+  (the first fresh-clone mutate run correctly failed on a stale anchor, `ANCHOR ERROR ... occurs 0 times`, which I fixed).
+  SPEC/CONTRACT CONFLICT, not improvised: two of the five reviewer probes (T1 `signature` = "c"*62+"\n" and `key_id` =
+  "platform-2026-01\n") are NOT rejected. `entry.schema.json` gives those fields minLength only (no pattern), append-only T1
+  clause 3 says "its pattern (or, for signature and key_id, its minimum length)", and `signature-format.md` says `signature`
+  holds multi-line text. Rejecting them would invent a rule; tests assert the contract-valid behaviour explicitly.
+  signature-format.md also states `key_id` is 16 uppercase hex, which the schema does not enforce: that is a schema change
+  (out of scope) for the manager to decide.
+
+## Questions
+- BLOCKING for the manager (F1 probes 4 and 5): decide whether `signature`/`key_id` need a pattern (schema change, probably
+  `key_id` `^[0-9A-F]{16}$` per signature-format.md, and a signature grammar), or whether the reviewer's probes are accepted as
+  contract-valid. 007a enforces what the contract states and nothing more.
