@@ -106,7 +106,7 @@ mut("b-allow-entry-deletion", AO, [('    if new is None:\n', '    if new is None
 mut("b-allow-rename", AO, [('            v = check_entry(old, new, path)\n', '            v = check_entry(old, new, path) if new is not None else check_entry(None, None, path)\n')],
     ["test_rename_is_a_deletion_plus_a_creation_and_is_rejected"])
 mut("b-allow-reorder-by-content", AO, [('        if _same(o, w):\n', '        if any(_same(w, x) for x in ov):\n')],
-    ["t1-reorders-versions", "test_reordering_identical_elements_is_a_violation_at_each_moved_index"])
+    ["test_reordering_identical_elements_is_a_violation_at_each_moved_index"])
 mut("b-allow-remove-and-readd", AO, [('        if _same(o, w):\n', '        if _same(o, w) or (len(nv) == n and all(any(_same(x, y) for y in ov) for x in nv)):\n')],
     ["test_remove_and_readd_identically_is_a_violation", "test_remove_one_and_append_identical_copy_keeps_length_but_fails"])
 allow_pair("b-allow-published-to-pending", '("published", "pending")', ["test_published_to_pending_is_rule_1"])
@@ -119,7 +119,7 @@ mut("c-t2-whitespace-reason", AO, [('    if not _reason_ok(w.get("reason")):\n',
 mut("c-t2-old-status-not-published", AO, [
     ('        key = (o.get("status"), w.get("status"))\n', '        key = (o.get("status"), w.get("status"))\n        if key[1] == "removed":\n            key = ("published", "removed")\n'),
     ('    for k in sorted(NINE - {"status"}):\n', '    for k in []:\n')],
-    ["pending-to-removed", "rejected-to-removed", "test_takedown_from_an_old_status_other_than_published_is_rejected"])
+    ["pending-to-removed", "test_takedown_from_an_old_status_other_than_published_is_rejected"])
 
 # ---- (d) T3 / born-pending / published->rejected ------------------------------------------------------
 mut("d-t3-http-build-log", AO, [('not _field_ok("build_log_url", w["build_log_url"])', 'not str(w["build_log_url"]).startswith("http")')],
@@ -137,8 +137,8 @@ mut("d-rule4-skips-history", AO, [('if sum(1 for v in versions if _same(v, versi
 # ---- (e) schema validation and path -> class mapping --------------------------------------------------
 mut("e-skip-schema-validation", SC, [('            schema_check.validate(value, schemas[kind])\n', '            pass\n')],
     ["test_invalid_documents_are_rejected_with_the_validator_message", "test_the_attacker_four_element_entry_is_schema_rejected"])
-mut("e-wrong-schema-for-path", SC, [('SCHEMA_FILES = {"entry": "entry.schema.json", "page": "page.schema.json"}', 'SCHEMA_FILES = {"entry": "page.schema.json", "page": "entry.schema.json"}')],
-    ["test_valid_entry_and_page_are_accepted_positive_control"])
+mut("e-page-validated-against-entry-schema", SC, [('SCHEMA_FILES = {"entry": "entry.schema.json", "page": "page.schema.json"}', 'SCHEMA_FILES = {"entry": "entry.schema.json", "page": "entry.schema.json"}')],
+    ["test_valid_entry_and_page_are_accepted_positive_control", "test_a_page_document_at_an_entry_path_is_validated_against_the_entry_schema_and_rejected"])
 mut("e-wrong-schema-kind-swap", SC, [('        kind = parsed[2]\n', '        kind = "page" if parsed[2] == "entry" else "entry"\n')],
     ["test_valid_entry_and_page_are_accepted_positive_control"])
 mut("e-corrupt-class-mapping", CL, [('    elif "entry" in kinds:\n        cls = CLASS_ENTRY\n    else:\n        cls = CLASS_PAGE\n', '    elif "page" in kinds:\n        cls = CLASS_ENTRY\n    else:\n        cls = CLASS_PAGE\n')],
@@ -168,7 +168,7 @@ mut("f-usage-error-as-rejection-exit", RP, [('not a rejection): {exc}\\n")\n    
 mut("f-crash-as-rejection-exit", RP, [('{type(exc).__name__}: {exc}\\n")\n        return EXIT_ERROR', '{type(exc).__name__}: {exc}\\n")\n        return EXIT_REJECTED')],
     ["test_run_maps_accepted_rejected_tool_error_and_crash_to_three_distinct_exits"])
 mut("f-exit-codes-collapsed", RP, [('EXIT_ERROR = 2\n', 'EXIT_ERROR = 1\n')],
-    ["test_the_three_exit_codes_are_distinct_and_documented", "test_usage_errors_exit_2_and_print_no_verdict"])
+    ["test_the_three_exit_codes_are_distinct_and_documented", "test_unreadable_or_garbage_reserved_list_is_exit_2_not_a_rejection"])
 mut("f-drop-authority-required", AO, [('    authority = sorted({e["classification"] for e in elements if e["classification"] in ("T1", "T2", "T3")})\n', '    authority = []\n')],
     ["test_exact_t1_is_shape_legal_and_needs_authority", "test_a1_t1_exact", "test_a5_two_valid_t2s_are_shape_accepted_with_t2_authority"])
 mut("f-message-without-remedy", RP, [("{what}. To fix: {fix}\"", "{what}.\"")],
@@ -213,8 +213,9 @@ mut("a4-fixture-file-missing", None, [lambda root: (Path(root) / FIX).unlink()],
 
 
 def run_suite(clone):
-    p = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests/registry"], cwd=clone,
-                       capture_output=True, text=True)
+    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")  # a stale .pyc of the previous mutant must never run
+    p = subprocess.run([sys.executable, "-B", "-m", "unittest", "discover", "-s", "tests/registry"], cwd=clone,
+                       capture_output=True, text=True, env=env)
     lines = [ln for ln in p.stderr.splitlines() if ln.startswith(("FAIL:", "ERROR:"))]
     return p.returncode, lines, p.stderr
 

@@ -8,7 +8,8 @@ against each other's code. Task 006 defined the first four (the ones that block 
 platform repository) already named but nobody had written yet; task 032 wrote the eleventh, for
 edge E16 — added to the graph by amendment after task 006's review found it had no contract at
 all. None of the three tasks implements checking logic —
-task 007 builds the CI gates and diff checker, task 008 the build pipeline, task 009 the site
+task 007a (built) wrote the shape checkers in `tools/registry/` (see "The registry shape checkers"
+below), task 007b the ownership checker, task 008 the build pipeline, task 009 the site
 build, all reading these files. Task 008a's pipeline core is built: see `docs/pipeline/build-pipeline.md` (E7 naming,
 E9 signing, E11 archive interior) and `docs/validation/manifest-reader.md` (E1). See `docs/tasks/006-contracts.md`, `docs/tasks/
 025-boundary-contracts.md` and `docs/tasks/032-ownership-contract.md` for the full task logs.
@@ -62,6 +63,27 @@ why this is a separate copy of task 002's `tests/validation/schema_check.py` rat
 import of it, and what extra JSON Schema keywords it supports (`enum`, `minLength`, `maxLength`, `oneOf` (task 057),
 `minItems`) that task 002's contract never needed.
 
+## The registry shape checkers (task 007a)
+
+`tools/registry/` holds the offline checkers that implement `contracts/append-only.rules.md` (E4),
+`entry.schema.json` / `page.schema.json` (E2, E3) and `ownership.md` R1's path form (E16, path half),
+with a shared verdict shape and exit codes in `tools/registry/report.py` (also used by 007b):
+
+```
+python3 tools/registry/cli.py classify    --reserved-file MERGE_BASE/reserved-namespaces.json PATH...
+python3 tools/registry/cli.py schema      --root PR_CHECKOUT PATH...
+python3 tools/registry/cli.py append-only --old-root MERGE_BASE_CHECKOUT --new-root PR_CHECKOUT PATH...
+```
+
+Exit `0` accepted, `1` rejected, `2` usage or internal error (never a rejection). The verdict is JSON on
+stdout. `classify` yields one class: `entry`, `page-only`, `reserved-namespace` or `other` (always a
+rejection). `append-only` classifies **each** `versions[]` element (`unchanged`, `appended`, `T1`, `T2`,
+`T3`, `violation` with the list of rule ids) and returns `authority_required`, the transitions present.
+**An `append-only` exit 0 with a non-empty `authority_required` is not a merge signal**: T1/T3 are
+shape-legal here and rejected at the authority layer (007b, fail closed until the pipeline carve-out
+exists); a T2 needs the R11 takedown authority. Tests: `python3 -m unittest discover -s tests/registry`;
+the verification artefact is `docs/tasks/007a-verify.sh` (`--mutate` for the mutation proof).
+
 ## Provider neutrality (ADR-0058 Section 4)
 
 None of these schemas require `owner.provider` or any URL field to be GitHub-specific. Every
@@ -72,14 +94,15 @@ free-form string or a generic URL pattern, never an enum naming specific hosts �
 
 ## What is deliberately not here
 
-- **No checking logic, in any of the three tasks.** No file here reads a PR diff, calls a git
-  host's API, extracts a real archive, verifies a real signature, or enforces anything at merge or
-  build time. Task 006, task 025 and task 032 are all prose-and-schema only (the live `gh api` /
-  `curl` commands pasted in `contracts/ownership.md` are one-off verification of environmental
-  facts made *while writing* the document, not checking logic the document itself runs); task 007
-  builds the registry CI gates and diff checker, task 008 the build pipeline (archiving, signing),
-  task 009 the site build (archive extraction, rendering, deploy) — all of them coding against the
-  contracts indexed above.
+- **No checking logic in the contracts themselves.** Task 006, task 025 and task 032 are
+  prose-and-schema only (the live `gh api` / `curl` commands pasted in `contracts/ownership.md` are
+  one-off verification of environmental facts made *while writing* the document). The checking logic
+  lives elsewhere: **built** (task 007a) are the PR classifier, schema validation and append-only
+  checkers in `tools/registry/`; **still to come** are the ownership checker (task 007b, including the
+  fail-closed rejection of T1/T3 and the R11 takedown authorisation), the GitHub Actions workflow,
+  PR comments and the one live org-membership API call (task 039), the build pipeline's remaining
+  parts (task 008) and the site build (task 009: archive extraction, rendering, deploy). The shape
+  checkers call no forge API and reach no network; they take parsed files and paths as input.
 - **No full `mod.lua` manifest.** `manifest.schema.json` is deliberately the ADR-0030 subset this
   task's acceptance criterion 4 names — fields meaningful only with a kernel (`declares`,
   `depends`, `permissions`, `server`/`client` blocks, …) are future work, once the kernel exists.
