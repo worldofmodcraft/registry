@@ -172,6 +172,37 @@ def cmd_mut(argv):
         f.write(s)
     return 0
 
+OLD_C33 = r"""    're\.search(schema\["pattern"\], instance)' """ + '"$CHECK_FILE"'
+NEW_C33 = re.compile(r"""^\s+'re\\\.search\(.*schema\\\["pattern"\\\].*instance.*\)' "\$CHECK_FILE"$""")
+
+def cmd_c33(argv):
+    # argv: unified -U0 diff of docs/tasks/034-verify.sh against 062's base. Task 069: the ONLY change allowed is task
+    # 064's re-pin of C3.3 -- the one call-text line plus the comment lines that follow it and name task 064. An empty
+    # diff (034 untouched) passes. C3.4 (re.fullmatch stays forbidden) and every other line stay fully protected.
+    lines = read(argv[0]).splitlines()
+    if not [l for l in lines if l.strip()]:
+        print("  034-verify.sh is untouched since the base")
+        return 0
+    rc = 0
+    hunks = [l for l in lines if l.startswith("@@")]
+    removed = [l[1:] for l in lines if l.startswith("-") and not l.startswith("---")]
+    added = [l[1:] for l in lines if l.startswith("+") and not l.startswith("+++")]
+    print("  034-verify.sh differs from the base: %d hunk(s), %d line(s) removed, %d added" % (len(hunks), len(removed), len(added)))
+    if len(hunks) != 1:
+        print("FAILED: expected exactly 1 hunk (the C3.3 call-text line and its comment), found %d" % len(hunks)); rc = 1
+    if removed != [OLD_C33]:
+        print("FAILED: the only line that may be removed is C3.3's old call text; removed: %r" % removed[:3]); rc = 1
+    if not added or not NEW_C33.match(added[0]):
+        print("FAILED: the first added line must be C3.3's re.search(schema[\"pattern\"], ... instance ...) call text; got %r" % (added[:1],)); rc = 1
+    rest = added[1:]
+    if not rest or not all(l.startswith("#") for l in rest) or len(rest) > 8:
+        print("FAILED: after the call-text line only 1-8 comment lines may be added; got %d line(s), non-comment: %r" % (len(rest), [l for l in rest if not l.startswith("#")][:2])); rc = 1
+    elif not any("task 064" in l for l in rest):
+        print("FAILED: the added comment must name task 064"); rc = 1
+    if rc == 0:
+        print("  only task 064's C3.3 re-pin differs (call text + %d comment line(s) naming task 064); C3.4 untouched" % len(rest))
+    return rc
+
 def cmd_own(argv):
     # argv: old-blob-file new-file unified-diff-file
     old, new, diff = read(argv[0]), read(argv[1]), read(argv[2])
@@ -206,7 +237,7 @@ def cmd_own(argv):
     return rc
 
 if __name__ == "__main__":
-    sys.exit({"diffids": cmd_diffids, "retire": cmd_retire, "mut": cmd_mut, "own": cmd_own}[sys.argv[1]](sys.argv[2:]))
+    sys.exit({"diffids": cmd_diffids, "retire": cmd_retire, "mut": cmd_mut, "own": cmd_own, "c33": cmd_c33}[sys.argv[1]](sys.argv[2:]))
 PYH
 H=(python3 -I "$TMP/helper.py")
 
@@ -230,6 +261,7 @@ new_clone() {   # new_clone DEST REV : a fresh clone of the repository, detached
 }
 
 SCRIPTS="006 008a 032 034 057"
+SCRIPTS_LATER="$SCRIPTS 007a"   # task 069: 007a (merged after 062's base, so absent from AC1's inventory) is also run on HEAD and on a later branch
 HEADREV="$(git -C "$ROOT" rev-parse HEAD)"
 
 # ==================================================================================================
@@ -290,13 +322,13 @@ done
 # --------------------------------------------------------------------------------------------------
 section "AC3 -- every closed task's verify script passes on HEAD and on a later branch (an unrelated file added)"
 new_clone "$TMP/head" "$HEADREV" || fail "AC3.0 cannot clone HEAD"
-for n in $SCRIPTS; do
+for n in $SCRIPTS_LATER; do
     rc=$(run_verify "$TMP/head" "$n" "$TMP/h.$n"); eval "HEADRC_$n=$rc"
     [ "$rc" = 0 ] && pass "AC3.head.$n $n-verify.sh exits 0 on HEAD" || { fail "AC3.head.$n $n-verify.sh exit $rc on HEAD; failing: $(fail_ids "$TMP/h.$n")"; }
 done
 git -C "$TMP/head" checkout -q -b later-task
 echo "unrelated" > "$TMP/head/later-task-unrelated.txt"; git -C "$TMP/head" add later-task-unrelated.txt; git -C "$TMP/head" "${GITID[@]}" commit -q -m "later task adds an unrelated file"
-for n in $SCRIPTS; do
+for n in $SCRIPTS_LATER; do
     rc=$(run_verify "$TMP/head" "$n" "$TMP/l.$n")
     [ "$rc" = 0 ] && pass "AC3.later.$n $n-verify.sh exits 0 on a later branch" || fail "AC3.later.$n $n-verify.sh exit $rc on a later branch; failing: $(fail_ids "$TMP/l.$n")"
 done
@@ -321,7 +353,14 @@ for n in 006 008a 032 057; do
     [ $rc = 0 ] && pass "AC6.$n only the allowed ids are missing from $n-verify.sh" || fail "AC6.$n unexpected check(s) missing from $n-verify.sh (see the line above)"
 done
 echo "  note: C8.1 is the PASS sibling of C8.2 (one 'if' printed C8.1 or C8.2): retiring C8.2 retires the pair, not a fifth check."
-if git -C "$ROOT" diff --quiet "$BASE062" HEAD -- docs/tasks/034-verify.sh; then pass "AC6.034 034-verify.sh is untouched (the inventory showed it green on main and on the probe branch)"; else fail "AC6.034 034-verify.sh was modified although the inventory showed no defect"; fi
+# Task 069: 034-verify.sh stays untouched since the base, EXCEPT for task 064's re-pin of C3.3 (the call-text line and
+# its comment naming task 064), judged by the helper's c33 command; C3.4 and every other line stay protected.
+git -C "$ROOT" diff -U0 "$BASE062" HEAD -- docs/tasks/034-verify.sh > "$TMP/034.diff"
+if "${H[@]}" c33 "$TMP/034.diff" > "$TMP/034.out" 2>&1; then
+    sed 's/^/ /' "$TMP/034.out"; pass "AC6.034 034-verify.sh is untouched since the base, or differs only by task 064's C3.3 re-pin"
+else
+    sed 's/^/ /' "$TMP/034.out"; fail "AC6.034 034-verify.sh was modified beyond task 064's C3.3 re-pin (see FAILED lines)"
+fi
 n006_pass=$(grep -c '^PASS' "$TMP/h.006"); n006_fail=$(grep -c '^FAIL' "$TMP/h.006")
 b006_pass=$(grep -c '^PASS' "$TMP/o.main.006"); b006_fail=$(grep -c '^FAIL' "$TMP/o.main.006")
 printf '  006-verify.sh evaluated checks: before %d (%d PASS, %d FAIL), after %d (%d PASS, %d FAIL)\n' $((b006_pass + b006_fail)) "$b006_pass" "$b006_fail" $((n006_pass + n006_fail)) "$n006_pass" "$n006_fail"
@@ -390,6 +429,14 @@ restore $f
 mutate $f 'FINAL=9ccb3ec' 'FINAL=deadbee' one; applies $? "AC4.008a.bad-pin" && expect_red "AC4.008a.bad-pin (unreachable pin must FAIL, never skip)" 008a "pinned"
 restore $f
 expect_green "AC4.008a" 008a
+
+# ---- 007a (task 069)
+f=docs/tasks/007a-verify.sh
+mutate $f 'tests/registry/|' '' one; applies $? "AC4.007a.drop-path" && expect_red "AC4.007a.drop-path (declared-scope regex loses tests/registry/)" 007a "files"
+restore $f
+mutate $f 'FINAL=aaf4260' 'FINAL=deadbee' one; applies $? "AC4.007a.bad-pin" && expect_red "AC4.007a.bad-pin (unreachable pin must FAIL, never skip)" 007a "pinned"
+restore $f
+expect_green "AC4.007a" 007a
 
 # ---- 032
 f=docs/tasks/032-verify.sh

@@ -80,6 +80,16 @@ run_008a_raced() {
 }
 
 # --- AC5 machinery: 062-verify.sh's own helper (its c33 command) judges variants of 034-verify.sh ---------
+MERGE10="3c94cf2"            # registry PR #10, the merge of task 007a
+mk_later() {   # mk_later DEST : HEAD plus two new source files under tools/registry (007b's shape); origin/main = the 069 base
+    new_clone "$1" "$HEADREV" || return 1
+    git -C "$1" update-ref refs/remotes/origin/main "$BASE069"
+    git -C "$1" checkout -q -b later-007b
+    echo "# probe one" > "$1/tools/registry/probe_one.py"; echo "# probe two" > "$1/tools/registry/probe_two.py"
+    git -C "$1" add tools/registry/probe_one.py tools/registry/probe_two.py
+    git -C "$1" "${GITID[@]}" commit -q -m "later branch adds two registry source files"
+}
+run007a() { ( cd "$1" && bash docs/tasks/007a-verify.sh ) > "$2" 2>&1; echo $?; }
 BASE062="e009ef0"            # registry origin/main when task 062 was cut; AC6.034 compares against it
 # extract_helper CLONE : the helper.py that CLONE's 062-verify.sh writes out (the heredoc between 'PYH' markers)
 extract_helper() {
@@ -147,16 +157,6 @@ grep -q '^ok    no wom008a-\* temp dirs left behind by the suite' "$TMP/h.out" &
 
 # --------------------------------------------------------------------------------------------------
 section "AC3 -- 007a-verify.sh measures 007a's own pinned range, so it is green on a later branch"
-MERGE10="3c94cf2"            # registry PR #10, the merge of task 007a
-mk_later() {   # mk_later DEST : HEAD plus two new source files under tools/registry (007b's shape); origin/main = the 069 base
-    new_clone "$1" "$HEADREV" || return 1
-    git -C "$1" update-ref refs/remotes/origin/main "$BASE069"
-    git -C "$1" checkout -q -b later-007b
-    echo "# probe one" > "$1/tools/registry/probe_one.py"; echo "# probe two" > "$1/tools/registry/probe_two.py"
-    git -C "$1" add tools/registry/probe_one.py tools/registry/probe_two.py
-    git -C "$1" "${GITID[@]}" commit -q -m "later branch adds two registry source files"
-}
-run007a() { ( cd "$1" && bash docs/tasks/007a-verify.sh ) > "$2" 2>&1; echo $?; }
 lb=$(sed -n 's/^BASE=\([0-9a-f]\{7,\}\).*/\1/p' "$ROOT/docs/tasks/007a-verify.sh" | head -n1)
 lf=$(sed -n 's/^FINAL=\([0-9a-f]\{7,\}\).*/\1/p' "$ROOT/docs/tasks/007a-verify.sh" | head -n1)
 if [ -z "$lb" ] || [ -z "$lf" ]; then fail "AC3.0 cannot read BASE/FINAL from 007a-verify.sh (a search that finds nothing is broken)"
@@ -223,7 +223,6 @@ section "AC3 mutations -- the pinned-range checks can fail"
 mk_later "$TMP/m3" || fail "AC3.m0 cannot build the later branch"
 S=docs/tasks/007a-verify.sh
 cp "$TMP/m3/$S" "$TMP/007a.orig"
-run007a() { ( cd "$1" && bash docs/tasks/007a-verify.sh ) > "$2" 2>&1; echo $?; }
 mut007a() {   # mut007a OLD NEW LABEL EXPECT_REGEX : apply one textual mutation to the clone's 007a script, run it, demand red
     if [ "$(grep -cF -- "$1" "$TMP/m3/$S")" != 1 ]; then fail "$3: the mutation did not apply (pattern not found exactly once)"; return; fi
     python3 -I - "$TMP/m3/$S" "$1" "$2" <<'PY'
