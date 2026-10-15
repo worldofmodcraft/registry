@@ -64,7 +64,7 @@ ID = re.compile(r"""["']([A-Za-z][A-Za-z0-9]*(?:[.\-/][A-Za-z0-9]+)*) """)
 def ids(text):
     out = set()
     for l in noncomment(text):
-        out.update(ID.findall(l))
+        out.update(t for t in ID.findall(l) if any(c.isdigit() for c in t))   # a check id always carries a digit (C1.5b, S4, T2); plain words are not ids
     return out
 
 MSG = re.compile(r'\b(?:ok|fail)\s+"([^"]*)"')
