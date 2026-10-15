@@ -106,10 +106,10 @@ s = open(out + ".base").read()
 if args and args[0] == "--064":
     args = args[1:]
     old = '    \'re\\.search(schema\\["pattern"\\], instance)\' "$CHECK_FILE"\n'
-    new = ('    \'re\\.search(_ecma_pattern(schema\\["pattern"\\]), instance, re\\.ASCII)\' "$CHECK_FILE"\n'
-           '# Re-pinned by task 064 (successor of the original text), as task 067 re-pinned 032 N5b: same intent -- search\n'
-           '# semantics, the schema\'s pattern, the instance -- now with ECMA-262 end-of-input and ASCII \\d.\n'
-           '# re.fullmatch stays forbidden (C3.4, unedited).\n')
+    new = ('    \'re\\.search(_ecma_pattern(schema\\["pattern"\\]), instance)\' "$CHECK_FILE"\n'
+           '# Re-pinned by task 064 (successor of the original text \'re.search(schema["pattern"], instance)\', as task 067 re-pinned\n'
+           '# 032 N5b): same intent -- search semantics, the schema\'s pattern, the instance -- now with ECMA-262 end-of-input\n'
+           '# (`$` rewritten to \\Z by _ecma_pattern) and ECMA escapes translated explicitly (amendment 1). re.fullmatch stays forbidden (C3.4, unedited).\n')
     assert s.count(old) == 1, "C3.3 call text not found exactly once in the base 034-verify.sh"
     s = s.replace(old, new)
 for i in range(0, len(args), 2):
@@ -199,6 +199,14 @@ else
     [ $rc = 0 ] && grep -q 'untouched' "$TMP/judge.txt" && pass "AC5.1 an untouched 034-verify.sh is accepted" || fail "AC5.1 an untouched 034-verify.sh was not accepted (rc $rc)"
     c33_judge "$TMP/034.064" > "$TMP/judge.txt"; rc=$?; cat "$TMP/judge.txt"
     [ $rc = 0 ] && grep -q 'only task 064' "$TMP/judge.txt" && pass "AC5.2 034-verify.sh with task 064's C3.3 re-pin applied is accepted" || fail "AC5.2 task 064's re-pin was not accepted (rc $rc)"
+    # the real thing, when the branch is reachable here (it is deleted after 064 merges; then AC5.2 above is the evidence)
+    if git -C "$ROOT" cat-file -e origin/task/064-schema-check-end-anchor:docs/tasks/034-verify.sh 2>/dev/null; then
+        git -C "$ROOT" show origin/task/064-schema-check-end-anchor:docs/tasks/034-verify.sh > "$TMP/034.real"
+        c33_judge "$TMP/034.real" > "$TMP/judge.txt"; rc=$?; cat "$TMP/judge.txt"
+        [ $rc = 0 ] && grep -q 'only task 064' "$TMP/judge.txt" && pass "AC5.3 the actual 034-verify.sh on origin/task/064-schema-check-end-anchor ($(git -C "$ROOT" rev-parse --short origin/task/064-schema-check-end-anchor)) is accepted" || fail "AC5.3 the actual 064 branch's 034-verify.sh is not accepted (rc $rc)"
+    else
+        echo "  note: origin/task/064-schema-check-end-anchor is not available in this clone; AC5.3 (the real branch file) not evaluated, AC5.2 is the evidence"
+    fi
 fi
 
 # ==================================================================================================
@@ -212,7 +220,7 @@ else
     gen034 "$TMP/034.b" --064 "C4.1 TRAVERSAL_PATHS contains" "C4.1 TRAVERSAL_PATHS holds" && c33_expect_red "AC5.m2 064's change plus an edit to an unrelated line (C4.1)" "$TMP/034.b" || fail "AC5.m2 variant did not build"
     gen034 "$TMP/034.c" "grep -q 're\\.fullmatch(' " "grep -q 're\\.fullmatchX(' " && c33_expect_red "AC5.m3 an edit to C3.4 alone (no 064 change)" "$TMP/034.c" || fail "AC5.m3 variant did not build"
     gen034 "$TMP/034.d" "C4.1 TRAVERSAL_PATHS contains" "C4.1 TRAVERSAL_PATHS holds" && c33_expect_red "AC5.m4 an unrelated edit alone" "$TMP/034.d" || fail "AC5.m4 variant did not build"
-    gen034 "$TMP/034.e" --064 're\.search(_ecma_pattern(schema\["pattern"\]), instance, re\.ASCII)' 're\.fullmatch(_ecma_pattern(schema\["pattern"\]), instance, re\.ASCII)' && c33_expect_red "AC5.m5 the re-pin weakened to re.fullmatch" "$TMP/034.e" || fail "AC5.m5 variant did not build"
+    gen034 "$TMP/034.e" --064 're\.search(_ecma_pattern(schema\["pattern"\]), instance)' 're\.fullmatch(_ecma_pattern(schema\["pattern"\]), instance)' && c33_expect_red "AC5.m5 the re-pin weakened to re.fullmatch" "$TMP/034.e" || fail "AC5.m5 variant did not build"
     gen034 "$TMP/034.f" --064 '# re.fullmatch stays forbidden (C3.4, unedited).' '# re.fullmatch stays forbidden (C3.4, unedited).
 exit 0' && c33_expect_red "AC5.m6 a code line smuggled in after the comment" "$TMP/034.f" || fail "AC5.m6 variant did not build"
     gen034 "$TMP/034.g" --064 'Re-pinned by task 064' 'Re-pinned by somebody' && c33_expect_red "AC5.m7 the comment no longer names task 064" "$TMP/034.g" || fail "AC5.m7 variant did not build"
