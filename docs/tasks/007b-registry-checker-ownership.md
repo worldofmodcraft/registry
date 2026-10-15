@@ -292,3 +292,24 @@ red      f1-sibling-entry-judged-by-login-not-id: 5 failing, all 2 named tests r
 (the other 50 per-mutation `red` lines elided here; all 54 print `red ... all N named tests red`)
 ```
 - 2026-10-15 manager: delta review (round 2) PASS on F1. New finding N1 taken into this task as fix round 2 (amendment 2): in the "new entry in an owned namespace" branch, the new entry's `owner` must equal the recorded namespace owner `(provider, id)` (else rejected, R3/R5 message); and the CLI's `namespace_owners` builder must fail closed (ToolError / rejection naming both entries) when merge-base entries of one namespace disagree on owner, instead of `setdefault` picking the first in sorted order. Red first (both cases shown accepted/silently-picked before the fix), one mutation each. Reason: an owner field frozen to another account plus order-dependent mapping is a namespace reassignment path, which `ownership.md` forbids.
+- 2026-10-15 implementer (fix round 2, amendment 2 / N1, log baseline 15): red first, commit e6ed1d7 adds both cases and
+  both fail on it: the sibling whose owner field names another account (`owner id 555`, author the real owner) is
+  `'accepted' != 'rejected'`, and the CLI with disagreeing merge-base owners in namespace `alice` exits `0 != 2`
+  (first sorted entry silently wins). Fix, commit 9522a70: (1) in the "new entry in an owned non-reserved namespace"
+  branch the new entry's `owner` (provider, id) must equal the recorded namespace owner, else an `R5` finding naming both;
+  (2) `ownership_cli.py` raises a ToolError (exit 2) naming both entries when merge-base entries of one namespace disagree
+  on owner. Three existing assertions that expected exactly `R3` now expect `R3`+`R5` where the stranger also proposes
+  themselves as owner (the verdict is unchanged; not weakened). Two new mutations, both red:
+  `n1-sibling-owner-field-not-checked`, `n1-cli-disagreeing-merge-base-owners-first-wins` (the runner now accepts an
+  optional third item in an edit naming another file). Other suites were idle (`ps`) when I ran.
+  `docs/tasks/007b-verify.sh` on 9522a70: `Ran 236 tests ... OK`, `ownership tests ran: 86`, `SUMMARY failed=0`.
+  `docs/tasks/007b-verify.sh --mutate`:
+```
+ok    mutation table has 56 entries (floor 45)
+baseline green on committed 9522a7053
+SUMMARY 56 mutations, not_red=0
+ok    every mutation turned its named tests red
+SUMMARY failed=0
+red      n1-sibling-owner-field-not-checked: 3 failing, all 1 named tests red
+red      n1-cli-disagreeing-merge-base-owners-first-wins: 1 failing, all 1 named tests red
+```
