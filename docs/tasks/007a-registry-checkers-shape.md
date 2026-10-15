@@ -196,3 +196,6 @@ After 057 (merged). Parallel-safe with 062 (disjoint files). Blocks 007b. 039 fo
 None blocking. Non-blocking, for the manager to book (MANAGER.md 8b): (A) `classify` rejects class `other`, including any
 PR that touches files outside `mods/` (e.g. a maintainer's docs change). Lean: keep, and let 039 decide which PRs the checker
 sees. Alternative: accept a named maintainer class here, which would be a new decision, so not taken.
+- 2026-10-15 manager: question (A) answered: keep rejecting class `other` (umbrella criterion 8, fail closed); which PRs
+  reach the checker is task 039's path filter (ADR-0099). Manager re-ran `007a-verify.sh` in a fresh clone at `b5db29b`:
+  normal `SUMMARY failed=0`; `--mutate` 73 mutations, `not_red=0`. Sent to independent review.
