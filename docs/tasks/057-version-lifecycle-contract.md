@@ -1,6 +1,6 @@
 # Task 057: The version lifecycle contract — `pending → published` in `entry.schema.json` and `append-only.rules.md`
 
-- **Mission:** SITE-V1 (unblocks deliverables D1 and D2) — **Status:** review (implemented 2026-10-15; awaiting the independent reviewer) 
+- **Mission:** SITE-V1 (unblocks deliverables D1 and D2) — **Status:** done (2026-10-15) (implemented 2026-10-15; awaiting the independent reviewer) 
 - **Repo:** registry (`worldofmodcraft/registry`); this file is kept in the platform repository's `docs/tasks/` with the other 054 specs and copied to the registry branch's `docs/tasks/` as that task's log.
 - **Agent / model:** doc-writer / sonnet for the contract text; implementer / sonnet for the schema, the `oneOf` support in the test validator, and the verify artefact (one branch, sequenced). Independent reviewer required: this amends two accepted contracts.
 - **Budget:** medium (≤ 3 agent-sessions)
@@ -225,3 +225,5 @@ Graph: no new node or edge. E2 and E8 already name `contracts/entry.schema.json`
   4. **`ownership.md` quotes the old heading** "The one permitted in-place mutation" (lines ~980 and ~1027), now stale. `ownership.md` is out of scope (sibling task with the T1/T3 carve-out).
   5. Python `re.search` with `$` accepts a trailing newline that Ajv's `$` refuses (pre-existing `schema_check.py` behaviour, untouched; no corpus case hits it).
   6. AC10 sibling gaps, named not done: `pipeline-trigger.md` (E15), the `ownership.md` carve-out for T1/T3 (until then every checker rejects T1/T3: fail closed), the `artifact-naming.md` URL amendment (after 058), the site's vendored schema re-sync (task 041's procedure), and a refreshed `ownership.md` cross-reference.
+- 2026-10-15 manager: fresh-clone 057-verify.sh at f5a139e gave 0 failures (reviewer re-ran it too). Independent review: PASS. Stale pins in 006/032/008a verify scripts are booked as task 062.
+- 2026-10-15 Ludwig, in session: "Ja bpda" (ja båda). Merge of 057 and 049 approved.
