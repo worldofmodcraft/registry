@@ -166,7 +166,7 @@ mut("i7-first-namespace-only", [('    for ns in sorted(by_ns):\n        findings
 mut("i7-namespaces-pooled-accept-if-any-passes", [(
     '    for ns in sorted(by_ns):\n        findings += _namespace(ns, sorted(by_ns[ns]), ctx)',
     '    per = [_namespace(ns, sorted(by_ns[ns]), ctx) for ns in sorted(by_ns)]\n    findings += per[0] if all(per) else []')],
-    ["test_i7_reject_one_foreign_namespace", "test_i7_accept_every_namespace_passes"])
+    ["test_i7_reject_one_foreign_namespace"])
 mut("i8-verdict-claims-merge-signal", [("merge_signal=False)", "merge_signal=True)")], ["test_i8_accept_a_green_verdict"])
 
 # ---------------------------------------------------------------------------------------------------------
