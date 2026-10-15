@@ -166,6 +166,14 @@ class OwnedNamespaceSibling(unittest.TestCase):
         v = run(MALLORY, files, login="alice", namespace_owners={"alice": ALICE})
         self.assertEqual(rules(v), ["R3", "R3"])  # one per new entry, each against the injected owner, not the PR's
 
+    def test_r5_reject_owner_adds_a_sibling_whose_owner_field_names_another_account(self):
+        """N1: the true owner may not freeze a different owner into a new entry of their own namespace."""
+        files = first_publish("alice", "new", owner=own(555, "alice"))
+        v = run(ALICE, files, login="alice", namespace_owners={"alice": ALICE})
+        self.assertEqual(v["verdict"], "rejected")
+        self.assertEqual(rules(v), ["R5"])
+        self.assertIn("555", v["findings"][0]["message"])
+
 
 class R4R5R6FirstPublish(unittest.TestCase):
     def test_r4_accept_namespace_equals_username_case_folded(self):
@@ -635,6 +643,30 @@ class Cli(unittest.TestCase):
             (root / "old/mods/alice.cooltool/entry.json").unlink()  # no merge-base owner => a genuine first publish
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(report.run(ownership_cli.main, args), 0)
+
+    def test_cli_fails_closed_when_merge_base_entries_of_one_namespace_disagree_on_owner(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        import ownership_cli
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            for name, oid in (("a", ALICE_ID), ("b", 555)):
+                for side in ("old", "new"):
+                    (root / side / f"mods/alice.{name}").mkdir(parents=True)
+                (root / f"old/mods/alice.{name}/entry.json").write_text(
+                    json.dumps(ent("alice", name, published(), owner=own(oid, "alice"))))
+            (root / "new/mods/alice.c").mkdir(parents=True)
+            (root / "new/mods/alice.c/entry.json").write_text(json.dumps(ent("alice", "c", pending())))
+            (root / "res.json").write_text(json.dumps(RES))
+            err = io.StringIO()
+            args = ["--author-provider", "github", "--author-id", str(ALICE_ID), "--author-login", "alice",
+                    "--old-root", str(root / "old"), "--new-root", str(root / "new"),
+                    "--reserved-file", str(root / "res.json"), "mods/alice.c/entry.json"]
+            with redirect_stdout(io.StringIO()), redirect_stderr(err):
+                self.assertEqual(report.run(ownership_cli.main, args), 2)
+            self.assertIn("alice.a", err.getvalue())
+            self.assertIn("alice.b", err.getvalue())
 
 
 if __name__ == "__main__":
