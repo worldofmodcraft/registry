@@ -254,10 +254,12 @@ def main(argv):
         selected = [m for m in M if not ids or m[0] in ids]
         for mid, file, edits, red in selected:
             apply(clone, file, edits)
-            rc, lines, _ = run_suite(clone)
+            rc, lines, err = run_suite(clone)
             subprocess.run(["git", "-C", clone, "checkout", "-q", "--", "."], check=True)
             if discover:
                 print(f"== {mid}: {len(lines)} failing")
+                if any("_FailedTest" in ln for ln in lines):
+                    print("   (import-time failure) " + err.strip().splitlines()[-1])
                 for ln in lines[:12]:
                     print("   " + ln)
                 continue
