@@ -331,3 +331,12 @@ ALL CHECKS PASSED
 
 - 2026-10-15 qa-engineer: **Remaining:** nothing in scope. Open for the reviewer: Questions 1, 2, 3 above. Status set
   to review. Not pushed, not merged.
+- 2026-10-15 manager: fresh-clone re-run at the branch HEAD: `062-verify.sh /tmp/fc041/node_modules` and `--mutate` both
+  ALL CHECKS PASSED. Independent review: PASS, five non-blocking notes (006 base kept at round-3 `be82c19`, a recorded
+  deviation from D-1, accepted because the exact four-file list only fits that range; the "Task 062" subject filter can miss
+  an unprefixed commit, so the merge gate compares the real diff; `057-verify.sh` also needs `PLATFORM_REPO`; ownership.md
+  ~1027 reads slightly looser; closed tasks' scope checks no longer count untracked files). Questions triaged: Q2 (057 T2/S2/S4
+  re-pinned with S1, one shared base variable) — correct per D-1; Q3 (ownership.md ~980) — accepted; Q4 (vacuous grep) —
+  the whitespace-normalised check is the right fix; Q5 — accepted. Q1 (no canonical ajv 8 location; only
+  `/tmp/fc041/node_modules`) — booked for Ludwig. Merge: PR opened; held for Ludwig because the branch edits a contract
+  sentence (`contracts/ownership.md`).
