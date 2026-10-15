@@ -27,7 +27,11 @@ for a in "$@"; do
 done
 
 ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)" || exit 99
-BASE="3c94cf2"               # registry origin/main when task 067 was cut: the frame of AC1
+BASE="3c94cf2"               # registry origin/main when task 067 was cut: the frame of AC1, and the fork point of PR #11
+# Task 069 (amendment 1): AC5.1 measures 067's OWN commit range BASE..FINAL, so it gives the same answer on main, on any
+# later branch and in any fresh clone. FINAL is the last commit on task/067-repin-032-n5b before its merge (registry PR #11:
+# the second parent of merge ac22c8f, `git rev-parse ac22c8f^2`). An unreachable pin is a FAILURE naming the commit.
+FINAL="06c721c"
 SENTENCE='None of the three tasks implements checking logic'
 FAILURES=0
 pass() { printf 'PASS  %s\n' "$1"; }
@@ -85,8 +89,16 @@ else
 fi
 
 section "AC5 -- file scope: only the three declared files differ from the base"
-extra=$(git -C "$TMP/head" diff --name-only "$BASE" HEAD | grep -vxE 'docs/tasks/032-verify\.sh|docs/tasks/067-repin-032-n5b\.md|docs/tasks/067-verify\.sh')
-if [ -z "$extra" ]; then pass "AC5.1 changed files are within 032-verify.sh, the 067 log, 067-verify.sh"; else fail "AC5.1 out-of-scope files changed: $(printf '%s' "$extra" | tr '\n' ' ')"; fi
+pins_ok=1
+for pin in "$BASE" "$FINAL"; do
+    if ! git -C "$TMP/head" merge-base --is-ancestor "$pin" HEAD 2>/dev/null; then
+        fail "AC5.1 pinned commit $pin is not an ancestor of HEAD: the scope check cannot run"; pins_ok=0
+    fi
+done
+if [ "$pins_ok" = 1 ]; then
+    extra=$(git -C "$TMP/head" diff --name-only "$BASE" "$FINAL" | grep -vxE 'docs/tasks/032-verify\.sh|docs/tasks/067-repin-032-n5b\.md|docs/tasks/067-verify\.sh')
+    if [ -z "$extra" ]; then pass "AC5.1 every path changed in $BASE..$FINAL is within 032-verify.sh, the 067 log, 067-verify.sh"; else fail "AC5.1 out-of-scope files changed: $(printf '%s' "$extra" | tr '\n' ' ')"; fi
+fi
 if [ -x "$ROOT/docs/tasks/067-verify.sh" ]; then pass "AC5.2 067-verify.sh is executable"; else fail "AC5.2 067-verify.sh is not executable"; fi
 
 if [ "$MUTATE" = 1 ]; then
