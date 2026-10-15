@@ -102,3 +102,9 @@ sequences 066 first if it is ready.
 - Q1 (for the manager): 067-verify.sh AC5.1 (scope vs 3c94cf2..HEAD) is red on every later branch, including this one. Options:
   A) a follow-up task re-bases it to 067's own PR range (as 062 did) ★; B) accept it red and exclude 067 from "all closed scripts green".
 - Q2: 062 AC1 vs concurrent 008a (see deviation above): A) leave, measure quietly ★; B) allow optional "suite" id for 008a in AC1.
+- 2026-10-15 qa-engineer: coordinator update applied: 066 merged (198dc98, PR #14; touched 057-verify.sh and 062-verify.sh, ajv
+  resolution only). Merged origin/main into this branch (merge commit 82d0aa2, no conflicts, my 062 edits and 066's both kept; no
+  force-push). Measured with NODE_MODULES_DIR=/tmp/fc041/node_modules passed explicitly (the argument outranks tools/dev, so no
+  npm ci was needed; nothing installed). Re-ran everything on HEAD 82d0aa2 with 0 other suite processes (ps) before each run:
+  007a, 008a, 032, 034, 006, 057, 062 exit 0; 062 on merge(HEAD, 007b head a3f04a1, the F1 fix) exit 0, 45 PASS; 062 on
+  merge(HEAD, 064 fc3a524) exit 0, 45 PASS; 067 exit 1 only on AC5.1 (see Q1). 069-verify.sh normal and --mutate: ALL CHECKS PASSED.
