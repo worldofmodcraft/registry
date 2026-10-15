@@ -242,3 +242,4 @@ sees. Alternative: accept a named maintainer class here, which would be a new de
   `not_red=0`. Delta review of fix round 1: PASS, no blocking findings. New non-blocking N1 (Python `\d` matches Unicode
   digits, unlike ECMA; fullwidth digits in `published_at` pass) is folded into platform task 064 (`re.ASCII`, here and in
   `schema_check.py`). Merge held for Ludwig: security-relevant CI (MANAGER.md §7).
+- 2026-10-15 manager: Ludwig approves the merge in session: "★ på alla" (his answer to the session-9 list "Godkänna merge (★ jag rekommenderar ja på alla)", covering platform #55, registry #10, registry #9 and platform #56).
