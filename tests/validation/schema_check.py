@@ -95,7 +95,12 @@ def validate(instance: Any, schema: dict, path: str = "$") -> None:
 
     if "pattern" in schema and isinstance(instance, str):
         if re.search(_ecma_pattern(schema["pattern"]), instance, re.ASCII) is None:
-            raise SchemaValidationError(path, f"{instance!r} does not match pattern {schema['pattern']!r}")
+            # Name the ECMA-262 difference when Python's own semantics would have accepted the value (task 064; the
+            # 007a hardening tests pin the phrase "end of input" in the message a trailing newline produces).
+            hint = ""
+            if re.search(schema["pattern"], instance) is not None:
+                hint = " (rejected under ECMA-262 semantics: `$` is end of input only, `\\d` is [0-9])"
+            raise SchemaValidationError(path, f"{instance!r} does not match pattern {schema['pattern']!r}{hint}")
 
     if "minimum" in schema and isinstance(instance, (int, float)) and not isinstance(instance, bool):
         if instance < schema["minimum"]:

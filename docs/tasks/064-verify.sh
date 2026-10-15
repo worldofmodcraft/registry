@@ -130,8 +130,8 @@ D=$(git -C "$TMP/head" diff -U0 "$BASE" HEAD -- docs/tasks/034-verify.sh | grep 
 DM=$(printf '%s\n' "$D" | grep -E '^-')
 DP=$(printf '%s\n' "$D" | grep -E '^\+')
 if [ "$(printf '%s\n' "$DM" | grep -c .)" = 1 ] && printf '%s\n' "$DM" | grep -qF "re\\.search(schema\\[\"pattern\"\\], instance)"; then pass "AC5.2 exactly one line removed: the old C3.3 call text"; else fail "AC5.2 removed lines: $DM"; fi
-if printf '%s\n' "$DP" | grep -qF 're\.search\(_ecma_pattern\(schema\["pattern"\]\), instance, re\.ASCII\)' && printf '%s\n' "$DP" | grep -q 'task 064'; then pass "AC5.3 added: the new C3.3 call text (still re.search) plus a comment naming task 064"; else fail "AC5.3 added lines: $DP"; fi
-if printf '%s\n' "$D" | grep -qE 'C3\.4|fullmatch'; then fail "AC5.4 C3.4 / fullmatch lines were edited"; else pass "AC5.4 C3.4 (no re.fullmatch call) is not edited"; fi
+if printf '%s\n' "$DP" | grep -qF 're\.search\(_ecma_pattern(schema\["pattern"\]), instance, re\.ASCII\)' && printf '%s\n' "$DP" | grep -q 'task 064'; then pass "AC5.3 added: the new C3.3 call text (still re.search) plus a comment naming task 064"; else fail "AC5.3 added lines: $DP"; fi
+if printf '%s\n' "$D" | grep -vE '^\+#' | grep -qE 'C3\.4|fullmatch'; then fail "AC5.4 C3.4 / fullmatch lines were edited"; else pass "AC5.4 C3.4 (no re.fullmatch call) is not edited"; fi
 if [ "$(git -C "$TMP/head" diff --stat "$BASE" HEAD -- docs/tasks/034-verify.sh | tail -1 | grep -oE '[0-9]+ insertions?')" = "4 insertions" ]; then pass "AC5.5 034-verify.sh: 4 inserted lines (1 call, 3 comment), 1 removed"; else fail "AC5.5 unexpected 034-verify.sh diff size"; fi
 SRCDIFF=$(git -C "$TMP/head" diff -U0 "$BASE" HEAD -- tools/registry/schema.py | grep -E '^[+-][^+-]')
 if [ "$(printf '%s\n' "$SRCDIFF" | grep -c .)" = 2 ] && printf '%s\n' "$SRCDIFF" | grep -qF 're.ASCII'; then pass "AC5.6 tools/registry/schema.py: one line changed, the ASCII flag only"; else fail "AC5.6 schema.py diff: $SRCDIFF"; fi
@@ -141,7 +141,10 @@ extra=$(git -C "$TMP/head" diff --name-only "$BASE" HEAD | grep -vxE 'tests/cont
 if [ -z "$extra" ]; then pass "S1 changed files are within the declared scope"; else fail "S1 out-of-scope files changed: $(printf '%s' "$extra" | tr '\n' ' ')"; fi
 if git -C "$TMP/head" diff --quiet "$BASE" HEAD -- contracts; then pass "S2 no schema in contracts/ changed"; else fail "S2 contracts/ changed"; fi
 REM=$(git -C "$TMP/head" diff "$BASE" HEAD -- tests | grep -E '^-[^-]')
-if [ -z "$REM" ]; then pass "S3 no existing test line removed or altered"; else fail "S3 test lines removed: $REM"; fi
+# the only existing lines that change are the two schema_check pattern calls and (task 064) the message line below them
+if [ "$(printf '%s\n' "$REM" | grep -c .)" = 4 ] && [ "$(printf '%s\n' "$REM" | grep -cF 're.search(schema["pattern"], instance) is None:')" = 2 ] && [ "$(printf '%s\n' "$REM" | grep -cF 'does not match pattern')" = 2 ]; then
+    pass "S3 existing test files: exactly the 2 validator pattern calls and their 2 message lines changed (no test removed or weakened)"
+else fail "S3 unexpected removed lines under tests/: $REM"; fi
 if [ -x "$ROOT/docs/tasks/064-verify.sh" ]; then pass "S4 064-verify.sh is executable"; else fail "S4 064-verify.sh is not executable"; fi
 
 if [ "$MUTATE" = 1 ]; then

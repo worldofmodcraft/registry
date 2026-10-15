@@ -160,6 +160,20 @@ class TrailingNewline(unittest.TestCase):
                     fn("a" * 40 + "\n", sub)
 
 
+class RejectionMessage(unittest.TestCase):
+    def test_message_names_the_ecma_reason_only_when_python_semantics_would_accept(self):
+        # Protects: an author who hits the trailing-newline rule is told why; an ordinary mismatch gets no misleading hint.
+        sub = {"type": "string", "pattern": "^[0-9a-f]{4}$"}
+        for label, fn, exc in PATHS[:2]:
+            with self.subTest(path=label):
+                with self.assertRaises(exc) as ctx:
+                    fn("abcd\n", sub)
+                self.assertIn("end of input", ctx.exception.message)
+                with self.assertRaises(exc) as ctx:
+                    fn("zzzz", sub)
+                self.assertNotIn("ECMA", ctx.exception.message)
+
+
 class FullwidthDigits(unittest.TestCase):
     def test_one_fullwidth_digit_is_rejected_by_every_path(self):
         # Protects: ECMA `\d` is [0-9]; Python's str `\d` accepts Unicode digits (task 007a N1).
