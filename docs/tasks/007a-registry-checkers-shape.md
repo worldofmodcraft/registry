@@ -236,3 +236,9 @@ sees. Alternative: accept a named maintainer class here, which would be a new de
 - BLOCKING for the manager (F1 probes 4 and 5): decide whether `signature`/`key_id` need a pattern (schema change, probably
   `key_id` `^[0-9A-F]{16}$` per signature-format.md, and a signature grammar), or whether the reviewer's probes are accepted as
   contract-valid. 007a enforces what the contract states and nothing more.
+- A (manager, 2026-10-15): accepted as contract-valid today (T1 clause 3: "or, for signature and key_id, its minimum
+  length"); the reviewer agrees. The schema/signature-format.md inconsistency for `key_id` is booked as platform task 065.
+- 2026-10-15 manager: fresh-clone re-run at `05322bf`: 150 tests OK, `SUMMARY failed=0`; `--mutate` 78 mutations,
+  `not_red=0`. Delta review of fix round 1: PASS, no blocking findings. New non-blocking N1 (Python `\d` matches Unicode
+  digits, unlike ECMA; fullwidth digits in `published_at` pass) is folded into platform task 064 (`re.ASCII`, here and in
+  `schema_check.py`). Merge held for Ludwig: security-relevant CI (MANAGER.md §7).
