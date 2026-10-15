@@ -209,6 +209,30 @@ else
     fi
 fi
 
+# --------------------------------------------------------------------------------------------------
+section "AC7 (amendment 1) -- 067-verify.sh measures 067's own pinned PR #11 range, so it is green on a later branch"
+MERGE11="ac22c8f"            # registry PR #11, the merge of task 067
+lb=$(sed -n 's/^BASE="\{0,1\}\([0-9a-f]\{7,\}\).*/\1/p' "$ROOT/docs/tasks/067-verify.sh" | head -n1)
+lf=$(sed -n 's/^FINAL="\{0,1\}\([0-9a-f]\{7,\}\).*/\1/p' "$ROOT/docs/tasks/067-verify.sh" | head -n1)
+if [ -z "$lb" ] || [ -z "$lf" ]; then fail "AC7.0 cannot read BASE/FINAL from 067-verify.sh (a search that finds nothing is broken)"
+else
+    [ "$(git -C "$ROOT" rev-parse "$lf^{commit}" 2>/dev/null)" = "$(git -C "$ROOT" rev-parse "$MERGE11^2")" ] && pass "AC7.1 FINAL=$lf is the last commit of PR #11 (git rev-parse $MERGE11^2)" || fail "AC7.1 FINAL=$lf is not $MERGE11^2"
+    [ "$(git -C "$ROOT" rev-parse "$lb^{commit}" 2>/dev/null)" = "$(git -C "$ROOT" merge-base "$MERGE11^1" "$MERGE11^2")" ] && pass "AC7.2 BASE=$lb is PR #11's fork point" || fail "AC7.2 BASE=$lb is not the fork point of PR #11"
+fi
+if [ -z "$NM" ] || [ ! -d "$NM/ajv" ]; then fail "AC7.0 a node_modules directory with ajv is required to run 067-verify.sh: pass NODE_MODULES_DIR"
+else
+    mk_later "$TMP/later67" || fail "AC7.0 cannot build the later branch"
+    git -C "$TMP/later67" show "$BASE069:docs/tasks/067-verify.sh" > "$TMP/later67/docs/tasks/067-verify.sh"
+    ( cd "$TMP/later67" && bash docs/tasks/067-verify.sh "$NM" ) > "$TMP/old067.out" 2>&1; rc=$?
+    if [ "$rc" != 0 ] && grep -q '^FAIL  AC5.1' "$TMP/old067.out"; then pass "AC7.3 red first: the OLD 067-verify.sh on a later branch fails AC5.1 (exit $rc)"
+    else fail "AC7.3 the old 067-verify.sh was not red on AC5.1 on the later branch (exit $rc)"; fi
+    git -C "$TMP/later67" checkout -q -- docs/tasks/067-verify.sh
+    ( cd "$TMP/later67" && bash docs/tasks/067-verify.sh "$NM" ) > "$TMP/new067.out" 2>&1; rc=$?
+    if [ "$rc" = 0 ]; then pass "AC7.4 HEAD's 067-verify.sh exits 0 on the later branch"
+    else fail "AC7.4 HEAD's 067-verify.sh exit $rc on the later branch; failing: $(grep '^FAIL' "$TMP/new067.out" | head -n3 | cut -c1-160 | tr '\n' '|')"; fi
+fi
+# (062-verify.sh does not run 067: 067-verify.sh AC3.2 runs 062, so that would be a cycle; 067 is covered here and in criterion 6.)
+
 # ==================================================================================================
 else
 section "AC5 mutations -- anything beyond 064's C3.3 re-pin is rejected"
@@ -261,6 +285,30 @@ else
     done
     grep -q '^PASS  AC4.007a restored' "$TMP/062m.out" && pass "AC4.m.restored 062 --mutate shows 007a green after restore" || fail "AC4.m.restored no passing AC4.007a restored line"
     [ "$rc" = 0 ] && pass "AC4.m.exit 062-verify.sh --mutate exits 0" || fail "AC4.m.exit 062-verify.sh --mutate exit $rc: $(grep '^FAIL' "$TMP/062m.out" | head -n3 | tr '\n' '|')"
+fi
+
+section "AC7 mutations -- 067's pinned-range check can fail"
+if [ -z "$NM" ] || [ ! -d "$NM/ajv" ]; then fail "AC7.m0 a node_modules directory with ajv is required to run 067-verify.sh"
+else
+    mk_later "$TMP/m7" || fail "AC7.m0 cannot build the later branch"
+    S=docs/tasks/067-verify.sh
+    cp "$TMP/m7/$S" "$TMP/067.orig"
+    mut067() {   # mut067 OLD NEW LABEL EXPECT_REGEX
+        if [ "$(grep -cF -- "$1" "$TMP/m7/$S")" != 1 ]; then fail "$3: the mutation did not apply (pattern not found exactly once)"; return; fi
+        python3 -I - "$TMP/m7/$S" "$1" "$2" <<'PY'
+import sys
+p, old, new = sys.argv[1:4]
+s = open(p).read()
+open(p, "w").write(s.replace(old, new, 1))
+PY
+        ( cd "$TMP/m7" && bash docs/tasks/067-verify.sh "$NM" ) > "$TMP/mut67.out" 2>&1; local rc=$?
+        if [ "$rc" != 0 ] && grep -Eq "$4" "$TMP/mut67.out"; then pass "$3 turns red: exit $rc, $(grep -E "$4" "$TMP/mut67.out" | head -n1 | cut -c1-140)"
+        else fail "$3 stayed green or missed /$4/: exit $rc"; fi
+        cp "$TMP/067.orig" "$TMP/m7/$S"
+    }
+    mut067 'FINAL="06c721c"' 'FINAL="HEAD"' "AC7.m1 range widened to HEAD" '^FAIL  AC5.1'
+    mut067 'FINAL="06c721c"' 'FINAL="deadbee"' "AC7.m2 unreachable FINAL pin must FAIL, never skip" '^FAIL  .*pinned commit deadbee'
+    mut067 'BASE="3c94cf2"' 'BASE="deadbee"' "AC7.m3 unreachable BASE pin must FAIL, never skip" '^FAIL'
 fi
 
 section "AC2 -- the leak check still bites: a test that really leaks a wom008a-* dir reddens 008a-verify.sh"
