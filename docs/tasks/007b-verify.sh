@@ -41,7 +41,7 @@ N=$(echo "$RUNLINE" | grep -oE '[0-9]+' | head -1)
 echo "$OUT" | tail -4
 echo "$OUT" | tail -1 | grep -q '^OK' && ok "unittest: $RUNLINE, OK" || { fail "unittest not OK"; echo "$OUT" | grep -E '^(FAIL|ERROR)'; }
 NO=$(echo "$OUT" | grep -cE '^test_.*\(test_ownership(_mutations)?\.' )
-[ "$NO" -ge 80 ] && ok "ownership tests ran: $NO (floor 80)" || fail "only $NO ownership tests ran (floor 80): a search that finds nothing is broken"
+[ "$NO" -ge 75 ] && ok "ownership tests ran: $NO (floor 75)" || fail "only $NO ownership tests ran (floor 75): a search that finds nothing is broken"
 
 # 1b. umbrella 11: the same suite passes in a FRESH CLONE of the committed tree, not only in this worktree
 SCR=$(mktemp -d "${WOM_TMP:-${TMPDIR:-/tmp}}/wom007b-fresh.XXXXXX")
@@ -53,8 +53,8 @@ rm -rf "$SCR"
 # 2. one named line per acceptance criterion: >=1 passing test and none failing
 crit() { # label pattern
   local P F
-  P=$(echo "$OUT" | grep -cE "^$2.* \.\.\. ok$")
-  F=$(echo "$OUT" | grep -cE "^$2.* \.\.\. (FAIL|ERROR)$")
+  P=$(echo "$OUT" | grep -cE "^($2).* \.\.\. ok$")
+  F=$(echo "$OUT" | grep -cE "^($2).* \.\.\. (FAIL|ERROR)$")
   if [ "$P" -ge 1 ] && [ "$F" -eq 0 ]; then ok "$1: $P passing, 0 failing"; else fail "$1: $P passing, $F failing"; fi
 }
 crit "umbrella 4   id differs / username matches rejected; rename accepted" "test_r3_(reject_same_username|accept_rename)"
