@@ -1654,28 +1654,26 @@ fi
 # this branch it is the fork point, so the changed set is exactly this task's own work. After the
 # merge, on main, the merge-base is HEAD itself, the changed set is empty, and the subset test is
 # trivially true -- green, correctly, forever, without anyone re-pinning anything.
-MERGE_BASE=""
-for ref in origin/main main origin/master master; do
-    if git rev-parse --verify --quiet "$ref" > /dev/null 2>&1; then
-        MERGE_BASE=$(git merge-base HEAD "$ref" 2>/dev/null) && [ -n "$MERGE_BASE" ] && { SCOPE_REF="$ref"; break; }
+# TASK 062 (D-1) SUPERSEDES THE PARAGRAPH ABOVE. A computed merge-base is green on main but red on every
+# LATER branch (the later task's files all count as out of scope), which is the defect task 062 closes.
+# The check exists to prove MANAGER.md Section 3.3 held for THIS task, so it now measures this task's own
+# commit range, pinned at both ends, and still tests a subset: BASE is the registry commit the branch was cut
+# from (e449e26, the merge of task 025: `git merge-base 4d4a204^1 4d4a204^2`), FINAL is the last commit on
+# task/032-ownership-contract before its merge (registry PR #4: `git rev-parse 4d4a204^2` = 76af1bb). The range
+# never moves, so the answer is the same on main, on any later branch and in a fresh clone. An unreachable pin
+# FAILS naming the commit (Section 2c rule 1), it never skips.
+SCOPE_BASE="e449e26"
+SCOPE_FINAL="76af1bb"
+PINS_OK=1
+for pin in "$SCOPE_BASE" "$SCOPE_FINAL"; do
+    if ! git merge-base --is-ancestor "$pin" HEAD 2>/dev/null; then
+        fail "S3a pinned commit $pin is not an ancestor of HEAD, so the scope check has no range to compute against"
+        PINS_OK=0
     fi
 done
-if [ -z "$MERGE_BASE" ]; then
-    # No skip, no silent green: an unresolvable base is a failed check (Section 2c rule 1 --
-    # a check that does not evaluate is not a clean result).
-    fail "S3a no integration branch (origin/main, main, origin/master, master) resolved, so the scope check has no base to compute against"
-else
-    # Rooted at the repository top level, never at the caller's cwd (fix round 4, round-3
-    # non-blocking 3): `git diff -- .` and `git ls-files --others` are both cwd-relative, so
-    # running this script from docs/ reported a clean scope while an out-of-scope file sat at the
-    # repository root. Usage says "run from the worktree root"; a check that is only correct when
-    # its usage note is obeyed is a footgun, and the toplevel is already computed above.
-    REPO_ROOT=$(git rev-parse --show-toplevel)
-    CHANGED=$( { git diff --name-only "$MERGE_BASE" -- "$REPO_ROOT"; \
-                 git -C "$REPO_ROOT" ls-files --others --exclude-standard; } \
-        | grep -v '__pycache__' | sort -u )
-    printf '  $ git merge-base HEAD %s -> %s\n' "$SCOPE_REF" "$MERGE_BASE"
-    printf '  $ { git diff --name-only %s -- %s ; git -C %s ls-files --others --exclude-standard ; } | grep -v __pycache__ | sort -u\n' "$MERGE_BASE" "$REPO_ROOT" "$REPO_ROOT"
+if [ "$PINS_OK" = 1 ]; then
+    CHANGED=$(git diff --name-only "$SCOPE_BASE" "$SCOPE_FINAL" | grep -v '__pycache__' | sort -u)
+    printf '  $ git diff --name-only %s %s | grep -v __pycache__ | sort -u\n' "$SCOPE_BASE" "$SCOPE_FINAL"
     printf '%s\n' "$CHANGED" | sed 's/^/  /'
     # Task 032's declared file scope, from the task file's own "What I wrote" plus the two
     # artefacts later rounds added (the verify script and its B1 fixture).
@@ -1687,9 +1685,9 @@ docs/tasks/032-b1-fixtures.json
 docs/tasks/032-mutations.sh"
     OUT_OF_SCOPE=$(printf '%s\n' "$CHANGED" | grep -v '^$' | grep -vxF "$DECLARED_SCOPE" || true)
     if [ -z "$OUT_OF_SCOPE" ]; then
-        pass "S3 every path changed since the merge-base with $SCOPE_REF is inside task 032's declared file scope (subset test, survives the merge)"
+        pass "S3 every path changed in $SCOPE_BASE..$SCOPE_FINAL is inside task 032's declared file scope (subset test over the task's own pinned range)"
     else
-        fail "S4 file(s) outside task 032's declared scope changed since the merge-base with $SCOPE_REF: $(printf '%s' "$OUT_OF_SCOPE" | tr '\n' ' ')"
+        fail "S4 file(s) outside task 032's declared scope changed in $SCOPE_BASE..$SCOPE_FINAL: $(printf '%s' "$OUT_OF_SCOPE" | tr '\n' ' ')"
     fi
 fi
 

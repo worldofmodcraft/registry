@@ -38,6 +38,11 @@ set -o pipefail
 RULES="contracts/append-only.rules.md"
 ROUND2_BLOB="db457c1:contracts/append-only.rules.md"
 ROUND3_BASE="be82c19"   # the commit this escalation round started from
+# Task 062 (D-1): the scope check measures this task's own range, pinned at BOTH ends, so it gives the
+# same answer on main, on any later branch and in any fresh clone. ROUND3_FINAL is the last commit on
+# the task/006-contracts branch before its merge (registry PR #2: the second parent of merge 497af6f,
+# found with `git log --first-parent` on main, then `git rev-parse 497af6f^2`).
+ROUND3_FINAL="2241923"
 FAILURES=0
 
 pass() { printf 'PASS  %s\n' "$1"; }
@@ -90,13 +95,14 @@ expect_hits "C1.4b rules 2 and 4 are stated to apply unchanged and in full at cr
     'therefore apply unchanged and in full'
 expect_hits "C1.5a rule 2 restated for creation (header)" \
     '\*\*Rule 2\*\* — every element must satisfy'
-# C1.5b: the reviewer's own mutation deleted exactly this clause (:98-102) and found
-# C1.5's old regex (header only) never looked for it at all. Anchored to the creation
-# restatement's own wording ("any element whose", no "newly added") so it cannot be
-# satisfied by the *general* rule 2 text at :199-202, which reads "newly added element
-# whose" -- a different string.
-expect_hits "C1.5b rule 2's creation restatement itself states the reason-for-removed clause (status removed requires a reason)" \
-    'and any element whose .status. is .\"removed\"'
+# RETIRED C1.5b (task 062, D-2)
+#   pinned:     rule 2's creation restatement states that an element whose status is "removed" must carry a
+#               reason (born-removed-needs-a-reason, at a first publish).
+#   reason:     superseded. ADR-0121 (Q-L: born-pending only) and task 057 replaced that rule: a newly
+#               appended element must now be pending. The sentence this check pinned no longer exists.
+#   successor:  057-verify.sh T1
+#   successor:  057-textchecks.py old-gone/rule2-creation-removed
+#   successor:  057-textchecks.py required/born-pending
 expect_hits "C1.6a rule 4 restated for creation (header, pairwise-unique across new.versions)" \
     '\*\*Rule 4\*\* — .version. must be \*\*pairwise-unique across'
 expect_hits "C1.6b rule 4's creation restatement states exact string equality" \
@@ -205,83 +211,37 @@ else
 fi
 
 # --------------------------------------------------------------------------------
-section "Criterion 8 -- premise of the checker walkthrough: entry.schema.json alone ACCEPTS the malicious first-publish entry"
+section "Criterion 8 -- rule 4 is stated where the checker walkthrough cites it (the born-removed checks are retired, see below)"
 
-python3 - <<'PY'
-# Builds the malicious first-publish entry from the round-3 brief and validates it with
-# the repository's own stdlib validator. No (old, new) pair exists here and no append-only
-# rule is evaluated -- this is single-document schema validation, demonstrating that the
-# schema is not sufficient at a first publish.
-import hashlib, json, sys
-sys.path.insert(0, "tests/contracts")
-from schema_check import validate, SchemaValidationError
-
-def sha1(label):   return hashlib.sha1(label.encode()).hexdigest()
-def sha256(label): return hashlib.sha256(label.encode()).hexdigest()
-
-def v(version, label, status="published", reason=None):
-    o = {
-        "version": version,
-        "commit": sha1(label),
-        "source_url": "https://github.com/attacker/mod",
-        "source_archive": "https://cdn.worldofmodcraft.org/archives/attacker-mod-%s.tar.gz" % label,
-        "source_sha256": sha256(label),
-        "signature": "c" * 62,
-        "key_id": "platform-2026-01",
-        "published_at": "2026-09-03T00:00:00Z",
-        "status": status,
-    }
-    if reason is not None:
-        o["reason"] = reason
-    return o
-
-entry = {
-    "id": "attacker:mod",
-    "owner": {"provider": "github", "id": 999001, "name_at_registration": "attacker"},
-    "versions": [
-        v("1.2.0", "first-1.2.0"),                                  # element 0
-        v("1.2.0", "second-1.2.0"),                                 # element 1 -- duplicate version, different commit
-        v("2.0.0", "born-removed-no-reason", status="removed"),     # element 2 -- born removed, no reason
-        v("2.1.0", "born-removed-blank", status="removed", reason="   "),  # element 3 -- born removed, blank reason
-    ],
-}
-
-schema = json.load(open("contracts/entry.schema.json"))
-try:
-    validate(entry, schema)
-    verdict = "PASS"
-except SchemaValidationError as exc:
-    verdict = "FAIL (%s)" % exc
-
-print("  SCHEMA VALIDATION: %s   <-- the malicious first-publish entry" % verdict)
-print("  version strings:                 %s" % [e["version"] for e in entry["versions"]])
-print("  the two 1.2.0 objects' commits differ: %s" % (entry["versions"][0]["commit"] != entry["versions"][1]["commit"]))
-print("  element 2: status=%s reason=%r" % (entry["versions"][2]["status"], entry["versions"][2].get("reason")))
-print("  element 3: status=%s reason=%r (len %d, len after strip %d)" % (
-    entry["versions"][3]["status"], entry["versions"][3]["reason"],
-    len(entry["versions"][3]["reason"]), len(entry["versions"][3]["reason"].strip())))
-sys.exit(0 if verdict == "PASS" else 1)
-PY
-if [ $? -eq 0 ]; then
-    pass "C8.1 the schema accepts the malicious entry -- so schema validity alone cannot be the whole rule at a first publish"
-else
-    fail "C8.2 the schema did NOT accept the malicious entry; the walkthrough's premise in the log needs rewriting"
-fi
-
-# The rules that must reject it, with the line numbers the log's walkthrough cites.
-# C8.3 and C8.4 were each one expect_hits with a two-way alternation. The reviewer's
-# mutation deleted the *creation-restated* reason-for-removed clause (:98-102) and found
-# C8.3 stayed green via its other, generic alternative ("non-empty after stripping
-# leading and trailing"), which is satisfied by the *general* rule 2 text at :199-202
-# regardless of what the creation restatement says. Likewise, reverting the *main* rule 4
-# to history-only (deleting its pairwise clause, round-1 F2) left C8.4 green because its
-# other alternative ("unique across$") also matches the creation restatement's own,
-# untouched "pairwise-unique across" text at :103-104. Both are now one conjunct per
-# call, each anchored to text that exists in only the one location it claims to prove.
-expect_hits "C8.3a rule 2 (general) -- newly added elements born removed must carry a reason" \
-    'newly added element whose .status. is .\"removed\". must carry a .reason.'
-expect_hits "C8.3b rule 2 (creation restatement, :98-102) -- the same requirement, restated for a first publish" \
-    'and any element whose .status. is .\"removed\"'
+# RETIRED C8.2 (task 062, D-2; its PASS sibling C8.1 was the same single check and goes with it)
+#   pinned:     the premise that entry.schema.json alone ACCEPTS the malicious first-publish entry, whose
+#               elements 2 and 3 are born status "removed" (no reason / blank reason).
+#   reason:     superseded. ADR-0121 (Q-L: born-pending only) and task 057 made the schema four-branch; the
+#               entry is no longer accepted, and born-removed is a rule-1/rule-2 violation by the
+#               born-pending rule rather than a schema question. The premise is false by design.
+#   successor:  057-verify.sh O1
+#   successor:  057-verify.sh O2
+#   successor:  057-gen-fixtures.py first-publish-born-removed
+#   successor:  057-oracle.py allow_born_removed
+#
+# RETIRED C8.3a (task 062, D-2)
+#   pinned:     rule 2 (general): newly added elements born removed must carry a reason.
+#   reason:     superseded by ADR-0121 Q-L and task 057 (a newly appended element must be pending).
+#   successor:  057-verify.sh T1
+#   successor:  057-textchecks.py old-gone/rule2-born-removed
+#   successor:  057-textchecks.py required/born-pending
+#
+# RETIRED C8.3b (task 062, D-2)
+#   pinned:     rule 2 (creation restatement): the same born-removed-needs-a-reason requirement, for a first publish.
+#   reason:     superseded by ADR-0121 Q-L and task 057.
+#   successor:  057-verify.sh T1
+#   successor:  057-textchecks.py old-gone/rule2-creation-removed
+#   successor:  057-textchecks.py required/born-pending
+#
+# C8.4 was one expect_hits with a two-way alternation (round 4): reverting the *main* rule 4 to
+# history-only left it green because its other alternative also matched the creation restatement's own
+# "pairwise-unique across" text. It is one conjunct per call, each anchored to text that exists in only
+# the one location it claims to prove.
 expect_hits "C8.4a rule 4 (creation restatement, :103-104) -- pairwise-unique across new.versions" \
     'pairwise-unique across'
 expect_hits "C8.4b rule 4 (main, :221-231) -- pairwise-distinct from every other newly added version" \
@@ -303,21 +263,29 @@ fi
 # Tracked changes plus untracked new files, so this check gives the same answer before
 # and after the round is committed. __pycache__ is excluded: it is generated by running
 # the suite above, is not committed, and its presence depends only on run order.
-CHANGED=$( { git diff --name-only "$ROUND3_BASE" -- .; git ls-files --others --exclude-standard; } \
+# Task 062 (D-1): the range is pinned at both ends. An unreachable pin FAILS (never skips).
+PINS_OK=1
+for pin in "$ROUND3_BASE" "$ROUND3_FINAL"; do
+    if ! git merge-base --is-ancestor "$pin" HEAD 2>/dev/null; then
+        fail "C9.7 pinned commit $pin is not reachable from HEAD (shallow or foreign clone?): the scope checks cannot run"
+        PINS_OK=0
+    fi
+done
+CHANGED=$( { [ "$PINS_OK" = 1 ] && git diff --name-only "$ROUND3_BASE" "$ROUND3_FINAL"; } \
     | grep -v '__pycache__' | sort -u )
-printf '  $ { git diff --name-only %s -- . ; git ls-files --others --exclude-standard ; } | grep -v __pycache__ | sort -u\n' "$ROUND3_BASE"
+printf '  $ git diff --name-only %s %s | grep -v __pycache__ | sort -u\n' "$ROUND3_BASE" "$ROUND3_FINAL"
 printf '%s\n' "$CHANGED" | sed 's/^/  /'
 EXPECTED=$(printf '.gitignore\ncontracts/append-only.rules.md\ndocs/tasks/006-contracts.md\ndocs/tasks/006-verify.sh\n')
 if [ "$CHANGED" = "$EXPECTED" ]; then
-    pass "C9.3 exactly the four declared in-scope files changed since $ROUND3_BASE (the new root .gitignore, plus the three from round 3)"
+    pass "C9.3 exactly the four declared in-scope files changed in $ROUND3_BASE..$ROUND3_FINAL (the new root .gitignore, plus the three from round 3)"
 else
     fail "C9.4 changed-file set does not match the declared scope for this round"
 fi
 
-TEST_DIFF=$(git diff --name-only "$ROUND3_BASE" -- tests/ contracts/entry.schema.json contracts/page.schema.json contracts/manifest.schema.json contracts/examples/ reserved-namespaces.json docs/contracts/ \
+TEST_DIFF=$( { [ "$PINS_OK" = 1 ] && git diff --name-only "$ROUND3_BASE" "$ROUND3_FINAL" -- tests/ contracts/entry.schema.json contracts/page.schema.json contracts/manifest.schema.json contracts/examples/ reserved-namespaces.json docs/contracts/; } \
     | grep -v '__pycache__')
-if [ -z "$TEST_DIFF" ]; then
-    pass "C9.5 no test, schema, example, reserved-namespaces or contracts-README file changed since $ROUND3_BASE"
+if [ "$PINS_OK" = 1 ] && [ -z "$TEST_DIFF" ]; then
+    pass "C9.5 no test, schema, example, reserved-namespaces or contracts-README file changed in $ROUND3_BASE..$ROUND3_FINAL"
 else
     fail "C9.6 files outside this round's scope changed: $TEST_DIFF"
 fi
