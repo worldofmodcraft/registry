@@ -1,0 +1,142 @@
+# Task 007b: Registry checkers, authority half — ownership by numeric id, reserved namespaces, R11, fail-closed T1/T3
+
+- **Mission:** SITE-V1, D1 — **Status:** spec-approved (manager, 2026-10-15, after independent spec review rounds 1–3: FAIL, FAIL,
+  PASS). 007a merged (registry PR #10); dispatchable.
+- **Umbrella:** `docs/tasks/007-registry-ci-checkers.md` — read it in full, including the
+  "Revision 2026-10-15" section, which overrides its older text.
+- **Agent / model:** implementer / sonnet
+- **Budget:** medium (≤ 3 agent-sessions)
+- **Branch / worktree:** `task/007b-registry-checker-ownership` / `~/wt/registry-task-007b`, cut from
+  registry `origin/main` after 007a's merge
+- **Graph:** node N3; edge E16. No new edges.
+
+## Objective
+An offline ownership checker `tools/registry/ownership` exists, using 007a's report module, implementing
+`contracts/ownership.md` as merged (task 032, PR #4) — every MUST rule R1–R11 and every invariant I1–I8 that
+constrains a checker — plus the **fail-closed rule** of ADR-0121 / `append-only.rules.md` ("Coexistence of
+T1, T2 and T3"): every PR that changes a `pending` version, or gives an existing version the status
+`published` or `rejected`, is rejected whoever the author is, until the pipeline carve-out (task 008b)
+amends `ownership.md`.
+
+## Context to load (exhaustive)
+- Umbrella 007 (all, revision first); ADR-0058 §2–4, ADR-0119, ADR-0121, ADR-0041 (takedown grounds).
+- Registry `origin/main`: `contracts/ownership.md` (all), `contracts/append-only.rules.md` ("Coexistence of T1,
+  T2 and T3", "Attack attempts", rule 3), `reserved-namespaces.json`, `docs/tasks/032-b1-fixtures.json` (HTTP
+  evidence only), 007a's `tools/registry/` and `tests/registry/` as merged.
+- Doctrine: MANAGER.md §2c, §3.3, §3.7, guardrail 6c; REVIEW-CHECKLIST.md; OPERATIONS.md.
+
+## Inputs, stated exactly (all injected; the module reads no network, environment or credential)
+- `author`: the PR author's `(provider, id)` pair, as task 039 will read it from `pulls.user.id` (I1). A
+  login may be passed for messages only and is never compared (I6, umbrella criterion 4).
+- `old` / `new` file contents per touched path, and the **merge-base** revision of
+  `reserved-namespaces.json` (I4). A PR that edits `reserved-namespaces.json` does not change the list its
+  own check reads (tested).
+- `membership_oracle(org, author) -> int`: returns the **HTTP status** of the membership question, so R9 is
+  testable: `204` member, `404` not a member, anything else (`302`, `301`, `500`, an exception) → R9's
+  fail-closed rejection naming the status (I5: a `302` is never followed).
+- `r11_identity`: the `(provider, id)` that `ownership.md` R11 authorises for takedowns. **Default `None`,
+  and `None` means R11 authorises nobody** (`ownership.md`, R11 "The mechanism, marked rather than
+  assumed"): every takedown PR is then rejected by R3/R7. The concrete id is **not** established in this task
+  — which `pulls.user.id` a PR opened on the organisation's behalf carries is an open question booked for
+  Ludwig and for task 039's live part; it is never settled by reading a stored credential (CLAUDE.md rule 11).
+  Tests use the reserved owner's recorded id `324218296` as one fixture value and an unrelated id as another.
+  **Recorded deviation from `ownership.md`:** its mechanism paragraph says task 007's implementer establishes
+  that id and configures R11. That cannot be done offline without reading a credential, so 007b ships the
+  parameter with the fail-closed default and the configuration moves to Ludwig's answer and task 039; the
+  contract's own fallback ("until it is configured, R11 authorises nobody") is what holds meanwhile. The value
+  is configuration, not data from the PR: it is never read from `reserved-namespaces.json` or any file the PR
+  can change, so it may legitimately differ from the reserved owner's id (an organisation-owned App or machine
+  account). A PR that edits `reserved-namespaces.json` changes neither R11 authority nor the reserved list
+  (tested both ways).
+- `pipeline_app_id`: an id parameter used only to prove that it confers **nothing** today. The case
+  `pipeline_app_id == r11_identity` is tested: fail-closed still rejects T1/T3; T2 behaves exactly as for
+  `r11_identity`.
+
+## The fail-closed key (independent of 007a's shape verdict)
+The fail-closed branch is evaluated **first**, on the raw `old`/`new` pair, not on 007a's classification —
+a malformed `pending → published` that 007a calls a violation must still trip it. It fires when, at any index
+`i < len(old.versions)`, either `new.versions[i]` is **missing** (truncation, rule 3) or
+`new.versions[i] != old.versions[i]` and either `old.versions[i].status == "pending"` or
+`new.versions[i].status` is `"published"` or `"rejected"`. Outside the key, by design: elements appended at
+index ≥ `len(old.versions)` and first publishes; a born-`published` or born-`rejected` element there is
+rejected by 007a's rule 2, which is why task 039 must run both checkers. The key also fires on some plain
+rule-1 violations (`published → published` with a changed field, `removed → published`); there the message
+says the change is not permitted at all, not only that the carve-out is missing (tested). All reasons are reported (fail-closed plus any
+R-rule failures); the fail-closed reason is always present when the key fires, so its message is asserted in
+every matrix cell.
+
+## How R11's "nothing but takedown mutations" is decided
+007b imports 007a's per-element classification **for this decision only**: R11 authorises a PR if, and only
+if, the author equals `r11_identity` (not `None`), every changed path is an existing `mods/<ns>.<name>/entry.json`,
+and every changed element of every such file is classified T2 by 007a, with `id`, `owner` and the element count
+unchanged. Anything else — a new entry, a `page.json` edit, an appended version, a malformed T2 (which 007a does
+not classify as T2) — means R11 does not authorise, and R3/R7 decide. Composing the shape verdict (007a) with the
+authority verdict (007b) into one PR result is task 039's job; 007b states in its CLI help that its `accepted`
+is never a merge signal on its own.
+
+## Size (SPEC-CHECKLIST 5b)
+Source files: 1–2 (`ownership.py`, optionally a small `ownership_cli.py`), within the cap. Changed source lines:
+expected 300–450, over the 300 cap. Reason not to split: R1–R11 and I1–I8 are one contract with explicit
+precedence between rules (R3/R7/R11), and the fail-closed rule must be evaluated before them; splitting would
+put precedence across two branches. Reading list: 10 entries (umbrella, four ADRs, `ownership.md`, `append-only.rules.md`, `reserved-namespaces.json`,
+`032-b1-fixtures.json`, 007a's modules) plus doctrine — at the cap, one over with doctrine. Every entry is a direct input of a
+rule this checker implements; none can be dropped.
+
+## Acceptance criteria — all demonstrated by `docs/tasks/007b-verify.sh`, whose output the log pastes
+Umbrella criteria **1, 2, 4, 5, 6, 9, 10 (ownership messages), 11, 12 (ownership half) and 14**, plus:
+- **B1. Fail-closed matrix.** PRs containing T1 only, T3 only, T1+T3, a *malformed* `pending → published`
+  (missing one field), T2+T1 and T2+T3, each authored by: the namespace owner; a stranger; an org member on a
+  reserved namespace (oracle `204`); an id equal to `pipeline_app_id`; an id equal to `r11_identity`. Every cell
+  rejected, the fail-closed message (naming ADR-0121 and the missing task-008b carve-out) asserted per cell.
+- **B2. Takedown authority (R3/R7/R11, umbrella criterion 7's authority half).** With `r11_identity` set: one T2,
+  and two T2s in one PR, from `r11_identity` → accepted; the same from the owner, a stranger or an org member →
+  rejected (R3/R7). With `r11_identity = None`: every takedown PR rejected. A T2 plus any non-takedown change
+  from `r11_identity` → rejected (R11 "nothing else").
+- **B3. Every rule both ways, proven by mutation.** For each of R1–R11 and each of I1–I8 that constrains a
+  checker (expected descriptive set: **I8 only**, merge authority; claiming any other I-rule descriptive is a
+  question for the manager, not a decision), at least one accepting and
+  one rejecting test, **and** at least one named mutation that reddens a test of that rule. The rule ids are
+  enumerated from `ownership.md`'s `**Rn (MUST` / `**In (MUST` markers at test time (11 R-rules and 8 I-rules on
+  `e009ef0`; zero found fails). A tag without a reddening mutation does not count.
+- **B4. Required mutations (at least):** read `owner` from `new` instead of `old` (I3); ignore `provider` (I6);
+  read the reserved list from `new` (I4); compare logins instead of ids; treat `302` as member, and separately
+  as not-member (R9/I5); treat an oracle exception as member; accept a `page.json`-only PR with no `entry.json`
+  (R10); evaluate namespaces jointly instead of independently (I7); skip the fail-closed branch; key fail-closed
+  on 007a's classification instead of the raw diff (the malformed-T1 cell must redden); let `pipeline_app_id`
+  bypass fail-closed; let any author use R11; let R11 admit a non-takedown change; make R11's precedence
+  shape-based rather than authority-based (`ownership.md`'s round-3 attempt); let a binding PR rebind an
+  existing namespace; reject everything (positive control).
+- **B5. The seam is explicit.** No network, environment or file reads beyond the paths passed in (asserted:
+  patched `socket`, `os.environ` and `open` outside the given inputs raise).
+
+- **B6. Truncation and composition cells.** A PR truncating `versions[]` trips fail-closed for every author; a
+  malformed T2 from `r11_identity` is not authorised by R11; a PR from `r11_identity` editing
+  `reserved-namespaces.json` alongside a T2 is not authorised. Each has a reddening mutation.
+## File scope (declared)
+`tools/registry/ownership*.py` (new), `tests/registry/test_ownership*.py` (new),
+`docs/tasks/007b-registry-checker-ownership.md` (log), `docs/tasks/007b-verify.sh` (new),
+`docs/contracts/README.md` (ownership half of umbrella criterion 12). Changing 007a's modules = stop and report.
+
+## Forbidden here
+The umbrella's list, plus: hard-coding any real GitHub App id or account id in `tools/` (fixture values in
+`tests/` are fine; the reserved list is read from the merge-base `reserved-namespaces.json` passed in, and
+`r11_identity` is injected configuration only); any carve-out
+letting the pipeline identity carry T1/T3 (task 008b's contract amendment); establishing `r11_identity` by any
+means (open question, Ludwig's); a network call or credential read of any kind (CLAUDE.md rule 11).
+
+## Questions
+- Q (booked for Ludwig, not blocking 007b): which concrete `pulls.user.id` do the platform's own takedown PRs
+  carry (`ownership.md` R11 mechanism paragraph)? Until answered, `r11_identity = None` in production and every
+  takedown is rejected. Options appear when 039/008b produce a real organisation-authored PR to read.
+
+## Dependencies
+After 007a (merged). Blocks 039. Task 008b later amends `ownership.md` and this checker together.
+
+---
+# Task 007b log
+- 2026-10-15 manager: spec written (session 9) from the umbrella's revision.
+- 2026-10-15 manager: revised after spec review round 1 (FAIL, findings 1–3, 5, 7): inputs stated, fail-closed key
+  made independent of 007a, R11 identity injected with `None` = nobody, mutation set per rule, Size section.
+- 2026-10-15 manager: spec review rounds 1-3 (FAIL, FAIL, PASS); spec-approved.
+- 2026-10-15 manager (session 10): worktree `~/wt/registry-task-007b` cut from registry `origin/main` `ac22c8f` (007a, 062, 067 merged); dispatched to implementer. Log-entry baseline recorded below.
+- 2026-10-15 manager: check-log-entry baseline = 4 (before dispatch).
