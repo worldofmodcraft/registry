@@ -169,6 +169,21 @@ mut("i7-namespaces-pooled-accept-if-any-passes", [(
     ["test_i7_reject_one_foreign_namespace"])
 mut("i8-verdict-claims-merge-signal", [("merge_signal=False)", "merge_signal=True)")], ["test_i8_accept_a_green_verdict"])
 
+# ---- amendment 1 / F1: a new entry in an owned namespace is judged by R3 on the recorded owner's id ----------
+mut("f1-namespace-owners-ignored-per-path-first-publish",
+    [('elif first is not None and not reserved and ns in ctx["owners"]:', 'elif first is not None and not reserved and False:')],
+    ["test_r3_reject_new_sibling_entry_by_a_stranger", "test_r3_accept_renamed_owner_adds_a_second_mod"])
+mut("f1-namespace-owners-read-from-the-prs-own-files",
+    [('"base_entries": base_entries or {}, "owners": owners}',
+      '"base_entries": base_entries or {}, "owners": {classify.parse_mod_path(p)[0]: _owner_pair(f[1]) for p, f in files.items() if classify.parse_mod_path(p) and f[1]}}')],
+    ["test_r3_reject_new_sibling_entry_by_a_stranger", "test_r3_reject_owners_are_not_read_from_the_prs_own_files"])
+mut("f1-none-namespace-owners-treated-as-empty",
+    [('"base_entries": base_entries or {}, "owners": owners}', '"base_entries": base_entries or {}, "owners": owners or {}}')],
+    ["test_r3_reject_missing_namespace_owners_fails_closed"])
+mut("f1-sibling-entry-judged-by-login-not-id",
+    [('if ctx["owners"][ns] != author:', 'if (login or "").lower() != ns.lower():')],
+    ["test_r3_reject_new_sibling_entry_by_a_stranger", "test_r3_accept_renamed_owner_adds_a_second_mod"])
+
 # ---------------------------------------------------------------------------------------------------------
 
 

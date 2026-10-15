@@ -18,6 +18,11 @@ membership_oracle (org, author) -> int, the HTTP status of the membership questi
 r11_identity      (provider, id) that R11 authorises for takedowns. Configuration, never data from the PR. None
                   (the default) means R11 authorises nobody: every takedown PR is then rejected by R3/R7.
 pipeline_app_id   accepted and deliberately ignored: it confers nothing until task 008b amends ownership.md.
+namespace_owners  {namespace: (provider, id)} read from EVERY mods/*/entry.json at the merge-base (never from the
+                  PR's files). A namespace is first published by a PR only if absent from this mapping and from the
+                  reserved list; a new entry.json in a namespace present here is judged by R3 on the recorded owner's
+                  id (ownership.md Attack 4), never by R4/R6's login. None = not supplied: every PR adding a new
+                  entry.json is rejected (fail closed). An empty mapping is legitimate (empty registry).
 base_entries      {mods/<ns>.<name>/entry.json: parsed entry at the merge-base} for the siblings of touched
                   page.json files that are not themselves in `files`; a missing key means "no entry" (R10).
 
@@ -171,6 +176,19 @@ def _namespace(ns, paths, ctx):
                     ["R3"], f"{path}: namespace {ns!r} is owned by {_owner_pair(existing)!r} but the PR author is "
                     f"{who}; ids are compared as (provider, id), never usernames", f"only the owner may touch {ns}; "
                     "fork and open the PR from the owning account", "ownership.md R3, I3, I6", path=path))
+        elif first is not None and ctx["owners"] is None:
+            out.append(report.finding(
+                ["namespace-owners-missing"], f"{path}: a new entry.json cannot be judged because the merge-base "
+                "namespace_owners input was not supplied, so the check cannot tell a first publish from a sibling "
+                "entry in an owned namespace", "supply namespace_owners (every merge-base mods/*/entry.json); an empty "
+                "mapping is valid for an empty registry", "ownership.md R3, Attack 4", path=path))
+        elif first is not None and not reserved and ns in ctx["owners"]:
+            if ctx["owners"][ns] != author:
+                out.append(report.finding(
+                    ["R3"], f"{path}: namespace {ns!r} already exists at the merge-base and is owned by "
+                    f"{ctx['owners'][ns]!r}, but the PR author is {who}; a new entry in an owned namespace is judged by "
+                    "the recorded owner's id, never by the author's username", f"only the owner may add entries to {ns}",
+                    "ownership.md R3, I3, I6, Attack 4", path=path))
         elif first is not None and reserved:
             rec = ctx["reserved"]["namespaces"][ns].get("owner")
             if not append_only._same(_d(first).get("owner"), rec):
@@ -203,10 +221,12 @@ def _namespace(ns, paths, ctx):
 
 
 def check(author, files, reserved_base, membership_oracle, *, login=None, r11_identity=None, pipeline_app_id=None,
-          base_entries=None):
+          base_entries=None, namespace_owners=None):
     author = _pair(author, "author")
     r11 = None if r11_identity is None else _pair(r11_identity, "r11_identity")
     names = classify.reserved_names(reserved_base)
+    owners = None if namespace_owners is None else {k: _pair(v, f"namespace_owners[{k!r}]")
+                                                    for k, v in namespace_owners.items()}
     findings = _fail_closed(files) + classify.classify(sorted(files), reserved_base)["findings"]
     shape = _takedown_shape(files)
     authorised = r11 is not None and author == r11 and shape
@@ -222,7 +242,7 @@ def check(author, files, reserved_base, membership_oracle, *, login=None, r11_id
         if p is not None:
             by_ns.setdefault(p[0], []).append(path)
     ctx = {"author": author, "login": login, "files": files, "names": names, "reserved": reserved_base,
-           "oracle": membership_oracle, "authorised": authorised, "base_entries": base_entries or {}}
+           "oracle": membership_oracle, "authorised": authorised, "base_entries": base_entries or {}, "owners": owners}
     for ns in sorted(by_ns):
         findings += _namespace(ns, sorted(by_ns[ns]), ctx)
     return report.make("ownership", findings, authorised_takedown=authorised, namespaces=sorted(by_ns),

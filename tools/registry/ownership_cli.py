@@ -79,10 +79,23 @@ def main(argv):
             errors += [(sib, err)] if err else []
             if entry is not None:
                 base[sib] = entry
+    owners = {}  # namespace -> owner pair, from EVERY merge-base entry.json (never from the PR's files)
+    for d in sorted(Path(a.old_root, "mods").glob("*")):
+        p = classify.parse_mod_path(f"mods/{d.name}/entry.json")
+        if p is None:
+            continue
+        entry, err = cli._read(a.old_root, f"mods/{d.name}/entry.json")
+        if err:
+            errors.append((f"mods/{d.name}/entry.json", err))
+        elif entry is not None:
+            pair = ownership._owner_pair(entry)
+            if pair is None:
+                raise report.ToolError(f"the merge-base mods/{d.name}/entry.json has no well-formed owner")
+            owners.setdefault(p[0], pair)
     if errors:  # a file we cannot parse unambiguously is not evidence; reject, never guess
         return report.make("ownership", cli._parse_error_findings(errors), merge_signal=False)
     return ownership.check((a.author_provider, a.author_id), files, reserved, _oracle(a.membership_status),
-                           login=a.author_login, r11_identity=r11, base_entries=base)
+                           login=a.author_login, r11_identity=r11, base_entries=base, namespace_owners=owners)
 
 
 if __name__ == "__main__":

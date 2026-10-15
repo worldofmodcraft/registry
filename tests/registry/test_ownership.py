@@ -47,6 +47,7 @@ def boom(org, author):
 
 
 def run(author, files, oracle=status(404), reserved=RES, **kw):
+    kw.setdefault("namespace_owners", {})  # an empty registry; tests of owned namespaces pass the real mapping
     return ownership.check(author, files, reserved, oracle, **kw)
 
 
@@ -138,13 +139,31 @@ class OwnedNamespaceSibling(unittest.TestCase):
 
     def test_r3_reject_new_sibling_entry_by_a_stranger_whose_login_matches_the_namespace(self):
         files = first_publish("alice", "new", owner=own(MALLORY_ID, "alice"))
-        v = run(MALLORY, files, login="alice")
+        v = run(MALLORY, files, login="alice", namespace_owners={"alice": ALICE})
         self.assertEqual(v["verdict"], "rejected")
-        self.assertIn("R3", rules(v))
+        self.assertEqual(rules(v), ["R3"])
 
     def test_r3_accept_renamed_owner_adds_a_second_mod(self):
-        v = run(ALICE, first_publish("alice", "second"), login="alice-renamed")
+        v = run(ALICE, first_publish("alice", "second"), login="alice-renamed", namespace_owners={"alice": ALICE})
         self.assertEqual(v["verdict"], "accepted")
+
+    def test_r3_reject_owners_provider_is_part_of_the_comparison(self):
+        v = run(("gitlab", ALICE_ID), first_publish("alice", "second"), login="alice",
+                namespace_owners={"alice": ALICE})
+        self.assertEqual(rules(v), ["R3"])
+
+    def test_r3_reject_missing_namespace_owners_fails_closed_but_empty_is_legitimate(self):
+        files = first_publish("alice", "second")
+        v = run(ALICE, files, login="alice", namespace_owners=None)
+        self.assertEqual(rules(v), ["namespace-owners-missing"])
+        self.assertIn("namespace_owners", v["findings"][0]["message"])
+        self.assertEqual(run(ALICE, files, login="alice", namespace_owners={})["verdict"], "accepted")
+
+    def test_r3_reject_owners_are_not_read_from_the_prs_own_files(self):
+        """A PR cannot declare its own namespace unowned by omission or owned by itself: only the injected mapping counts."""
+        files = dict(first_publish("alice", "new", owner=own(MALLORY_ID, "alice")), **add_version("alice", "cooltool"))
+        v = run(MALLORY, files, login="alice", namespace_owners={"alice": ALICE})
+        self.assertIn("R3", rules(v))
 
 
 class R4R5R6FirstPublish(unittest.TestCase):
@@ -590,6 +609,31 @@ class Cli(unittest.TestCase):
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     codes[label] = report.run(ownership_cli.main, base + extra + ["mods/mc.core/entry.json"])
             self.assertEqual(codes, {"member": 0, "no-status": 1, "302": 1, "bad-r11": 2})
+
+    def test_cli_builds_namespace_owners_from_the_old_root_only(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        import ownership_cli
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            for side in ("old", "new"):
+                (root / side / "mods/alice.cooltool").mkdir(parents=True)
+            (root / "new/mods/alice.new").mkdir(parents=True)
+            (root / "res.json").write_text(json.dumps(RES))
+            (root / "old/mods/alice.cooltool/entry.json").write_text(json.dumps(ent("alice", "cooltool", published())))
+            (root / "new/mods/alice.cooltool/entry.json").write_text(json.dumps(ent("alice", "cooltool", published())))
+            # the PR's own copy claims the namespace for the stranger; only the old root may count
+            (root / "new/mods/alice.new/entry.json").write_text(json.dumps(
+                ent("alice", "new", pending(), owner=own(MALLORY_ID, "alice"))))
+            args = ["--author-provider", "github", "--author-id", str(MALLORY_ID), "--author-login", "alice",
+                    "--old-root", str(root / "old"), "--new-root", str(root / "new"),
+                    "--reserved-file", str(root / "res.json"), "mods/alice.new/entry.json"]
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(report.run(ownership_cli.main, args), 1)
+            (root / "old/mods/alice.cooltool/entry.json").unlink()  # no merge-base owner => a genuine first publish
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(report.run(ownership_cli.main, args), 0)
 
 
 if __name__ == "__main__":
