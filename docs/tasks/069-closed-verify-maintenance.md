@@ -114,3 +114,13 @@ sequences 066 first if it is ready.
 - **Q1:** A (above, folded into this task instead of a new one). **Q2:** A — 062 AC1 keeps running the old 008a at its base by design; measurements are taken on a quiet machine; no loosening.
 - **Trailer deviation:** accepted as logged; pushed commits stay unchanged.
 - 2026-10-15 manager: amendment 1 appended; sent back to the agent. Log baseline recounted below.
+- 2026-10-15 qa-engineer (amendment 1): 067-verify.sh AC5.1 re-based to PR #11's range, BASE=3c94cf2 (fork point, also AC1's frame),
+  FINAL=06c721c (`git rev-parse ac22c8f^2`); unreachable pin is a FAIL naming the commit. Red first: 8e651f2 added 069-verify.sh AC7;
+  run on that commit: AC7.1-3 PASS (pins correct, old 067 red on a later branch: "FAIL  AC5.1 out-of-scope files changed: .gitignore
+  docs/tasks/007a-verify.sh ..."), AC7.4 FAIL (067 unchanged, exit 1). Fix: 403280f. Decision: 062-verify.sh does NOT run 067, because
+  067-verify.sh AC3.2 runs 062 (a cycle); 067 is covered by 069-verify.sh AC7 and criterion 6 instead (deviation from "if not already").
+  Q2 answered A: no loosening. Quiet machine (ps others=0 before every run), HEAD 403280f, 064 tip 942211c, 007b tip a3f04a1:
+  criterion 6 (/tmp/w069/c6c.out): 007a, 008a, 032, 034, 067, 006, 057, 062 all exit 0 (062: 45 PASS 0 FAIL); 062 on merge with 007b:
+  exit 0, 45 PASS; 062 on merge with 064: exit 0, 45 PASS. 069-verify.sh normal: ALL CHECKS PASSED (incl. AC7.1-4); --mutate: ALL CHECKS
+  PASSED, incl. "AC7.m1 range widened to HEAD turns red", "AC7.m2 ... FAIL  AC5.1 pinned commit deadbee is not an ancestor of HEAD",
+  "AC7.m3 ... FAIL  P0 base deadbee is reachable".
