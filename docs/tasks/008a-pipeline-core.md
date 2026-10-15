@@ -1,6 +1,6 @@
 # Task 008a: Pipeline core — clone, validate, scan, archive, hash, sign (offline)
 
-- **Mission:** SITE-V1, deliverable **D2** (first half; umbrella `docs/tasks/008-build-pipeline.md`) — **Status:** review (implementer, 2026-10-15; spec-approved by manager 2026-10-14 after independent spec review round 2: PASS) 
+- **Mission:** SITE-V1, deliverable **D2** (first half; umbrella `docs/tasks/008-build-pipeline.md`) — **Status:** done (implementer, 2026-10-15; spec-approved by manager 2026-10-14 after independent spec review round 2: PASS) 
 - **Agent / model:** implementer / sonnet (the signing and verifier parts get an independent reviewer at the same tier or higher with full tools — OPERATIONS.md, "The reviewer agent cannot run this project's verify artefacts")
 - **Budget:** large (≤ 6 agent-sessions)
 - **Branch / worktree:** `task/008a-pipeline-core` / `~/wt/registry-task-008a` — **registry** repo (`worldofmodcraft/registry`)
@@ -405,3 +405,5 @@ all re-verified by the reference verifier; AC14 above; AC15 `grep` of eight head
     - (7) SSRF is handled by 008b's job split, per the implementer's lean. Ludwig's question is booked.
     - (8) Consumers must extract relative symlinks safely.
   - **Merge waits for Ludwig** (signing, §7).
+- 2026-10-15 Ludwig, in session: "Stjärna på allt", which includes ★ merge 008a. Signing merge approved under §7.
+  The SSRF policy is also decided: 008b clones in a job that holds no signing secret.
