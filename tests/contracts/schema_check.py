@@ -25,6 +25,30 @@ import re
 from typing import Any
 
 
+def _ecma_pattern(pattern: str) -> str:
+    r"""The pattern with every unescaped `$` outside a character class rewritten to `\Z`.
+
+    ECMA-262 `$` (no `m` flag) matches only at the very end of input; Python's also matches just before a final
+    "\n". Same rewrite as tools/registry/schema.py `ecma_pattern` (task 007a); duplicated here so this validator
+    stays standalone (tests/ never imports from tools/). Task 064."""
+    out, i, in_class = [], 0, False
+    while i < len(pattern):
+        c = pattern[i]
+        if c == "\\":
+            out.append(pattern[i:i + 2])
+            i += 2
+            continue
+        if in_class:
+            in_class = c != "]"
+        elif c == "[":
+            in_class = True
+        elif c == "$":
+            c = "\\Z"
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
 class SchemaValidationError(Exception):
     def __init__(self, path: str, message: str):
         super().__init__(f"{path}: {message}")
@@ -116,8 +140,13 @@ def validate(instance: Any, schema: dict, path: str = "$") -> None:
             raise SchemaValidationError(path, f"{instance!r} is not one of the {len(schema['enum'])} allowed enum values")
 
     if "pattern" in schema and isinstance(instance, str):
-        if re.search(schema["pattern"], instance) is None:
-            raise SchemaValidationError(path, f"{instance!r} does not match pattern {schema['pattern']!r}")
+        if re.search(_ecma_pattern(schema["pattern"]), instance, re.ASCII) is None:
+            # Name the ECMA-262 difference when Python's own semantics would have accepted the value (task 064; the
+            # 007a hardening tests pin the phrase "end of input" in the message a trailing newline produces).
+            hint = ""
+            if re.search(schema["pattern"], instance) is not None:
+                hint = " (rejected under ECMA-262 semantics: `$` is end of input only, `\\d` is [0-9])"
+            raise SchemaValidationError(path, f"{instance!r} does not match pattern {schema['pattern']!r}{hint}")
 
     if "minLength" in schema and isinstance(instance, str):
         if len(instance) < schema["minLength"]:

@@ -72,7 +72,7 @@ def ecma_pattern(pattern):
 
 def _strict_patterns(instance, sub, path):
     if isinstance(instance, str) and "pattern" in sub:
-        if re.search(ecma_pattern(sub["pattern"]), instance) is None:
+        if re.search(ecma_pattern(sub["pattern"]), instance, re.ASCII) is None:
             raise schema_check.SchemaValidationError(
                 path, f"{instance!r} does not match pattern {sub['pattern']!r} at end of input "
                       "(a trailing newline is not accepted by `$`)")
