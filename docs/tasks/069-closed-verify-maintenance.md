@@ -74,3 +74,31 @@ sequences 066 first if it is ready.
   and size checks red on its branch; 062 008a reds), the static diagnosis of the 008a race (008a-verify.sh lines 36, 72–73),
   064's report Q2 (062 AC6.034) and its note that 008a passes when re-run alone.
 - 2026-10-15 manager: worktree `~/wt/registry-task-069` cut from registry origin/main `ac22c8f`; dispatched. check-log-entry baseline = 2.
+- 2026-10-15 qa-engineer: red-first commits (each shown red on its commit, run from the worktree): 8e04c13 (AC1 race: AC1.4/AC1.5 FAIL
+  against the old 008a, "suite left 2 wom008a-* temp dir(s)"); d0370d5 (AC3.4, AC4.1, AC4.2 FAIL: old 007a size 7>5 and scope
+  "docs/tasks/008a-verify.sh"; 062 had no 007a lines); 46d722b (AC5.1, AC5.2 and all AC5.m* FAIL: helper has no c33 command).
+  Fixes: ffa2359 (008a per-run TMPDIR), 727bce2 (007a pinned BASE=e009ef0/FINAL=aaf4260; 062 SCRIPTS_LATER + 007a mutations + c33),
+  later 069-verify.sh refinements 08b7649, 7c6041b. 008a messages unchanged, so 062 AC6.008a label comparison stays green.
+- 2026-10-15 qa-engineer: coordinator course correction received: 064's C3.3 changed again (tip fc3a524, call text
+  `re.search(_ecma_pattern(schema["pattern"]), instance)`, 3-line comment). Re-read `git diff origin/main origin/task/064-...`
+  after fetch. The allowance was written as: exactly 1 hunk; removed lines == [old C3.3 call text]; first added line matches
+  `re\.search\(.*schema\["pattern"\].*instance.*\)' "$CHECK_FILE"`; 1-8 further added lines, all comments, one naming "task 064".
+  So it already accepted this form; 069-verify.sh's embedded variant was updated to the current text and AC5.3 judges the real
+  branch file (accepted, fc3a524). Brittleness note: if 064 changes the call text so it no longer contains
+  re.search( ... schema["pattern"] ... instance ...), AC6.034 goes red and the regex needs a one-line update.
+- 2026-10-15 qa-engineer: criterion 6, sequential, `ps` showed 0 other suite processes before each run (log: /tmp/w069/c6.out). On HEAD 08b7649:
+  007a, 008a, 032, 034, 006, 057, 062 all exit 0 (062: 45 PASS 0 FAIL). 062 on merge(HEAD, 007b 9bec938): exit 0, 45 PASS.
+  062 on merge(HEAD, 064 fc3a524): exit 0, 45 PASS (AC6.034 green via the allowance). 067-verify.sh exit 1 with NODE_MODULES_DIR:
+  AC5.1 "out-of-scope files changed" (it diffs from its base 3c94cf2 to HEAD, red by construction on any later branch, same
+  defect class as 007a). Out of this task's file scope; booked below.
+- 2026-10-15 qa-engineer: deviation: 062 AC1 reproduces the OLD 008a at BASE062 by design, so its probe-branch inventory
+  ("changed,paths") can still pick up "suite" when another 008a runs concurrently (seen once, with 064/066 suites running; green
+  when quiet). Not fixed (would loosen AC1); measuring runs were made quiet.
+- 2026-10-15 qa-engineer: final 069-verify.sh output (quiet machine, ps others=0) normal: exit 0, ALL CHECKS PASSED (AC1.1-5, AC3.1-4,
+  AC3.head/later.007a, AC4.1-3, AC5.1-3). --mutate: ALL CHECKS PASSED (AC5.m1-m7, AC3.m1-m5, AC4.007a.drop-path/bad-pin/restored,
+  AC4.m.*, AC2.1 "suite left 16 wom008a-* temp dir(s)"). Full text returned in the report to the manager.
+
+## Questions
+- Q1 (for the manager): 067-verify.sh AC5.1 (scope vs 3c94cf2..HEAD) is red on every later branch, including this one. Options:
+  A) a follow-up task re-bases it to 067's own PR range (as 062 did) ★; B) accept it red and exclude 067 from "all closed scripts green".
+- Q2: 062 AC1 vs concurrent 008a (see deviation above): A) leave, measure quietly ★; B) allow optional "suite" id for 008a in AC1.
