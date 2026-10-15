@@ -313,3 +313,4 @@ SUMMARY failed=0
 red      n1-sibling-owner-field-not-checked: 3 failing, all 1 named tests red
 red      n1-cli-disagreeing-merge-base-owners-first-wins: 1 failing, all 1 named tests red
 ```
+- 2026-10-15 manager: delta review round 3 PASS (HEAD 18bd3dc); N1 closed. Review complete: round 1 FAIL (F1) → round 2 PASS (F1 fixed; N1 found) → round 3 PASS. Correction to the implementer's report: the reviewer counts **two** changed assertions (test_ownership.py ~144, ~167; exact R3 → exact R3+R5, verdict unchanged, strictly stronger), not three. F2 (mixed-PR takedown) is booked for Ludwig and gates task 039, not this task. Remaining merge gate: after task 069 merges, merge `main` into this branch and run `062-verify.sh` on the result on a quiet machine (manager); then merge under Ludwig's standing approval (mission log, session 10).
