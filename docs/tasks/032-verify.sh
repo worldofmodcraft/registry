@@ -1366,8 +1366,8 @@ else
 fi
 expect_hits "N5 docs/contracts/README.md's worked-examples count names eight prose documents" \
     'eight prose' "$CONTRACTS_README"
-expect_hits "N5b docs/contracts/README.md's checking-logic paragraph names three tasks" \
-    'in any of the three tasks' "$CONTRACTS_README"
+expect_hits_flow "N5b docs/contracts/README.md's checking-logic paragraph names three tasks and says none of them implements checking logic (task 067: re-pinned to the sentence task 007a rewrote)" \
+    'None of the three tasks implements checking logic' "$CONTRACTS_README"
 expect_hits_in_para "N9 the two-namespace example names alice as the concrete PR author instead of restating the owner (round-2 finding 9; round-3 non-blocking 4: the old pattern 'opened by' matched elsewhere)" \
     'The two-namespace case, stated explicitly' '\*\*opened by\*\* .alice.'
 expect_hits_in_para "N10 the first-publish classification paragraph says merge-base, matching append-only.rules.md, not 'target branch' (round-2 finding 10)" \
