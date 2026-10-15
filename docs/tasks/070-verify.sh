@@ -63,7 +63,7 @@ mk_later() {
     new_clone "$1" "$HEADREV" || return 1
     git -C "$1" checkout -q -b later-007b
     printf '\nA later task adds this sentence to the contracts README.\n' >> "$1/docs/contracts/README.md"
-    echo "# probe one" > "$1/tools/registry/probe_one.py"; echo "# probe two" > "$1/tools/registry/probe_two.py"
+    echo "# probe one, task 070 later branch" > "$1/tools/registry/probe_one.py"; echo "# probe two, task 070 later branch" > "$1/tools/registry/probe_two.py"   # content differs from 069 mk_later (it would otherwise find nothing to commit)
     printf '\n# a later task annotates this script\n' >> "$1/docs/tasks/032-verify.sh"
     sed -i 's/"S5 /"S5x /g' "$1/docs/tasks/032-verify.sh"
     printf '\n# a later task annotates this script\n' >> "$1/docs/tasks/034-verify.sh"
