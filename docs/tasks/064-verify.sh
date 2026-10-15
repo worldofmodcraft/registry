@@ -129,7 +129,7 @@ done
 fails=$(grep -E '^FAIL' "$TMP/s.out")
 if [ "$rc" = 0 ]; then pass "AC4.2 007a-verify.sh exits 0 at HEAD"
 elif [ "$(printf '%s\n' "$fails" | grep -c .)" = 1 ] && printf '%s\n' "$fails" | grep -q '^FAIL  files outside the declared scope'; then
-    listed=$(sed -n '/^FAIL  files outside the declared scope/,/^SUMMARY/p' "$TMP/s.out" | sed -e 's/^FAIL  files outside the declared scope: //' -e '/^SUMMARY/d' | grep .)
+    listed=$(awk '/^FAIL  files outside the declared scope/ {sub(/^FAIL  files outside the declared scope: /, ""); print; f=1; next} f && /^(docs|tests|tools|contracts)\// {print; next} {f=0}' "$TMP/s.out")
     extra=$(printf '%s\n' "$listed" | grep -vxE 'tests/contracts/schema_check\.py|tests/validation/schema_check\.py|docs/tasks/057-corpus\.py|docs/tasks/034-verify\.sh|docs/tasks/064-schema-check-end-anchor\.md|docs/tasks/064-verify\.sh')
     if [ -z "$extra" ]; then pass "AC4.2 007a-verify.sh: every check green except its by-construction branch-scope check, which lists only task 064's own declared files"; else fail "AC4.2 007a-verify.sh scope line lists files beyond task 064's scope: $extra"; fi
 else fail "AC4.2 007a-verify.sh exits $rc; failing lines: $fails"; fi
@@ -138,7 +138,7 @@ else fail "AC4.2 007a-verify.sh exits $rc; failing lines: $fails"; fi
 ( cd "$TMP/head" && bash docs/tasks/062-verify.sh "$NM" >"$TMP/s.out" 2>&1 ); rc=$?
 fails=$(grep -E '^FAIL' "$TMP/s.out" | grep -v '^FAIL  AC3\..*\.008a ')   # 008a's temp-dir count check is racy when another agent runs 008a concurrently
 if [ "$rc" = 0 ] || [ -z "$fails" ]; then pass "AC4.2 062-verify.sh exits 0 at HEAD"
-else fail "AC4.2 062-verify.sh: $(printf '%s\n' "$fails" | cut -c1-12 | tr '\n' ' ') -- BLOCKED by its own AC6.034 pin on 034-verify.sh (spec criteria 4 and 5 conflict; needs a manager decision)"; fi
+else fail "AC4.2 062-verify.sh: $(printf '%s\n' "$fails" | awk '{print $2}' | tr '\n' ' ') -- BLOCKED by its own AC6.034 pin on 034-verify.sh (spec criteria 4 and 5 conflict; needs a manager decision)"; fi
 
 section "AC5 -- 034 C3.3 re-pinned, not weakened; C3.4 untouched; nothing else in a closed script"
 CLOSED=$(git -C "$TMP/head" diff --name-only "$BASE" HEAD | grep -E '^docs/tasks/[0-9]+[a-z]?-verify\.sh$|^docs/tasks/(032|057)-' | grep -vE '^docs/tasks/(064-verify\.sh|057-corpus\.py)$')
