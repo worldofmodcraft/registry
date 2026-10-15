@@ -108,3 +108,9 @@ sequences 066 first if it is ready.
   npm ci was needed; nothing installed). Re-ran everything on HEAD 82d0aa2 with 0 other suite processes (ps) before each run:
   007a, 008a, 032, 034, 006, 057, 062 exit 0; 062 on merge(HEAD, 007b head a3f04a1, the F1 fix) exit 0, 45 PASS; 062 on
   merge(HEAD, 064 fc3a524) exit 0, 45 PASS; 067 exit 1 only on AC5.1 (see Q1). 069-verify.sh normal and --mutate: ALL CHECKS PASSED.
+
+## Amendment 1 (manager, 2026-10-15, session 10)
+- **Scope extended:** `docs/tasks/067-verify.sh` — its AC5.1 scope check measures `3c94cf2..HEAD` and is red on every later branch (registry `main` itself has been red on it since task 066 merged, `198dc98`). Re-base AC5.1 to 067's own pinned PR #11 range (base = merge-base, final = `<merge commit of #11>^2`), exactly as for 007a; red first (old script red on a later branch), widen-to-HEAD and unreachable-pin mutations red; `062-verify.sh` runs 067 on HEAD and a later branch (if not already).
+- **Q1:** A (above, folded into this task instead of a new one). **Q2:** A — 062 AC1 keeps running the old 008a at its base by design; measurements are taken on a quiet machine; no loosening.
+- **Trailer deviation:** accepted as logged; pushed commits stay unchanged.
+- 2026-10-15 manager: amendment 1 appended; sent back to the agent. Log baseline recounted below.
