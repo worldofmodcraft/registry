@@ -72,3 +72,24 @@ until then it takes `NODE_MODULES_DIR`. Before merging: run `062-verify.sh` on t
   objective, criteria each scripted, scope declared, context incl. ADR-0067/0103, budget small, size within cap,
   traps under Forbidden, no file overlap with 007b/064, verify artefact named).
 - 2026-10-15 manager: worktree cut from registry origin/main `ac22c8f`; dispatched. check-log-entry baseline = 3.
+- 2026-10-15 implementer (sonnet): built tools/dev/{package.json,package-lock.json,README.md} (ajv exact 8.20.0; lock
+  from `npm install --userconfig /dev/null`, anonymous public registry, 5 packages with integrity), `.gitignore`
+  `node_modules/`, default ajv location in 057-verify.sh and 062-verify.sh (argument, then WOM_NODE_MODULES, then
+  `<repo root>/tools/dev/node_modules`; missing-install messages name `npm ci --prefix tools/dev`), and
+  `docs/tasks/066-verify.sh`. Root README lists no prerequisites, so it is unchanged. Environment: node v24.20.0,
+  npm 11.19.0 (recorded, not pinned).
+- 2026-10-15 implementer: `066-verify.sh --mutate` output (HEAD clone; networked step labelled; exit 0):
+  C1 PASS (pin + lock integrity); C2 PASS (`NETWORKED STEP: npm ci --prefix tools/dev`, added 5 packages, ajv 8.20.0);
+  C3a PASS (V1: ajv 8.20.0; 156 cases; disagreements: []); C3b PASS (062 ALL CHECKS PASSED, default location);
+  C4 PASS (both scripts exit 1, output names the command); C5a-d PASS (argument, WOM_NODE_MODULES incl. 062,
+  /tmp/fc041); C6a-d PASS (positive controls found ajv in tools/dev/package.json and a node invocation in 057-verify.sh;
+  nothing under tools/registry/); C7 PASS (clean git status after npm ci); M1-M4 PASS, each red:
+  M1 `package.json ajv spec is '^8.20.0'`, M2 `FAIL V1 Ajv agreement not demonstrated`, M3 C4 reddens,
+  M4 `?? tools/dev/node_modules/`. Final: ALL CHECKS PASSED.
+- 2026-10-15 implementer FINDING (pre-existing, not 066): 008a-verify.sh counts `/tmp/wom008a-*` dirs before and after
+  its suite, so any parallel verify run (another worktree's 064/062/008a) makes it fail "suite left N temp dir(s)", which
+  reddens 062 AC3.head.008a (reproduced on unmodified origin/main with /tmp/fc041). Verify runs must not overlap on one
+  machine; 066's final run waited for quiet. Suggest a follow-up task to make that check use a private TMPDIR.
+
+## Questions
+- Q1: README.md lists no prerequisites, so I made no README change (spec: only "if"). Assumption taken: leave it.
