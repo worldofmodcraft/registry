@@ -79,6 +79,51 @@ run_008a_raced() {
     echo $?
 }
 
+# --- AC5 machinery: 062-verify.sh's own helper (its c33 command) judges variants of 034-verify.sh ---------
+BASE062="e009ef0"            # registry origin/main when task 062 was cut; AC6.034 compares against it
+# extract_helper CLONE : the helper.py that CLONE's 062-verify.sh writes out (the heredoc between 'PYH' markers)
+extract_helper() {
+    sed -n "/^cat > \"\$TMP\/helper.py\" <<'PYH'\$/,/^PYH\$/p" "$1/docs/tasks/062-verify.sh" | sed '1d;$d' > "$TMP/helper062.py"
+}
+# gen034 OUT [--064] [OLD NEW]... : 034-verify.sh as of BASE062, with task 064's C3.3 re-pin applied if --064 is given,
+# then each OLD replaced (exactly once) by NEW. Exit 2 when a replacement does not apply.
+gen034() {
+    git -C "$ROOT" show "$BASE062:docs/tasks/034-verify.sh" > "$1.base" || return 2
+    python3 -I - "$@" <<'PY'
+import sys
+out = sys.argv[1]; args = sys.argv[2:]
+s = open(out + ".base").read()
+if args and args[0] == "--064":
+    args = args[1:]
+    old = '    \'re\\.search(schema\\["pattern"\\], instance)\' "$CHECK_FILE"\n'
+    new = ('    \'re\\.search(_ecma_pattern(schema\\["pattern"\\]), instance, re\\.ASCII)\' "$CHECK_FILE"\n'
+           '# Re-pinned by task 064 (successor of the original text), as task 067 re-pinned 032 N5b: same intent -- search\n'
+           '# semantics, the schema\'s pattern, the instance -- now with ECMA-262 end-of-input and ASCII \\d.\n'
+           '# re.fullmatch stays forbidden (C3.4, unedited).\n')
+    assert s.count(old) == 1, "C3.3 call text not found exactly once in the base 034-verify.sh"
+    s = s.replace(old, new)
+for i in range(0, len(args), 2):
+    if s.count(args[i]) != 1:
+        print("MUTATION DID NOT APPLY: %r" % args[i][:60]); sys.exit(2)
+    s = s.replace(args[i], args[i + 1])
+open(out, "w").write(s)
+PY
+}
+# c33_judge FILE : run the helper's c33 on the diff of FILE against the base 034-verify.sh; prints its output, returns its rc
+c33_judge() {
+    git -C "$ROOT" show "$BASE062:docs/tasks/034-verify.sh" > "$TMP/034.base"
+    git diff --no-index -U0 -- "$TMP/034.base" "$1" > "$TMP/034.diff"
+    python3 -I "$TMP/helper062.py" c33 "$TMP/034.diff" > "$TMP/c33.out" 2>&1; local rc=$?
+    sed 's/^/    /' "$TMP/c33.out" | cut -c1-200
+    return $rc
+}
+# c33_expect_red LABEL FILE : must exit non-zero AND say FAILED (a crash of the helper is not a red verdict)
+c33_expect_red() {
+    local rc; c33_judge "$2" > "$TMP/judge.txt"; rc=$?
+    if [ "$rc" != 0 ] && grep -q 'FAILED:' "$TMP/judge.txt"; then pass "$1 is rejected: $(grep -m1 'FAILED:' "$TMP/judge.txt" | sed 's/^ *//' | cut -c1-110)"
+    else fail "$1 was not rejected by a FAILED verdict (rc $rc)"; fi
+}
+
 # ==================================================================================================
 if [ "$MUTATE" = 0 ]; then
 
@@ -143,8 +188,37 @@ else
     [ "$rc" = 0 ] && pass "AC4.3 062-verify.sh exits 0 on HEAD" || fail "AC4.3 062-verify.sh exit $rc on HEAD: $(grep '^FAIL' "$TMP/062.out" | head -n3 | tr '\n' '|')"
 fi
 
+# --------------------------------------------------------------------------------------------------
+section "AC5 -- 062's AC6.034 accepts task 064's C3.3 re-pin and nothing else"
+extract_helper "$TMP/head"
+if [ ! -s "$TMP/helper062.py" ]; then fail "AC5.0 cannot extract helper.py from 062-verify.sh (a search that finds nothing is broken)"
+else
+    gen034 "$TMP/034.untouched" || fail "AC5.0 cannot build the untouched variant"
+    gen034 "$TMP/034.064" --064 || fail "AC5.0 cannot build the 064 variant"
+    c33_judge "$TMP/034.untouched" > "$TMP/judge.txt"; rc=$?; cat "$TMP/judge.txt"
+    [ $rc = 0 ] && grep -q 'untouched' "$TMP/judge.txt" && pass "AC5.1 an untouched 034-verify.sh is accepted" || fail "AC5.1 an untouched 034-verify.sh was not accepted (rc $rc)"
+    c33_judge "$TMP/034.064" > "$TMP/judge.txt"; rc=$?; cat "$TMP/judge.txt"
+    [ $rc = 0 ] && grep -q 'only task 064' "$TMP/judge.txt" && pass "AC5.2 034-verify.sh with task 064's C3.3 re-pin applied is accepted" || fail "AC5.2 task 064's re-pin was not accepted (rc $rc)"
+fi
+
 # ==================================================================================================
 else
+section "AC5 mutations -- anything beyond 064's C3.3 re-pin is rejected"
+new_clone "$TMP/m5" "$HEADREV" || fail "AC5.m0 cannot clone HEAD"
+extract_helper "$TMP/m5"
+if [ ! -s "$TMP/helper062.py" ]; then fail "AC5.m0 cannot extract helper.py from 062-verify.sh"
+else
+    gen034 "$TMP/034.a" --064 "grep -q 're\\.fullmatch(' " "grep -q 're\\.fullmatchX(' " && c33_expect_red "AC5.m1 064's change plus an edit to C3.4 (its grep pattern)" "$TMP/034.a" || fail "AC5.m1 variant did not build"
+    gen034 "$TMP/034.b" --064 "C4.1 TRAVERSAL_PATHS contains" "C4.1 TRAVERSAL_PATHS holds" && c33_expect_red "AC5.m2 064's change plus an edit to an unrelated line (C4.1)" "$TMP/034.b" || fail "AC5.m2 variant did not build"
+    gen034 "$TMP/034.c" "grep -q 're\\.fullmatch(' " "grep -q 're\\.fullmatchX(' " && c33_expect_red "AC5.m3 an edit to C3.4 alone (no 064 change)" "$TMP/034.c" || fail "AC5.m3 variant did not build"
+    gen034 "$TMP/034.d" "C4.1 TRAVERSAL_PATHS contains" "C4.1 TRAVERSAL_PATHS holds" && c33_expect_red "AC5.m4 an unrelated edit alone" "$TMP/034.d" || fail "AC5.m4 variant did not build"
+    gen034 "$TMP/034.e" --064 're\.search(_ecma_pattern(schema\["pattern"\]), instance, re\.ASCII)' 're\.fullmatch(_ecma_pattern(schema\["pattern"\]), instance, re\.ASCII)' && c33_expect_red "AC5.m5 the re-pin weakened to re.fullmatch" "$TMP/034.e" || fail "AC5.m5 variant did not build"
+    gen034 "$TMP/034.f" --064 '# re.fullmatch stays forbidden (C3.4, unedited).' '# re.fullmatch stays forbidden (C3.4, unedited).
+exit 0' && c33_expect_red "AC5.m6 a code line smuggled in after the comment" "$TMP/034.f" || fail "AC5.m6 variant did not build"
+    gen034 "$TMP/034.g" --064 'Re-pinned by task 064' 'Re-pinned by somebody' && c33_expect_red "AC5.m7 the comment no longer names task 064" "$TMP/034.g" || fail "AC5.m7 variant did not build"
+fi
+
+# --------------------------------------------------------------------------------------------------
 section "AC3 mutations -- the pinned-range checks can fail"
 mk_later "$TMP/m3" || fail "AC3.m0 cannot build the later branch"
 S=docs/tasks/007a-verify.sh
