@@ -1,0 +1,9 @@
+{
+  "name": "wom-registry-dev-tools",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pinned developer tooling for the registry's verify scripts. Not a runtime dependency of any checker.",
+  "devDependencies": {
+    "ajv": "8.20.0"
+  }
+}
