@@ -356,7 +356,7 @@ else
 section "AC4 / AC5 / AC6 mutations (temporary clone of HEAD; each mutation must turn the named check red, the restore green)"
 new_clone "$TMP/m" "$HEADREV" || fail "AC4.0 cannot clone HEAD"
 
-mutate() {   # mutate FILE OLD NEW one|all  -> applies, returns helper's rc
+mutate() {   # mutate FILE OLD NEW one|first|all  -> applies, returns helper's rc
     "${H[@]}" mut "$TMP/m/$1" "$2" "$3" "$4"
 }
 restore() { git -C "$TMP/m" checkout -q -- "$1"; }
@@ -412,10 +412,10 @@ expect_green "AC4.057" 057
 
 # ---- AC5: a successor id that does not exist reddens the retirement check
 f=docs/tasks/006-verify.sh
-mutate $f '#   successor:  057-textchecks.py required/born-pending' '#   successor:  057-textchecks.py required/born-pendingX' one; applies $? "AC5.mut1"
+mutate $f '#   successor:  057-textchecks.py required/born-pending' '#   successor:  057-textchecks.py required/born-pendingX' first; applies $? "AC5.mut1"
 if "${H[@]}" retire "$TMP/m" > "$TMP/m.retire" 2>&1; then fail "AC5.mut1 a renamed successor id (textchecks) did NOT redden the retirement check"; else pass "AC5.mut1 renaming one successor id (057-textchecks.py) reddens the retirement check: $(grep FAILED "$TMP/m.retire" | head -n1)"; fi
 restore $f
-mutate docs/tasks/057-verify.sh 'pass "O1 ' 'pass "OX ' one; applies $? "AC5.mut2"
+mutate docs/tasks/057-verify.sh '"O1 ' '"OX ' all; applies $? "AC5.mut2"
 if "${H[@]}" retire "$TMP/m" > "$TMP/m.retire" 2>&1; then fail "AC5.mut2 a renamed 057-verify.sh id did NOT redden the retirement check"; else pass "AC5.mut2 renaming the 057-verify.sh id O1 reddens the retirement check: $(grep FAILED "$TMP/m.retire" | head -n1)"; fi
 restore docs/tasks/057-verify.sh
 if "${H[@]}" retire "$TMP/m" > "$TMP/m.retire" 2>&1; then pass "AC5.mut.restore the restored tree passes the retirement check"; else fail "AC5.mut.restore the restored tree fails the retirement check"; fi
