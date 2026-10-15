@@ -221,7 +221,7 @@ else
     gen034 "$TMP/034.c" "grep -q 're\\.fullmatch(' " "grep -q 're\\.fullmatchX(' " && c33_expect_red "AC5.m3 an edit to C3.4 alone (no 064 change)" "$TMP/034.c" || fail "AC5.m3 variant did not build"
     gen034 "$TMP/034.d" "C4.1 TRAVERSAL_PATHS contains" "C4.1 TRAVERSAL_PATHS holds" && c33_expect_red "AC5.m4 an unrelated edit alone" "$TMP/034.d" || fail "AC5.m4 variant did not build"
     gen034 "$TMP/034.e" --064 're\.search(_ecma_pattern(schema\["pattern"\]), instance)' 're\.fullmatch(_ecma_pattern(schema\["pattern"\]), instance)' && c33_expect_red "AC5.m5 the re-pin weakened to re.fullmatch" "$TMP/034.e" || fail "AC5.m5 variant did not build"
-    gen034 "$TMP/034.f" --064 '# re.fullmatch stays forbidden (C3.4, unedited).' '# re.fullmatch stays forbidden (C3.4, unedited).
+    gen034 "$TMP/034.f" --064 're.fullmatch stays forbidden (C3.4, unedited).' 're.fullmatch stays forbidden (C3.4, unedited).
 exit 0' && c33_expect_red "AC5.m6 a code line smuggled in after the comment" "$TMP/034.f" || fail "AC5.m6 variant did not build"
     gen034 "$TMP/034.g" --064 'Re-pinned by task 064' 'Re-pinned by somebody' && c33_expect_red "AC5.m7 the comment no longer names task 064" "$TMP/034.g" || fail "AC5.m7 variant did not build"
 fi
