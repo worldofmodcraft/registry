@@ -261,8 +261,8 @@ done
 
 # --------------------------------------------------------------------------------------------------
 section "AC2 -- each closed task's scope check is pinned at both ends, and the pins are the task's own"
-check_pins() {   # name script mergecommit basevar finalvar derive-base(yes/no)
-    local n="$1" f="$ROOT/docs/tasks/$1-verify.sh" m="$3" bv="$4" fv="$5" lb lf rb rf fork
+check_pins() {   # name mergecommit basevar finalvar
+    local n="$1" f="$ROOT/docs/tasks/$1-verify.sh" m="$2" bv="$3" fv="$4" lb lf rb rf fork
     lb=$(sed -n "s/^$bv=\"\{0,1\}\([0-9a-f]\{7,\}\)\"\{0,1\}.*/\1/p" "$f" | head -n1)
     lf=$(sed -n "s/^$fv=\"\{0,1\}\([0-9a-f]\{7,\}\)\"\{0,1\}.*/\1/p" "$f" | head -n1)
     if [ -z "$lb" ] || [ -z "$lf" ]; then fail "AC2.$n cannot read $bv/$fv from $n-verify.sh (a search that finds nothing is broken)"; return; fi
