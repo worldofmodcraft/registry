@@ -132,6 +132,21 @@ class R3Existing(unittest.TestCase):
         self.assertEqual(v["verdict"], "rejected")
 
 
+class OwnedNamespaceSibling(unittest.TestCase):
+    """Amendment 1 / F1: a NEW entry.json in a namespace that already exists at the merge-base is judged by R3 on
+    the recorded owner's id, never by the first-publish login rules (ownership.md Attack 4)."""
+
+    def test_r3_reject_new_sibling_entry_by_a_stranger_whose_login_matches_the_namespace(self):
+        files = first_publish("alice", "new", owner=own(MALLORY_ID, "alice"))
+        v = run(MALLORY, files, login="alice")
+        self.assertEqual(v["verdict"], "rejected")
+        self.assertIn("R3", rules(v))
+
+    def test_r3_accept_renamed_owner_adds_a_second_mod(self):
+        v = run(ALICE, first_publish("alice", "second"), login="alice-renamed")
+        self.assertEqual(v["verdict"], "accepted")
+
+
 class R4R5R6FirstPublish(unittest.TestCase):
     def test_r4_accept_namespace_equals_username_case_folded(self):
         self.assertEqual(run(ALICE, first_publish(), login="Alice")["verdict"], "accepted")
