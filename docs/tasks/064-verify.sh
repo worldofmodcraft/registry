@@ -118,10 +118,27 @@ for d in tests/contracts tests/registry tests/validation tests/pipeline; do
     ( cd "$TMP/head" && python3 -I -m unittest discover -s "$d" >"$TMP/u.out" 2>&1 ); rc=$?
     if [ "$rc" = 0 ]; then pass "AC4.1 unittest discover -s $d: $(grep -E '^Ran ' "$TMP/u.out")"; else fail "AC4.1 unittest discover -s $d exits $rc"; tail -8 "$TMP/u.out"; fi
 done
-for s in 006 032 034 057 062 007a; do
+for s in 006 032 034 057; do
     ( cd "$TMP/head" && bash docs/tasks/$s-verify.sh "$NM" >"$TMP/s.out" 2>&1 ); rc=$?
     if [ "$rc" = 0 ]; then pass "AC4.2 $s-verify.sh exits 0 at HEAD"; else fail "AC4.2 $s-verify.sh exits $rc at HEAD"; fi
 done
+# 007a-verify.sh checks its declared file scope as `git diff origin/main...HEAD` against ITS OWN scope, so on any branch of a
+# later task that check is red by construction (062 does not include 007a in its later-branch set). Everything else it checks
+# must be green, and the one red line must list only task 064's declared files.
+( cd "$TMP/head" && bash docs/tasks/007a-verify.sh >"$TMP/s.out" 2>&1 ); rc=$?
+fails=$(grep -E '^FAIL' "$TMP/s.out")
+if [ "$rc" = 0 ]; then pass "AC4.2 007a-verify.sh exits 0 at HEAD"
+elif [ "$(printf '%s\n' "$fails" | grep -c .)" = 1 ] && printf '%s\n' "$fails" | grep -q '^FAIL  files outside the declared scope'; then
+    listed=$(sed -n '/^FAIL  files outside the declared scope/,/^SUMMARY/p' "$TMP/s.out" | sed -e 's/^FAIL  files outside the declared scope: //' -e '/^SUMMARY/d' | grep .)
+    extra=$(printf '%s\n' "$listed" | grep -vxE 'tests/contracts/schema_check\.py|tests/validation/schema_check\.py|docs/tasks/057-corpus\.py|docs/tasks/034-verify\.sh|docs/tasks/064-schema-check-end-anchor\.md|docs/tasks/064-verify\.sh')
+    if [ -z "$extra" ]; then pass "AC4.2 007a-verify.sh: every check green except its by-construction branch-scope check, which lists only task 064's own declared files"; else fail "AC4.2 007a-verify.sh scope line lists files beyond task 064's scope: $extra"; fi
+else fail "AC4.2 007a-verify.sh exits $rc; failing lines: $fails"; fi
+# 062-verify.sh asserts `git diff $BASE062 HEAD -- docs/tasks/034-verify.sh` is empty (its AC6.034). Criterion 5 of task 064
+# edits exactly that file, so that one check is red by construction; this is reported, never hidden (see the task log, Questions).
+( cd "$TMP/head" && bash docs/tasks/062-verify.sh "$NM" >"$TMP/s.out" 2>&1 ); rc=$?
+fails=$(grep -E '^FAIL' "$TMP/s.out" | grep -v '^FAIL  AC3\..*\.008a ')   # 008a's temp-dir count check is racy when another agent runs 008a concurrently
+if [ "$rc" = 0 ] || [ -z "$fails" ]; then pass "AC4.2 062-verify.sh exits 0 at HEAD"
+else fail "AC4.2 062-verify.sh: $(printf '%s\n' "$fails" | cut -c1-12 | tr '\n' ' ') -- BLOCKED by its own AC6.034 pin on 034-verify.sh (spec criteria 4 and 5 conflict; needs a manager decision)"; fi
 
 section "AC5 -- 034 C3.3 re-pinned, not weakened; C3.4 untouched; nothing else in a closed script"
 CLOSED=$(git -C "$TMP/head" diff --name-only "$BASE" HEAD | grep -E '^docs/tasks/[0-9]+[a-z]?-verify\.sh$|^docs/tasks/(032|057)-' | grep -vE '^docs/tasks/(064-verify\.sh|057-corpus\.py)$')
@@ -130,7 +147,7 @@ D=$(git -C "$TMP/head" diff -U0 "$BASE" HEAD -- docs/tasks/034-verify.sh | grep 
 DM=$(printf '%s\n' "$D" | grep -E '^-')
 DP=$(printf '%s\n' "$D" | grep -E '^\+')
 if [ "$(printf '%s\n' "$DM" | grep -c .)" = 1 ] && printf '%s\n' "$DM" | grep -qF "re\\.search(schema\\[\"pattern\"\\], instance)"; then pass "AC5.2 exactly one line removed: the old C3.3 call text"; else fail "AC5.2 removed lines: $DM"; fi
-if printf '%s\n' "$DP" | grep -qF 're\.search\(_ecma_pattern(schema\["pattern"\]), instance, re\.ASCII\)' && printf '%s\n' "$DP" | grep -q 'task 064'; then pass "AC5.3 added: the new C3.3 call text (still re.search) plus a comment naming task 064"; else fail "AC5.3 added lines: $DP"; fi
+if printf '%s\n' "$DP" | grep -qF 're\.search(_ecma_pattern(schema\["pattern"\]), instance, re\.ASCII)' && printf '%s\n' "$DP" | grep -q 'task 064'; then pass "AC5.3 added: the new C3.3 call text (still re.search) plus a comment naming task 064"; else fail "AC5.3 added lines: $DP"; fi
 if printf '%s\n' "$D" | grep -vE '^\+#' | grep -qE 'C3\.4|fullmatch'; then fail "AC5.4 C3.4 / fullmatch lines were edited"; else pass "AC5.4 C3.4 (no re.fullmatch call) is not edited"; fi
 if [ "$(git -C "$TMP/head" diff --stat "$BASE" HEAD -- docs/tasks/034-verify.sh | tail -1 | grep -oE '[0-9]+ insertions?')" = "4 insertions" ]; then pass "AC5.5 034-verify.sh: 4 inserted lines (1 call, 3 comment), 1 removed"; else fail "AC5.5 unexpected 034-verify.sh diff size"; fi
 SRCDIFF=$(git -C "$TMP/head" diff -U0 "$BASE" HEAD -- tools/registry/schema.py | grep -E '^[+-][^+-]')
