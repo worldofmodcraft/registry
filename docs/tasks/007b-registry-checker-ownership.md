@@ -262,3 +262,32 @@ Required:
 by the ordinary rules"). No code change in this task; the contract gap is booked for Ludwig and gates task 039.
 **F3:** no change required; the `--mutate` paste in the log is the demonstration.
 - 2026-10-15 manager: amendment 1 appended; fix round sent to the implementer. Log baseline recounted below.
+- 2026-10-15 implementer (fix round, amendment 1, log baseline 13): F1 fixed. Red first: commit e974fe4 adds the
+  reviewer's probe (stranger id 999, login `alice`, new `mods/alice.new/entry.json`) and the renamed-owner case; on that
+  commit both fail (`'accepted' != 'rejected'` and `'rejected' != 'accepted'`). Fix: commit 2ddfff5 adds the injected
+  `namespace_owners` input ({namespace: (provider, id)} from every merge-base entry.json; the CLI builds it from
+  `--old-root` only). A new entry.json (old absent) in a non-reserved namespace present in it is judged by R3 on the
+  recorded owner's (provider, id), never by R4/R6's login; None fails closed (`namespace-owners-missing`, names the
+  input), `{}` is legitimate and tested distinct. Reserved namespaces keep R8+R7. Commit ad33c2f strengthens one test
+  so its mutation reddens (the first `--mutate` run had one NOT RED: `f1-namespace-owners-read-from-the-prs-own-files`,
+  because the test's second path hid the effect; the test, not the mutation, was weak). Deviation 4 in the earlier
+  entry is superseded by this. Four new mutations: ignore namespace_owners, read it from the PR's files, None as empty,
+  judge a sibling by login; all red. Other suites were checked with `ps` and were idle before the verify runs (a task-069
+  agent was running 062/067/008a verify earlier; I waited).
+  `docs/tasks/007b-verify.sh` (committed tree ad33c2f): `Ran 234 tests ... OK`, `ownership tests ran: 84`, every named
+  criterion line ok (R1..R10: 34 passing; umbrella 4: 2; umbrella 9: 12), `info ownership source lines: 351`,
+  `SUMMARY failed=0`. `docs/tasks/007b-verify.sh --mutate`:
+```
+ok    tool present: git
+ok    tool present: python3
+ok    mutation table has 54 entries (floor 45)
+baseline green on committed ad33c2f38
+SUMMARY 54 mutations, not_red=0
+ok    every mutation turned its named tests red
+SUMMARY failed=0
+red      f1-namespace-owners-ignored-per-path-first-publish: 5 failing, all 2 named tests red
+red      f1-namespace-owners-read-from-the-prs-own-files: 9 failing, all 2 named tests red
+red      f1-none-namespace-owners-treated-as-empty: 1 failing, all 1 named tests red
+red      f1-sibling-entry-judged-by-login-not-id: 5 failing, all 2 named tests red
+(the other 50 per-mutation `red` lines elided here; all 54 print `red ... all N named tests red`)
+```
