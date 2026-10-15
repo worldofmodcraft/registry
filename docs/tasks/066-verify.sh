@@ -135,7 +135,7 @@ U="$(git -C "$INST" status --porcelain)"
 
 if [ "$MUTATE" = 1 ]; then
     section "8 mutations, each must be red (criterion 8)"
-    mclone() { rm -rf "$TMP/m"; cp -a "$INST" "$TMP/m"; }       # installed clone, including node_modules
+    mclone() { [ -d "$TMP/m" ] && rm -r "$TMP/m"; cp -a "$INST" "$TMP/m"; }       # installed clone, including node_modules
 
     mclone; sed -i 's/"ajv": "8.20.0"/"ajv": "^8.20.0"/' "$TMP/m/tools/dev/package.json"
     if out="$(pin_check "$TMP/m")"; then fail "M1 range pin ^8.20.0 did NOT redden the pin check"; else pass "M1 range pin reddens C1: $out"; fi
