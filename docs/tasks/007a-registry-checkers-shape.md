@@ -199,3 +199,14 @@ sees. Alternative: accept a named maintainer class here, which would be a new de
 - 2026-10-15 manager: question (A) answered: keep rejecting class `other` (umbrella criterion 8, fail closed); which PRs
   reach the checker is task 039's path filter (ADR-0099). Manager re-ran `007a-verify.sh` in a fresh clone at `b5db29b`:
   normal `SUMMARY failed=0`; `--mutate` 73 mutations, `not_red=0`. Sent to independent review.
+- 2026-10-15 manager brief, fix round 1 (independent review FAIL, one blocking finding). Findings as briefed:
+  F1 BLOCKING: every `$`-anchored pattern check accepts a trailing newline (schema_check.py uses `re.search`; Python `$`
+  matches before a final "\n"). Probes wrongly accepted: pending commit = "a"*40+"\n"; T1 source_sha256 = "b"*64+"\n"; T3
+  build_log_url = "https://x.org/log\n"; T1 signature = "c"*62+"\n"; T1 key_id = "platform-2026-01\n". Contract patterns
+  follow ECMA-262 (`$` only at end of input). Fix inside 007a scope (append_only `_field_ok`, schema.py), do NOT edit
+  tests/contracts/schema_check.py (manager books the root-cause fix); `re.fullmatch` alone is not equivalent; document the
+  approach; hostile fixtures for all five probes plus the schema.check path, positive controls, a mutation restoring the old
+  behaviour. F2: cli `_read` follows symlinks: a symlinked entry.json/page.json is a rejection finding; state in cli help and
+  README that the caller must diff with `--no-renames` (039 wires it). F3: reject duplicate JSON object keys in `_read` and
+  schema.check's string path, with tests and a mutation. F5: 007a-verify.sh must FAIL when origin/main is missing. F4: no
+  change (the contract does not require it); considered and recorded. Rule: each break first as a test shown red, then fixed.

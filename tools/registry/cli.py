@@ -14,6 +14,10 @@ The reserved list given to `classify` MUST be the merge-base revision of reserve
 Output: a JSON verdict on stdout (shape in report.py), one 'REJECTED ...' line per finding on stderr.
 Exit codes: 0 accepted, 1 rejected, 2 usage or internal error (NOT a rejection).
 
+Symlinked entry.json/page.json files are rejected (rule "symlink"), never read through. The caller MUST
+produce the changed-path list with `git diff --no-renames` (task 039 wires this) so a rename cannot hide a
+deletion plus a creation, and a link cannot pose as a regular file.
+
 WARNING: `append-only` alone never authorises a merge. Its verdict lists `authority_required` (T1/T2/T3);
 when that list is non-empty an 'accepted' exit only means the SHAPE is legal. Who may carry T1/T3 and who
 may open a takedown is the ownership checker's (task 007b); task 039 must run it as well.
@@ -33,21 +37,29 @@ import schema  # noqa: E402
 
 
 def _read(root, rel):
-    """(parsed-or-None, parse-error-or-None) for root/rel; a missing file is (None, None)."""
+    """(parsed-or-None, (rule, message)-or-None) for root/rel; a missing file is (None, None).
+    A symlink is never read through (it could point anywhere): it is a rejection finding."""
     p = Path(root) / rel
-    if classify.parse_mod_path(rel) is None or not p.is_file():  # never read a path outside the R1 form
+    if classify.parse_mod_path(rel) is None:  # never read a path outside the R1 form
+        return None, None
+    if p.is_symlink():
+        return None, ("symlink", f"{rel} is a symbolic link; registry files must be regular files. Diff with "
+                                 "`git diff --no-renames` so a link is never mistaken for a rename")
+    if not p.is_file():
         return None, None
     try:
-        return json.loads(p.read_text()), None
+        return schema.loads_strict(p.read_text()), None
+    except schema.DuplicateKey as exc:
+        return None, ("duplicate-key", f"{rel} has {exc}")
     except (ValueError, UnicodeDecodeError) as exc:
-        return None, f"{rel} is not valid JSON ({exc})"
+        return None, ("json-syntax", f"{rel} is not valid JSON ({exc})")
     except OSError as exc:
         raise report.ToolError(f"cannot read {p}: {exc}") from exc
 
 
 def _parse_error_findings(errors):
-    return [report.finding(["json-syntax"], err, "fix the JSON syntax", "E2/E4: the file must parse", path=rel)
-            for rel, err in errors]
+    return [report.finding([rule], msg, "replace it with a regular file holding valid JSON with unique keys",
+                           "E2/E4: the file must parse unambiguously", path=rel) for rel, (rule, msg) in errors]
 
 
 def _cmd_classify(a):

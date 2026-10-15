@@ -36,7 +36,7 @@ _FIELDS = schema.load_schema("entry")["properties"]["versions"]["items"]["proper
 def _field_ok(name, value):
     """A field satisfies its entry.schema.json sub-schema (pattern / minLength), via the repo's validator."""
     try:
-        schema.schema_check.validate(value, _FIELDS[name])
+        schema.validate(value, _FIELDS[name])
     except schema.schema_check.SchemaValidationError:
         return False
     return True

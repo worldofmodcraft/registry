@@ -184,6 +184,21 @@ mut("g-classify-rejects-everything", CL, [('    names = reserved_names(reserved)
 mut("g-schema-rejects-everything", SC, [('    findings, results = [], []\n', '    findings, results = [report.finding(["x"], "w", "f", "c")], []\n')],
     ["test_valid_entry_and_page_are_accepted_positive_control"])
 
+# ---- fix round 1: F1 ECMA end-of-input, F2 symlinks, F3 duplicate keys ----------------------------------
+mut("r1-f1-old-search-dollar-behaviour", SC, [('    _strict_patterns(instance, sub, "$")\n', '    pass\n')],
+    ["test_f1_born_pending_commit_with_trailing_newline_is_rule_2", "test_f1_t1_pipeline_fields_with_trailing_newline_are_rejected",
+     "test_f1_t3_build_log_url_with_trailing_newline_is_rejected", "test_f1_schema_check_rejects_entry_strings_with_trailing_newline",
+     "test_f1_schema_check_rejects_page_strings_with_trailing_newline"])
+mut("r1-f1-dollar-not-rewritten", SC, [('            c = "\\\\Z"\n', '            c = "$"\n')],
+    ["test_f1_born_pending_commit_with_trailing_newline_is_rule_2", "test_f1_ecma_conversion_leaves_escaped_dollar_and_classes_alone"])
+mut("r1-f1-append-only-uses-plain-validator", AO, [('schema.validate(value, _FIELDS[name])', 'schema.schema_check.validate(value, _FIELDS[name])')],
+    ["test_f1_born_pending_commit_with_trailing_newline_is_rule_2", "test_f1_t3_build_log_url_with_trailing_newline_is_rejected"])
+mut("r1-f2-symlink-read-through", "tools/registry/cli.py", [('    if p.is_symlink():\n', '    if False:\n')],
+    ["test_f2_a_symlinked_entry_json_is_a_rejection_not_a_read_through"])
+mut("r1-f3-duplicate-keys-allowed", SC, [('    return json.loads(text, object_pairs_hook=_no_dups)\n', '    return json.loads(text)\n')],
+    ["test_f3_schema_check_text_path_rejects_duplicate_keys", "test_f3_cli_rejects_duplicate_keys_on_either_side",
+     "test_f3_nested_duplicate_keys_are_rejected_too"])
+
 # ---- A4: the fixture-count guard ----------------------------------------------------------------------
 
 

@@ -83,6 +83,9 @@ crit "umbrella 10   messages name the problem, the rule and the remedy"     "tes
 crit "umbrella 13   057 fixture parity (read at test time)"                 "test_parity_every_fixture_matches"
 crit "A1            element classification of T1/T2/T3 accept fixtures"     "test_a1_"
 crit "A4            fixture-count guard"                                    "test_a4_"
+crit "F1            trailing newline rejected (ECMA end-of-input), 5 probes + schema path" "test_f1_"
+crit "F2            symlinks rejected; --no-renames documented"             "test_f2_"
+crit "F3            duplicate JSON keys rejected"                           "test_f3_"
 crit "schema        reuses schema_check; unsupported keyword is exit 2"    "test_(an_unsupported_schema|the_attacker_four_element_entry_is_schema|every_published_example)"
 
 # 3. structural checks
@@ -109,7 +112,7 @@ if git rev-parse -q --verify origin/main >/dev/null 2>&1; then
   BAD=$(git diff --name-only origin/main...HEAD | grep -vE '^(tools/registry/|tests/registry/|docs/tasks/007a-registry-checkers-shape\.md$|docs/tasks/007a-verify\.sh$|docs/contracts/README\.md$)' || true)
   [ -z "$BAD" ] && ok "changed files all inside the declared scope" || fail "files outside the declared scope: $BAD"
 else
-  ok "scope check skipped: no origin/main in this clone"
+  fail "scope check cannot run: no origin/main in this clone (fetch it; a skipped check proves nothing)"
 fi
 check_oracle_coverage
 

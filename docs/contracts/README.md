@@ -75,6 +75,11 @@ python3 tools/registry/cli.py schema      --root PR_CHECKOUT PATH...
 python3 tools/registry/cli.py append-only --old-root MERGE_BASE_CHECKOUT --new-root PR_CHECKOUT PATH...
 ```
 
+The caller must build the changed-path list with `git diff --no-renames` (task 039 wires it): a rename
+then appears as a deletion plus a creation, which append-only rejects. Symlinked `entry.json`/`page.json`
+files are rejected, never read through, and duplicate JSON object keys are rejected. String patterns use
+ECMA-262 end-of-input `$` (a trailing newline never matches), enforced in `tools/registry/schema.py`.
+
 Exit `0` accepted, `1` rejected, `2` usage or internal error (never a rejection). The verdict is JSON on
 stdout. `classify` yields one class: `entry`, `page-only`, `reserved-namespace` or `other` (always a
 rejection). `append-only` classifies **each** `versions[]` element (`unchanged`, `appended`, `T1`, `T2`,
