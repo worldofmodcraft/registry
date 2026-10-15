@@ -138,7 +138,7 @@ mut("d-rule4-skips-history", AO, [('if sum(1 for v in versions if _same(v, versi
 mut("e-skip-schema-validation", SC, [('            schema_check.validate(value, schemas[kind])\n', '            pass\n')],
     ["test_invalid_documents_are_rejected_with_the_validator_message", "test_the_attacker_four_element_entry_is_schema_rejected"])
 mut("e-page-validated-against-entry-schema", SC, [('SCHEMA_FILES = {"entry": "entry.schema.json", "page": "page.schema.json"}', 'SCHEMA_FILES = {"entry": "entry.schema.json", "page": "entry.schema.json"}')],
-    ["test_valid_entry_and_page_are_accepted_positive_control", "test_a_page_document_at_an_entry_path_is_validated_against_the_entry_schema_and_rejected"])
+    ["test_valid_entry_and_page_are_accepted_positive_control", "test_an_entry_document_at_a_page_path_is_validated_against_the_page_schema_and_rejected"])
 mut("e-wrong-schema-kind-swap", SC, [('        kind = parsed[2]\n', '        kind = "page" if parsed[2] == "entry" else "entry"\n')],
     ["test_valid_entry_and_page_are_accepted_positive_control"])
 mut("e-corrupt-class-mapping", CL, [('    elif "entry" in kinds:\n        cls = CLASS_ENTRY\n    else:\n        cls = CLASS_PAGE\n', '    elif "page" in kinds:\n        cls = CLASS_ENTRY\n    else:\n        cls = CLASS_PAGE\n')],
