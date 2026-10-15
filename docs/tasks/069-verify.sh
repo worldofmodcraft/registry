@@ -102,7 +102,18 @@ grep -q '^ok    no wom008a-\* temp dirs left behind by the suite' "$TMP/h.out" &
 
 # ==================================================================================================
 else
-section "mutations (temporary clone of HEAD)"
+section "AC2 -- the leak check still bites: a test that really leaks a wom008a-* dir reddens 008a-verify.sh"
+new_clone "$TMP/m" "$HEADREV" || fail "AC2.0 cannot clone HEAD"
+H=tests/pipeline/helpers.py
+if [ "$(grep -c 'shutil.rmtree(cls.tmp, ignore_errors=True)' "$TMP/m/$H")" = 1 ]; then
+    # tearDownClass stops removing its per-class temp dir: every test class now leaks one wom008a-* directory
+    sed -i 's/shutil.rmtree(cls.tmp, ignore_errors=True)/pass/' "$TMP/m/$H"
+    git -C "$TMP/m" diff --stat | tail -n1
+    ( cd "$TMP/m" && bash docs/tasks/008a-verify.sh ) > "$TMP/leak.out" 2>&1; rc=$?
+    if [ "$rc" != 0 ] && grep -q '^FAIL  suite left [1-9][0-9]* wom008a-\* temp dir(s)' "$TMP/leak.out"; then
+        pass "AC2.1 a leaking test class turns the check red: exit $rc, $(grep '^FAIL  suite left' "$TMP/leak.out" | head -n1)"
+    else fail "AC2.1 a real leak did NOT redden the temp-dir check: exit $rc, $(grep -c '^FAIL' "$TMP/leak.out") FAIL line(s)"; fi
+else fail "AC2.0 the mutation did not apply: tearDownClass cleanup line not found exactly once (a mutation that changes nothing proves nothing)"; fi
 fi
 
 printf '\n== RESULT ==\n'
