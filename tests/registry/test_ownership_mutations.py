@@ -184,6 +184,13 @@ mut("f1-sibling-entry-judged-by-login-not-id",
     [('if ctx["owners"][ns] != author:', 'if (login or "").lower() != ns.lower():')],
     ["test_r3_reject_new_sibling_entry_by_a_stranger", "test_r3_accept_renamed_owner_adds_a_second_mod"])
 
+# ---- amendment 2 / N1 ------------------------------------------------------------------------------------
+mut("n1-sibling-owner-field-not-checked", [('if _owner_pair(first) != ctx["owners"][ns]:', 'if False:')],
+    ["test_r5_reject_owner_adds_a_sibling_whose_owner_field"])
+mut("n1-cli-disagreeing-merge-base-owners-first-wins",
+    [('if p[0] in owners and owners[p[0]] != pair:', 'if False:', "tools/registry/ownership_cli.py")],
+    ["test_cli_fails_closed_when_merge_base_entries"])
+
 # ---------------------------------------------------------------------------------------------------------
 
 
@@ -195,8 +202,8 @@ def _suite(clone):
 
 
 def _apply(clone, edits):
-    path = Path(clone) / OW
-    for old, new in edits:
+    for old, new, *target in edits:  # an optional third item names another file (default: ownership.py)
+        path = Path(clone) / (target[0] if target else OW)
         text = path.read_text()
         if text.count(old) != 1:
             raise SystemExit(f"ANCHOR ERROR: {old[:70]!r} occurs {text.count(old)} times (need exactly 1)")

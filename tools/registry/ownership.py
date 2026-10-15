@@ -189,6 +189,12 @@ def _namespace(ns, paths, ctx):
                     f"{ctx['owners'][ns]!r}, but the PR author is {who}; a new entry in an owned namespace is judged by "
                     "the recorded owner's id, never by the author's username", f"only the owner may add entries to {ns}",
                     "ownership.md R3, I3, I6, Attack 4", path=path))
+            if _owner_pair(first) != ctx["owners"][ns]:
+                out.append(report.finding(
+                    ["R5"], f"{path}: the new entry's owner is {_owner_pair(first)!r} but namespace {ns!r} is bound "
+                    f"to {ctx['owners'][ns]!r}; a namespace is never reassigned and owner is frozen at first write",
+                    "set owner.provider and owner.id to the namespace's recorded owner", "ownership.md R5, I6, Attack 4",
+                    path=path))
         elif first is not None and reserved:
             rec = ctx["reserved"]["namespaces"][ns].get("owner")
             if not append_only._same(_d(first).get("owner"), rec):

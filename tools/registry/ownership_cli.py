@@ -79,7 +79,7 @@ def main(argv):
             errors += [(sib, err)] if err else []
             if entry is not None:
                 base[sib] = entry
-    owners = {}  # namespace -> owner pair, from EVERY merge-base entry.json (never from the PR's files)
+    owners, src = {}, {}  # namespace -> owner pair, from EVERY merge-base entry.json (never from the PR's files)
     for d in sorted(Path(a.old_root, "mods").glob("*")):
         p = classify.parse_mod_path(f"mods/{d.name}/entry.json")
         if p is None:
@@ -91,7 +91,13 @@ def main(argv):
             pair = ownership._owner_pair(entry)
             if pair is None:
                 raise report.ToolError(f"the merge-base mods/{d.name}/entry.json has no well-formed owner")
+            if p[0] in owners and owners[p[0]] != pair:
+                raise report.ToolError(
+                    f"merge-base entries of namespace {p[0]!r} disagree on the owner: mods/{p[0]}.{src[p[0]]}/entry.json "
+                    f"says {owners[p[0]]!r}, mods/{d.name}/entry.json says {pair!r}; the registry is inconsistent "
+                    "and the check cannot decide")
             owners.setdefault(p[0], pair)
+            src.setdefault(p[0], d.name.split(".", 1)[1])
     if errors:  # a file we cannot parse unambiguously is not evidence; reject, never guess
         return report.make("ownership", cli._parse_error_findings(errors), merge_signal=False)
     return ownership.check((a.author_provider, a.author_id), files, reserved, _oracle(a.membership_status),

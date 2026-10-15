@@ -141,7 +141,7 @@ class OwnedNamespaceSibling(unittest.TestCase):
         files = first_publish("alice", "new", owner=own(MALLORY_ID, "alice"))
         v = run(MALLORY, files, login="alice", namespace_owners={"alice": ALICE})
         self.assertEqual(v["verdict"], "rejected")
-        self.assertEqual(rules(v), ["R3"])
+        self.assertEqual(sorted(rules(v)), ["R3", "R5"])
 
     def test_r3_accept_renamed_owner_adds_a_second_mod(self):
         v = run(ALICE, first_publish("alice", "second"), login="alice-renamed", namespace_owners={"alice": ALICE})
@@ -164,7 +164,7 @@ class OwnedNamespaceSibling(unittest.TestCase):
         files = dict(first_publish("alice", "new", owner=own(MALLORY_ID, "alice")),
                      **first_publish("alice", "other", owner=own(MALLORY_ID, "alice")))
         v = run(MALLORY, files, login="alice", namespace_owners={"alice": ALICE})
-        self.assertEqual(rules(v), ["R3", "R3"])  # one per new entry, each against the injected owner, not the PR's
+        self.assertEqual(sorted(rules(v)), ["R3", "R3", "R5", "R5"])  # one per new entry, each against the injected owner, not the PR's
 
     def test_r5_reject_owner_adds_a_sibling_whose_owner_field_names_another_account(self):
         """N1: the true owner may not freeze a different owner into a new entry of their own namespace."""
