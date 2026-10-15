@@ -48,6 +48,9 @@ for _field in ("id", "version", "commit", "source_url", "source_archive", "sourc
 corpus.append(("pattern064:newline:build_log_url", _with(_rej, "build_log_url", lambda v: v + "\n")))
 corpus.append(("pattern064:fullwidth:version", _with(_pub, "version", lambda v: "1０" + v[1:])))
 corpus.append(("pattern064:fullwidth:published_at", _with(_pub, "published_at", lambda v: "２０" + v[2:])))
+# Amendment 1: `\S` excludes Unicode WhiteSpace (U+00A0, U+2028) in ECMA-262.
+corpus.append(("pattern064:nbsp:source_url", _with(_pub, "source_url", lambda v: v + "\u00a0x")))
+corpus.append(("pattern064:u2028:source_archive", _with(_pub, "source_archive", lambda v: v + "\u2028x")))
 out = []
 for name, inst in corpus:
     try:

@@ -2,13 +2,13 @@
 #
 # 064-verify.sh -- the runnable verification artefact for task 064 (MANAGER.md Section 2c).
 #
-# Task 064: the registry's schema validators match `pattern` with ECMA-262 semantics (end of input, ASCII \d).
+# Task 064: the registry's schema validators match `pattern` with ECMA-262 semantics (end of input, ASCII \d \w, ECMA \s and .).
 # Demonstrates acceptance criteria 1-6 of docs/tasks/064-schema-check-end-anchor.md.
 #
 # Usage:  docs/tasks/064-verify.sh [--mutate] [NODE_MODULES_DIR]      (any cwd inside the repository)
 #   (no flag)  AC1 (red on the red commit), AC2 (fixed at HEAD, controls kept), AC3 (Ajv agreement),
 #              AC4 (other suites and the closed verify scripts), AC5 (034 C3.3 re-pinned only), file scope.
-#   --mutate   AC6: nine mutations in a temporary clone, each must turn the new tests red.
+#   --mutate   AC6: fifteen mutations in a temporary clone, each must turn the new tests red.
 #   NODE_MODULES_DIR  (or env WOM_NODE_MODULES) a node_modules directory containing ajv 8 (a missing ajv is a
 #                     FAILURE, never a skip).
 # Everything runs on the COMMITTED state (HEAD) in temporary clones; the caller's worktree is never modified.
@@ -30,6 +30,7 @@ done
 ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)" || exit 99
 BASE="ac22c8f"      # registry origin/main when task 064 was cut
 RED="4299b80"       # the commit that adds the new failing cases and nothing else (AC1)
+RED2="30ef7d5"      # amendment 1: the commit that turns the Q1 expected failures into normal tests and adds the translation tests, no fix
 TESTF="tests/registry/test_pattern_semantics.py"
 FAILURES=0
 pass() { printf 'PASS  %s\n' "$1"; }
@@ -39,7 +40,7 @@ section() { printf '\n== %s ==\n' "$1"; }
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
 
-for c in "$BASE" "$RED"; do
+for c in "$BASE" "$RED" "$RED2"; do
     if ! git -C "$ROOT" rev-parse --verify -q "$c^{commit}" >/dev/null; then
         fail "P0 commit $c is reachable"
         exit "$FAILURES"
@@ -49,6 +50,7 @@ HEADSHA="$(git -C "$ROOT" rev-parse HEAD)"
 clone_at() { git clone -q --no-hardlinks "$ROOT" "$1" 2>/dev/null && git -C "$1" checkout -q --detach "$2"; }
 clone_at "$TMP/head" "$HEADSHA" || exit 99
 clone_at "$TMP/red" "$RED" || exit 99
+clone_at "$TMP/red2" "$RED2" || exit 99
 
 # run_tests DIR -> runs the new test module in DIR, output to $TMP/t.out, returns its exit code
 run_tests() { ( cd "$1" && python3 -I -m unittest discover -s tests/registry -p 'test_pattern_semantics.py' -v >"$TMP/t.out" 2>&1 ); }
@@ -64,6 +66,18 @@ nfail=$(grep -cE '\.\.\. (FAIL|ERROR)$' "$TMP/t.out")
 if [ "$rc" != 0 ] && [ "$nfail" -gt 0 ]; then pass "AC1.5 red commit: new test module exits $rc with $nfail failing subtests"; else fail "AC1.5 red commit: exit $rc, failing subtests $nfail (expected red)"; fi
 for t in test_valid_value_plus_newline_is_rejected_by_every_path test_one_fullwidth_digit_is_rejected_by_every_path test_the_f1_case_from_the_review; do
     if grep -E "^(FAIL|ERROR): $t " "$TMP/t.out" >/dev/null; then pass "AC1.6 red commit: $t is red"; else fail "AC1.6 red commit: $t is not red"; fi
+done
+
+section "AC1b -- amendment 1, red first: at the second red commit the escape-translation tests fail"
+if git -C "$ROOT" merge-base --is-ancestor "$RED2" "$HEADSHA" && git -C "$ROOT" merge-base --is-ancestor "$RED" "$RED2"; then pass "AC1b.1 $RED2 is between the first red commit and HEAD"; else fail "AC1b.1 $RED2 is not in the history between $RED and HEAD"; fi
+RF2=$(git -C "$ROOT" diff --name-only "$RED2"~1 "$RED2" | tr '\n' ' ')
+if [ "$RF2" = "tests/registry/test_pattern_semantics.py " ]; then pass "AC1b.2 the second red commit changes only the test module (no fix)"; else fail "AC1b.2 second red commit touches: $RF2"; fi
+if git -C "$ROOT" diff --quiet "$RED" "$RED2" -- tests/contracts tests/validation tools; then pass "AC1b.3 validators and tools are unchanged between the first and second red commit"; else fail "AC1b.3 a validator changed before the second red commit"; fi
+run_tests "$TMP/red2"; rc=$?
+nfail=$(grep -cE '\.\.\. (FAIL|ERROR)$' "$TMP/t.out")
+if [ "$rc" != 0 ] && [ "$nfail" -gt 0 ]; then pass "AC1b.4 second red commit: exit $rc with $nfail failing subtests"; else fail "AC1b.4 second red commit: exit $rc, failing subtests $nfail (expected red)"; fi
+for t in test_backslash_s_rejects_unicode_whitespace test_dot_rejects_cr_and_line_separators_but_accepts_other_characters test_whitespace_escape_is_the_ecma_set test_unsupported_constructs_raise_not_silently_pass test_no_re_ascii_flag_remains_in_any_pattern_path test_rejection_message_names_the_ecma_reason_for_translated_cases; do
+    if grep -E "^(FAIL|ERROR): $t " "$TMP/t.out" >/dev/null; then pass "AC1b.5 second red commit: $t is red"; else fail "AC1b.5 second red commit: $t is not red"; fi
 done
 if [ -z "$NM" ] || [ ! -d "$NM/ajv" ] || ! command -v node >/dev/null 2>&1; then
     fail "AC0 prerequisite: node and a node_modules directory with ajv are required; pass NODE_MODULES_DIR or set WOM_NODE_MODULES"
@@ -98,12 +112,15 @@ if [ "$rc" = 0 ]; then pass "AC2.1 HEAD: new test module green ($ran; $(tail -1 
 for t in test_valid_samples_are_accepted_by_every_path test_unanchored_pattern_still_matches_mid_string test_end_anchor_only_pattern_still_matches_a_suffix test_alternation_with_end_anchor_keeps_search_semantics test_dollar_inside_class_or_escaped_is_literal_not_end_anchor test_valid_value_plus_newline_is_rejected_by_every_path test_one_fullwidth_digit_is_rejected_by_every_path; do
     if grep -qE "^$t .*\.\.\. ok$" "$TMP/t.out"; then pass "AC2.2 HEAD: $t ok"; else fail "AC2.2 HEAD: $t not ok"; fi
 done
-if grep -c 'expected failure' "$TMP/t.out" >/dev/null && [ "$(grep -cE '\.\.\. expected failure$' "$TMP/t.out")" = 2 ]; then pass "AC2.3 HEAD: the 2 known ECMA gaps (Questions Q1) are reported as expected failures"; else fail "AC2.3 HEAD: expected exactly 2 expected-failure tests"; fi
+if [ "$(grep -cE '\.\.\. (expected failure|skipped)' "$TMP/t.out")" = 0 ]; then pass "AC2.3 HEAD: no expected-failure or skipped test remains (the Q1 gaps are closed by amendment 1)"; else fail "AC2.3 HEAD: expected-failure or skipped tests remain"; fi
+for t in test_backslash_s_rejects_unicode_whitespace test_dot_rejects_cr_and_line_separators_but_accepts_other_characters test_backslash_s_still_accepts_non_ascii_visible_characters test_whitespace_escape_is_the_ecma_set test_unsupported_constructs_raise_not_silently_pass test_rejection_message_names_the_ecma_reason_for_translated_cases; do
+    if grep -qE "^$t .*\.\.\. ok$" "$TMP/t.out"; then pass "AC2.3b HEAD: $t ok"; else fail "AC2.3b HEAD: $t not ok"; fi
+done
 if grep -nE 're\.fullmatch\(' "$TMP/head/tests/contracts/schema_check.py" "$TMP/head/tests/validation/schema_check.py" "$TMP/head/tools/registry/schema.py"; then fail "AC2.4 re.fullmatch( is called somewhere"; else pass "AC2.4 no re.fullmatch( call in the three pattern paths"; fi
 
 section "AC3 -- agreement with Ajv (057 V1 corpus now carries the new cases)"
 read -r n n64 d64 dother <<<"$(corpus_compare "$TMP/head")"
-if [ "${n:-ERR}" != ERR ] && [ "$n64" = 10 ] && [ "$d64" = 0 ] && [ "$dother" = 0 ]; then
+if [ "${n:-ERR}" != ERR ] && [ "$n64" = 12 ] && [ "$d64" = 0 ] && [ "$dother" = 0 ]; then
     AJV=$(python3 -I -c "import json;print(json.load(open('$TMP/a.json'))['ajv_version'])")
     pass "AC3.1 HEAD: Python and Ajv $AJV (2020, strict:true) agree on all $n corpus cases, including the $n64 new ones"
 else
@@ -147,11 +164,12 @@ D=$(git -C "$TMP/head" diff -U0 "$BASE" HEAD -- docs/tasks/034-verify.sh | grep 
 DM=$(printf '%s\n' "$D" | grep -E '^-')
 DP=$(printf '%s\n' "$D" | grep -E '^\+')
 if [ "$(printf '%s\n' "$DM" | grep -c .)" = 1 ] && printf '%s\n' "$DM" | grep -qF "re\\.search(schema\\[\"pattern\"\\], instance)"; then pass "AC5.2 exactly one line removed: the old C3.3 call text"; else fail "AC5.2 removed lines: $DM"; fi
-if printf '%s\n' "$DP" | grep -qF 're\.search(_ecma_pattern(schema\["pattern"\]), instance, re\.ASCII)' && printf '%s\n' "$DP" | grep -q 'task 064'; then pass "AC5.3 added: the new C3.3 call text (still re.search) plus a comment naming task 064"; else fail "AC5.3 added lines: $DP"; fi
+if printf '%s\n' "$DP" | grep -qF 're\.search(_ecma_pattern(schema\["pattern"\]), instance)' && printf '%s\n' "$DP" | grep -q 'task 064'; then pass "AC5.3 added: the new C3.3 call text (still re.search) plus a comment naming task 064"; else fail "AC5.3 added lines: $DP"; fi
 if printf '%s\n' "$D" | grep -vE '^\+#' | grep -qE 'C3\.4|fullmatch'; then fail "AC5.4 C3.4 / fullmatch lines were edited"; else pass "AC5.4 C3.4 (no re.fullmatch call) is not edited"; fi
 if [ "$(git -C "$TMP/head" diff --stat "$BASE" HEAD -- docs/tasks/034-verify.sh | tail -1 | grep -oE '[0-9]+ insertions?')" = "4 insertions" ]; then pass "AC5.5 034-verify.sh: 4 inserted lines (1 call, 3 comment), 1 removed"; else fail "AC5.5 unexpected 034-verify.sh diff size"; fi
 SRCDIFF=$(git -C "$TMP/head" diff -U0 "$BASE" HEAD -- tools/registry/schema.py | grep -E '^[+-][^+-]')
-if [ "$(printf '%s\n' "$SRCDIFF" | grep -c .)" = 2 ] && printf '%s\n' "$SRCDIFF" | grep -qF 're.ASCII'; then pass "AC5.6 tools/registry/schema.py: one line changed, the ASCII flag only"; else fail "AC5.6 schema.py diff: $SRCDIFF"; fi
+if printf '%s\n' "$SRCDIFF" | grep -q 'ecma_pattern' && ! git -C "$TMP/head" diff -U0 "$BASE" HEAD -- tools/registry/schema.py | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' | grep -qE 'def (check|validate|_strict_patterns|load_schema|loads_strict)'; then pass "AC5.6 tools/registry/schema.py: only ecma_pattern (translation, amendment 1) and the pattern call changed; no other function touched"; else fail "AC5.6 schema.py diff touches more than ecma_pattern"; fi
+if grep -rn 're\.ASCII' "$TMP/head/tests/contracts/schema_check.py" "$TMP/head/tests/validation/schema_check.py" "$TMP/head/tools/registry/schema.py"; then fail "AC5.7 re.ASCII is still present in a pattern path"; else pass "AC5.7 no re.ASCII anywhere in the three pattern paths (amendment 1)"; fi
 
 section "File scope -- only the declared files differ from the base"
 extra=$(git -C "$TMP/head" diff --name-only "$BASE" HEAD | grep -vxE 'tests/contracts/schema_check\.py|tests/validation/schema_check\.py|tools/registry/schema\.py|tests/registry/test_pattern_semantics\.py|docs/tasks/057-corpus\.py|docs/tasks/034-verify\.sh|docs/tasks/064-schema-check-end-anchor\.md|docs/tasks/064-verify\.sh')
@@ -183,15 +201,20 @@ PY
         if run_tests "$M"; then fail "AC6 $1: tests stayed GREEN (mutation survived)"; else pass "AC6 $1: red ($(grep -cE '\.\.\. (FAIL|ERROR)$' "$TMP/t.out") failing subtests)"; fi
         restore
     }
-    mutate $CC '_ecma_pattern(schema["pattern"]), instance, re.ASCII)' 'schema["pattern"], instance, re.ASCII)';  check_red "M1 plain \$ in tests/contracts/schema_check.py"
-    mutate $VC '_ecma_pattern(schema["pattern"]), instance, re.ASCII)' 'schema["pattern"], instance, re.ASCII)';  check_red "M2 plain \$ in tests/validation/schema_check.py"
-    mutate $SP 'ecma_pattern(sub["pattern"]), instance, re.ASCII)' 'sub["pattern"], instance, re.ASCII)';        check_red "M3 plain \$ in tools/registry/schema.py _strict_patterns"
-    mutate $CC 'instance, re.ASCII)' 'instance)';                                                                  check_red "M4 no re.ASCII in tests/contracts/schema_check.py"
-    mutate $VC 'instance, re.ASCII)' 'instance)';                                                                  check_red "M5 no re.ASCII in tests/validation/schema_check.py"
-    mutate $SP 'instance, re.ASCII)' 'instance)';                                                                  check_red "M6 no re.ASCII in tools/registry/schema.py"
-    mutate $CC 'instance, re.ASCII) is None:' 'instance, re.ASCII) is None or True:';                              check_red "M7 positive control: contracts validator rejects every string"
-    mutate $VC 'instance, re.ASCII) is None:' 'instance, re.ASCII) is None or True:';                              check_red "M8 positive control: validation validator rejects every string"
-    mutate $SP 'instance, re.ASCII) is None:' 'instance, re.ASCII) is None or True:';                              check_red "M9 positive control: strict path rejects every string"
+    for P in "$CC:contracts" "$VC:validation"; do
+        F="${P%%:*}"; N="${P##*:}"
+        mutate $F 'out.append("\\Z")' 'out.append("$")';                                  check_red "plain \$ in tests/$N/schema_check.py"
+        mutate $F '"d": "[0-9]"' '"d": "\\d"';                                            check_red "translation \\d removed in tests/$N/schema_check.py"
+        mutate $F '"S": "[^" + _WS + "]"' '"S": "\\S"';                                   check_red "translation \\S removed in tests/$N/schema_check.py"
+        mutate $F '_DOT = "[^\\n\\r\\u2028\\u2029]"' '_DOT = "."';                     check_red "translation . removed in tests/$N/schema_check.py"
+        mutate $F 'instance) is None:' 'instance) is None or True:';                         check_red "positive control: tests/$N/schema_check.py rejects every string"
+    done
+    F=$SP; N="tools/registry/schema.py"
+    mutate $F 'out.append("\\Z")' 'out.append("$")';                                      check_red "plain \$ in $N"
+    mutate $F '"d": "[0-9]"' '"d": "\\d"';                                                check_red "translation \\d removed in $N"
+    mutate $F '"S": "[^" + _WS + "]"' '"S": "\\S"';                                       check_red "translation \\S removed in $N"
+    mutate $F '_DOT = "[^\\n\\r\\u2028\\u2029]"' '_DOT = "."';                         check_red "translation . removed in $N"
+    mutate $F 'instance) is None:' 'instance) is None or True:';                             check_red "positive control: $N strict path rejects every string"
     run_tests "$M"; if [ $? = 0 ]; then pass "AC6.10 restored: new tests green again"; else fail "AC6.10 restored tree is not green"; fi
 fi
 

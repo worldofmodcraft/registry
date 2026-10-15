@@ -25,27 +25,75 @@ import re
 from typing import Any
 
 
-def _ecma_pattern(pattern: str) -> str:
-    r"""The pattern with every unescaped `$` outside a character class rewritten to `\Z`.
+# ECMA-262 -> Python pattern translation (task 064 and its amendment 1). No global re flag is used: a flag changes every
+# escape at once (an ASCII-only flag made `\S` accept U+00A0). Each escape ECMA-262 defines differently is translated explicitly.
+_WS = "\\t\\n\\v\\f\\r \\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff"  # ECMA WhiteSpace + LineTerminator
+_OUTSIDE = {"d": "[0-9]", "D": "[^0-9]", "w": "[A-Za-z0-9_]", "W": "[^A-Za-z0-9_]", "s": "[" + _WS + "]", "S": "[^" + _WS + "]"}
+_INSIDE = {"d": "0-9", "w": "A-Za-z0-9_", "s": _WS}
+_DOT = "[^\\n\\r\\u2028\\u2029]"
+_SAME_ESCAPES = set("nrtfv0xu")  # letter escapes with the same meaning in Python and ECMA-262
+_SAME_GROUPS = ("(?:", "(?=", "(?!", "(?<=", "(?<!")
 
-    ECMA-262 `$` (no `m` flag) matches only at the very end of input; Python's also matches just before a final
-    "\n". Same rewrite as tools/registry/schema.py `ecma_pattern` (task 007a); duplicated here so this validator
-    stays standalone (tests/ never imports from tools/). Task 064."""
-    out, i, in_class = [], 0, False
-    while i < len(pattern):
+
+def _ecma_pattern(pattern):
+    r"""The pattern with ECMA-262 semantics spelled out for Python's `re` (used with search, never fullmatch).
+
+    Unescaped `$` outside a class becomes `\Z` (ECMA `$` is end of input only); `.` and `\d \D \w \W \s \S` become explicit
+    classes (in a class `\d \w \s` expand to ranges); a literal `[` inside a class is escaped. A construct whose meaning
+    differs between Python and ECMA-262 and that is not translated raises NotImplementedError, never a silent pass."""
+    def unsupported(why):
+        raise NotImplementedError(f"pattern {pattern!r}: {why} (not translated to ECMA-262 semantics; extend the translator deliberately)")
+
+    out, i, n, in_class = [], 0, len(pattern), False
+    while i < n:
         c = pattern[i]
         if c == "\\":
-            out.append(pattern[i:i + 2])
+            if i + 1 >= n:
+                unsupported("dangling backslash")
+            e = pattern[i + 1]
+            if in_class and e in _INSIDE:
+                out.append(_INSIDE[e])
+            elif in_class and e in "DWS":
+                unsupported(f"negated escape \\{e} inside a character class")
+            elif in_class and e == "b":
+                out.append("\\b")  # backspace in both
+            elif not in_class and e in _OUTSIDE:
+                out.append(_OUTSIDE[e])
+            elif e.isalpha() and e not in _SAME_ESCAPES:
+                unsupported(f"escape \\{e}")
+            else:
+                out.append(pattern[i:i + 2])
             i += 2
             continue
         if in_class:
-            in_class = c != "]"
-        elif c == "[":
+            if c == "]":
+                in_class = False
+                out.append(c)
+            else:
+                out.append("\\[" if c == "[" else c)
+            i += 1
+            continue
+        if c == "[":
             in_class = True
+            out.append(c)
+            i += 1
+            if pattern[i:i + 1] == "^":
+                out.append("^")
+                i += 1
+            if pattern[i:i + 1] == "]":
+                unsupported("']' first in a character class (empty class in ECMA-262, a literal in Python)")
+            continue
+        if c == "(" and pattern[i + 1:i + 2] == "?" and not pattern.startswith(_SAME_GROUPS, i):
+            unsupported("group construct")
+        if c == ".":
+            out.append(_DOT)
         elif c == "$":
-            c = "\\Z"
-        out.append(c)
+            out.append("\\Z")
+        else:
+            out.append(c)
         i += 1
+    if in_class:
+        unsupported("unterminated character class")
     return "".join(out)
 
 
@@ -140,11 +188,11 @@ def validate(instance: Any, schema: dict, path: str = "$") -> None:
             raise SchemaValidationError(path, f"{instance!r} is not one of the {len(schema['enum'])} allowed enum values")
 
     if "pattern" in schema and isinstance(instance, str):
-        if re.search(_ecma_pattern(schema["pattern"]), instance, re.ASCII) is None:
+        if re.search(_ecma_pattern(schema["pattern"]), instance) is None:
             # Name the ECMA-262 difference when Python's own semantics would have accepted the value (task 064; the
             # 007a hardening tests pin the phrase "end of input" in the message a trailing newline produces).
             hint = ""
-            if re.search(schema["pattern"], instance) is not None:
+            if re.search(schema["pattern"], instance) is not None or not instance.isascii() or "\r" in instance or "\n" in instance:
                 hint = " (rejected under ECMA-262 semantics: `$` is end of input only, `\\d` is [0-9])"
             raise SchemaValidationError(path, f"{instance!r} does not match pattern {schema['pattern']!r}{hint}")
 
