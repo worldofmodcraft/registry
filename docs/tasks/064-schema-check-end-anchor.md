@@ -416,3 +416,4 @@ PASS  AC6.10 restored: new tests green again
 == RESULT ==
 1 CHECK(S) FAILED
 ```
+- 2026-10-15 manager: fix round accepted for review after 069. Rebase condition (added): after 069 merges, `064-verify.sh` must drop its filter that treats 062's 008a lines as racy (the race is then fixed; keeping the filter would hide real failures) and must show `062-verify.sh` fully green, AC6.034 included.
