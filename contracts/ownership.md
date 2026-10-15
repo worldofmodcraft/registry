@@ -977,8 +977,8 @@ merge-base revision of that file.
 ## Takedown PRs: who may open one (Ludwig's ruling, 2026-09-07)
 
 A legally-mandated takedown (ADR-0041) sets an existing version's `status` to `"removed"` with a
-reason. `contracts/append-only.rules.md` defines the *shape* of that one permitted in-place
-mutation and explicitly declines to say who may perform it: *"This document defines the shape of a
+reason. `contracts/append-only.rules.md` defines the *shape* of that permitted in-place
+mutation (T2) and explicitly declines to say who may perform it: *"This document defines the shape of a
 legal takedown, not who may perform one."* Review round 1's finding B5 found that the delegation
 landed nowhere — the ownership gate is the only other place the identity question could go, and it
 did not mention takedowns at all, so the ordinary rule rejected every takedown PR, including one
@@ -1024,8 +1024,8 @@ PR that sets `status` to `"removed"` with its reason *and* makes any other chang
 an edited `owner`, a `page.json` rewrite — is not a takedown for this rule's purposes and is judged
 in full by the ordinary rules (Attempt 8 above). **How many takedown mutations one authorised PR
 may carry**: any number, provided the diff contains nothing else — "the takedown mutation" names a
-*kind* of change here, matching `append-only.rules.md`'s own heading "The one permitted in-place
-mutation: takedown", so a legal notice covering three versions of one entry is one PR and not
+*kind* of change here, matching `append-only.rules.md`'s own heading "The permitted in-place mutations",
+so a legal notice covering three versions of one entry is one PR and not
 three. That reading enlarges nothing about what may be done to any single version, and it does not
 touch the merge gate: MANAGER.md §7's written approval is given per PR and names every version the
 PR removes. This is **confirmed by Ludwig, 2026-10-14**: the strict reading (one version per PR)
