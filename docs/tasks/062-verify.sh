@@ -10,7 +10,8 @@
 #   (no flag)  AC1 (red inventory, reproduced at the task's base), AC2 (pins), AC3 (later-branch property),
 #              AC5 (retirements traceable), AC6 (nothing else removed), AC7 (ownership.md), self-scope.
 #   --mutate   AC4 plus the reddening mutations of AC5 and AC6, all in a temporary clone.
-#   NODE_MODULES_DIR  (or env WOM_NODE_MODULES) a node_modules directory containing ajv 8. 057-verify.sh's check
+#   NODE_MODULES_DIR  (or env WOM_NODE_MODULES, else <repo root>/tools/dev/node_modules; install with
+#                     npm ci --prefix tools/dev) a node_modules directory containing ajv 8. 057-verify.sh's check
 #                     V1 needs it and, by that script's own rule, a missing ajv is a FAILURE, never a skip; so
 #                     this script cannot go green without it.
 # Everything runs on the COMMITTED state (HEAD) in temporary clones; the caller's worktree is never modified.
@@ -23,7 +24,7 @@ set -u
 set -o pipefail
 
 MUTATE=0
-NM="${WOM_NODE_MODULES:-}"
+NM="${WOM_NODE_MODULES:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)/tools/dev/node_modules}"
 for a in "$@"; do
     case "$a" in
         --mutate) MUTATE=1 ;;
@@ -43,7 +44,7 @@ TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
 
 if [ -z "$NM" ] || [ ! -d "$NM/ajv" ] || ! command -v node >/dev/null 2>&1; then
-    fail "AC0 prerequisite: a node_modules directory with ajv and a node binary are required (057-verify.sh V1); pass NODE_MODULES_DIR or set WOM_NODE_MODULES"
+    fail "AC0 prerequisite: a node_modules directory with ajv and a node binary are required (057-verify.sh V1); run: npm ci --prefix tools/dev (or pass NODE_MODULES_DIR / set WOM_NODE_MODULES)"
     printf '\n== RESULT ==\n%d CHECK(S) FAILED\n' "$FAILURES"
     exit "$FAILURES"
 fi

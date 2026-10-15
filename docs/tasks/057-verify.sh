@@ -3,8 +3,9 @@
 # 057-verify.sh -- the runnable verification artefact for task 057 (MANAGER.md Section 2c).
 #
 # Usage:  ./docs/tasks/057-verify.sh [NODE_MODULES_DIR]     (run from the repository root)
-#   NODE_MODULES_DIR  a node_modules directory containing ajv 8 (e.g. the site repo's). Without it, or
-#                     without node, criterion 4 prints SKIPPED and COUNTS AS A FAILURE: a skip never yields green.
+#   NODE_MODULES_DIR  a node_modules directory containing ajv 8. Resolution order (task 066): this argument, then env
+#                     WOM_NODE_MODULES, then <repo root>/tools/dev/node_modules (install: npm ci --prefix tools/dev).
+#                     Without ajv or node, criterion 4 prints SKIPPED and COUNTS AS A FAILURE: a skip never yields green.
 #   PLATFORM_REPO     env, default /home/ludwig/wom: the platform checkout that holds docs/decisions/0121-*.md
 #                     (criterion 1 reads it from that repo's main; the registry itself has no ADR directory).
 #   The scope and pre-change checks (T2, S1, S2, S4) measure this task's OWN commit range, pinned at both ends
@@ -20,7 +21,7 @@ FAILURES=0
 pass() { echo "PASS  $1"; }
 fail() { echo "FAIL  $1"; FAILURES=$((FAILURES + 1)); }
 PY="python3 -I"
-NM="${1:-}"
+NM="${1:-${WOM_NODE_MODULES:-$(git rev-parse --show-toplevel)/tools/dev/node_modules}}"
 PLATFORM_REPO="${PLATFORM_REPO:-/home/ludwig/wom}"
 BASE_COMMIT="a50daac"
 FINAL_COMMIT="3ab8f43"
@@ -86,7 +87,7 @@ PYE
 
 echo "== 5 two validators agree (criterion 4)"
 if [ -z "$NM" ] || ! command -v node >/dev/null 2>&1 || [ ! -d "$NM/ajv" ]; then
-  echo "SKIPPED: node or ajv under '${NM:-<no path given>}' unavailable. Criterion 4 is NOT MET (a skip never yields green)."
+  echo "SKIPPED: node or ajv under '${NM:-<no path given>}' unavailable. Criterion 4 is NOT MET (a skip never yields green). Install the pinned ajv with: npm ci --prefix tools/dev"
   fail "V1 Ajv agreement not demonstrated"
 else
   $PY docs/tasks/057-corpus.py > /tmp/057-corpus.$$ && node docs/tasks/057-ajv-check.mjs "$NM" < /tmp/057-corpus.$$ > /tmp/057-ajv.$$ ; rc=$?
