@@ -57,7 +57,7 @@ new_clone() {   # new_clone DEST REV : a fresh clone, detached at REV, with a re
 
 # mk_later DEST : HEAD plus a later task's legitimate edits to every file an own-change check of a closed script guards.
 #  007b's shape: docs/contracts/README.md edited, two new files under tools/registry/.
-#  Also: 032-verify.sh, 034-verify.sh edited (one check id renamed in 032), contracts/ownership.md edited, one check
+#  Also: 032-verify.sh, 034-verify.sh annotated with comments (no check added, removed or renamed), contracts/ownership.md edited, one check
 #  added to 006-verify.sh, and a follow-up commit whose subject starts "Task 062" touching a file outside 062's scope.
 mk_later() {
     new_clone "$1" "$HEADREV" || return 1
@@ -65,7 +65,6 @@ mk_later() {
     printf '\nA later task adds this sentence to the contracts README.\n' >> "$1/docs/contracts/README.md"
     echo "# probe one, task 070 later branch" > "$1/tools/registry/probe_one.py"; echo "# probe two, task 070 later branch" > "$1/tools/registry/probe_two.py"   # content differs from 069 mk_later (it would otherwise find nothing to commit)
     printf '\n# a later task annotates this script\n' >> "$1/docs/tasks/032-verify.sh"
-    sed -i 's/"S5 /"S5x /g' "$1/docs/tasks/032-verify.sh"
     printf '\n# a later task annotates this script\n' >> "$1/docs/tasks/034-verify.sh"
     printf '\n<!-- a later task annotates this contract -->\n' >> "$1/contracts/ownership.md"
     python3 -I - "$1/docs/tasks/006-verify.sh" <<'PY'
@@ -80,6 +79,36 @@ PY
     git -C "$1" "${GITID[@]}" commit -q -m "Task 007b: later task edits files the closed scripts guard"
     echo "probe" > "$1/probe062.txt"; git -C "$1" add probe062.txt
     git -C "$1" "${GITID[@]}" commit -q -m "Task 062 follow-up: a later commit with a 062 subject outside 062's scope"
+}
+
+# mk_deleter DEST : HEAD plus a later task that DELETES or RENAMES one check in each of 006, 008a, 032, 034, 057 (committed).
+#  These are the changes 062's live guards (AC6L.*) exist to catch; they are the opposite of mk_later's additions.
+mk_deleter() {
+    new_clone "$1" "$HEADREV" || return 1
+    git -C "$1" checkout -q -b later-deleter
+    sed -i 's/"S5 /"S5x /g' "$1/docs/tasks/032-verify.sh"                      # 032: check id S5 renamed
+    sed -i 's/"C4\.1 /"C4.1x /' "$1/docs/tasks/034-verify.sh"                  # 034: check id C4.1 renamed
+    sed -i 's/"O1 /"OX /g' "$1/docs/tasks/057-verify.sh"                         # 057: check id O1 renamed
+    sed -i 's/ok "no key-like file tracked"/ok "no key-like file tracked (reworded)"/' "$1/docs/tasks/008a-verify.sh"   # 008a: label reworded
+    python3 -I - "$1/docs/tasks/006-verify.sh" <<'PY' || return 1
+import sys
+p = sys.argv[1]
+s = open(p).read()
+old = "expect_hits \"C10.3 id/owner are stated frozen, full stop, with no carve-out\" \\\n    'is a violation, full stop'\n"
+assert s.count(old) == 1
+open(p, "w").write(s.replace(old, ""))                                           # 006: check C10.3 deleted
+PY
+    git -C "$1" add -A
+    git -C "$1" "${GITID[@]}" commit -q -m "Task 007b: later task deletes or renames one check in each closed script"
+}
+LIVE_IDS="AC6L.006 AC6L.008a AC6L.032 AC6L.034 AC6L.057 AC6L.006.count"
+# deleter_unseen DIR : run 062 in DIR; echo how many of LIVE_IDS did NOT turn red; the ids that did not go to $TMP/unseen.txt
+deleter_unseen() {
+    local id n=0
+    ( cd "$1" && env -u WOM_NODE_MODULES -u NODE_MODULES_DIR bash docs/tasks/062-verify.sh ) > "$TMP/D.out" 2>&1
+    : > "$TMP/unseen.txt"
+    for id in $LIVE_IDS; do grep -q "^FAIL  $id " "$TMP/D.out" || { n=$((n + 1)); echo "$id" >> "$TMP/unseen.txt"; }; done
+    echo "$n"
 }
 
 # run_closed DIR NAME OUT : run NAME-verify.sh in DIR with no argument and no WOM_NODE_MODULES (the default ajv path); echo exit code
@@ -115,11 +144,23 @@ if ! mk_later "$TMP/L"; then fail "AC2.0 cannot build the later branch"; else
         if [ "$rc" = 0 ]; then pass "AC2.$n $n-verify.sh exits 0 on the later branch"; else fail "AC2.$n $n-verify.sh exit $rc on the later branch; $(fail_lines "$TMP/L.$n.out")"; fi
     done
     # the own-change checks the audit re-pins, each by name: a green exit is not enough (a check could have vanished)
-    for id in AC2.1 AC2.2 AC2.3 AC2.4 AC2.5; do
+    for id in AC2.1 AC2.2 AC2.3 AC2.4 AC2.5 AC2.6; do
         grep -q "^PASS  $id " "$TMP/L.067.out" && pass "AC2.067.$id 067-verify.sh reports $id PASS on the later branch" || fail "AC2.067.$id 067-verify.sh has no passing $id line on the later branch"
     done
-    for id in AC6.006 AC6.008a AC6.032 AC6.057 AC6.006.count AC6.034 AC7.1 SELF.1; do
+    for id in AC6.006 AC6.008a AC6.032 AC6.057 AC6.006.count AC6.034 AC7.1 AC7.4 SELF.1 $LIVE_IDS; do
         grep -q "^PASS  $id " "$TMP/L.062.out" && pass "AC2.062.$id 062-verify.sh reports $id PASS on the later branch" || fail "AC2.062.$id 062-verify.sh has no passing $id line on the later branch"
+    done
+fi
+
+section "AC5 -- a later task that deletes or renames a check turns 062's live guards red (the pinned parts stay green)"
+if ! mk_deleter "$TMP/D0"; then fail "AC5.0 cannot build the deleter branch"; else
+    git -C "$TMP/D0" diff --stat "$HEADREV" HEAD | sed 's/^/  /'
+    n=$(deleter_unseen "$TMP/D0")
+    for id in $LIVE_IDS; do
+        grep -q "^FAIL  $id " "$TMP/D.out" && pass "AC5.$id a deleted/renamed check turns $id red: $(grep -m1 "^FAIL  $id " "$TMP/D.out" | cut -c1-150)" || fail "AC5.$id a deleted/renamed check left $id green (the live guard is missing or blind)"
+    done
+    for id in AC6.006 AC6.008a AC6.032 AC6.057 AC6.034 AC6.006.count AC7.1 SELF.1; do
+        grep -q "^PASS  $id " "$TMP/D.out" && pass "AC5.pinned.$id the pinned own-change check $id stays green on the deleter branch" || fail "AC5.pinned.$id the pinned check $id is not green on the deleter branch"
     done
 fi
 
@@ -163,6 +204,27 @@ PY
     # ---- AC4: live-property checks are not converted; breaking the live property still reddens them
     expect_red "AC4.m1 README sentence deleted (committed) reddens 067's live AC2.5" 067 docs/contracts/README.md 'None of the three tasks implements checking logic' 'None of the tasks implement checking logic' '^FAIL  AC2\.5'
     expect_red "AC4.m2 a 006 retirement successor renamed (committed) reddens 062's live AC5.1" 062 docs/tasks/006-verify.sh '#   successor:  057-textchecks.py old-gone/rule2-born-removed' '#   successor:  057-textchecks.py old-gone/rule2-born-removedX' '^FAIL  AC5\.1'
+    # ---- live guards removed: the deleter branch must then go undetected (n = 6 unseen); proves AC5 can fail
+    if mk_deleter "$TMP/D1"; then
+        python3 -I - "$TMP/D1/docs/tasks/062-verify.sh" <<'PY' || fail "AC5.m0 cannot neutralise the live guards"
+import sys
+p = sys.argv[1]
+s = open(p).read()
+for old, new in (('LIVE_IDS_SCRIPTS="006 008a 032 034 057"', 'LIVE_IDS_SCRIPTS=""'), ("LIVE_COUNT_GUARD=1", "LIVE_COUNT_GUARD=0")):
+    assert s.count(old) == 1, old
+    s = s.replace(old, new)
+open(p, "w").write(s)
+PY
+        git -C "$TMP/D1" "${GITID[@]}" commit -q -am "mutation: live guards removed"
+        n=$(deleter_unseen "$TMP/D1")
+        if [ "$n" = 6 ]; then pass "AC5.m1 with the six live guards removed from 062, the delete/rename branch goes undetected ($n of 6 ids stay green), so AC5 turns red on such a 062"
+        else fail "AC5.m1 guards removed but only $n of 6 live ids stayed green (unseen: $(tr '\n' ' ' < "$TMP/unseen.txt"))"; fi
+    else fail "AC5.m0 cannot build the deleter branch"; fi
+
+    # ---- F2: 032's N5b pattern reverted to the old phrase (committed) reddens 067's live AC2.6
+    expect_red "AC5.m2 032's N5b pattern reverted to the old phrase reddens 067's live AC2.6" 067 docs/tasks/032-verify.sh "'None of the three tasks implements checking logic' \"\$CONTRACTS_README\"" "'in any of the three tasks' \"\$CONTRACTS_README\"" '^FAIL  AC2\.6'
+    # ---- F3: a stale quoting sentence re-introduced into contracts/ownership.md (committed) reddens 062's live AC7.4
+    expect_red "AC5.m3 the stale 'one permitted in-place mutation' quote re-introduced in ownership.md reddens 062's live AC7.4" 062 contracts/ownership.md '<!-- a later task annotates this contract -->' 'the one permitted in-place mutation' '^FAIL  AC7\.4'
 fi
 fi
 
