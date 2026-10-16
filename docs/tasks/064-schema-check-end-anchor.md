@@ -418,3 +418,204 @@ PASS  AC6.10 restored: new tests green again
 ```
 - 2026-10-15 manager: fix round accepted for review after 069. Rebase condition (added): after 069 merges, `064-verify.sh` must drop its filter that treats 062's 008a lines as racy (the race is then fixed; keeping the filter would hide real failures) and must show `062-verify.sh` fully green, AC6.034 included.
 - 2026-10-15 manager: independent review PASS (no blocking findings; differential fuzz vs Node RegExp u-flag: 60000 cases, 0 mismatches; red commits genuine; 15 mutations red). Required before merge (R1, = the rebase condition): after task 069 merges, merge `main` into this branch; remove the 008a filter, the `|| [ -z "$fails" ]` escape and the BLOCKED fallback at `064-verify.sh:156-158`; re-check the 007a by-construction block (lines 142-152), which 069 makes unnecessary; paste one fresh full normal + --mutate run (N3). Then the manager runs every closed verify script on the merge result on a quiet machine and merges under Ludwig's standing approval.
+
+- 2026-10-16 qa-engineer (R1, before merge): merged origin/main 70cedca into the branch (no conflicts). 064-verify.sh (f78e509,
+  15ae3eb): removed the 008a-line filter, the `|| [ -z "$fails" ]` escape, the BLOCKED fallback and the 007a by-construction
+  allowance; it now requires 006, 007a, 007b, 008a, 032, 034, 057, 062, 066, 067, 069, 070 to exit 0 at HEAD (run with no
+  argument, ajv via WOM_NODE_MODULES, as 066 accepts none); default ajv is tools/dev/node_modules (`npm ci --prefix tools/dev
+  --userconfig /dev/null --ignore-scripts --no-audit --no-fund`); AC5/file-scope checks are framed against the merged main
+  (70cedca). Machine check before the runs: no verify/test processes (ps); scripts run one at a time. Results: every closed
+  script exits 0 except **007b-verify.sh (exit 2)**: its scope check is `git diff origin/main...HEAD` and is not pinned to its own
+  range, so it is red by construction on any later branch (lists `.gitignore` in the measuring clone, whose origin/main is the
+  local main, and `tools/registry/schema.py` = "007a modules changed", the edit amendment 1 authorises). 007b is not in 070's
+  CLOSED list. Not edited here (closed script); needs a task like 069/070 for 007b. 007b's unit tests are green (tests/registry).
+  Output of one fresh `064-verify.sh` (normal):
+
+```
+
+== AC1 -- red first: at the red commit the new cases fail ==
+PASS  AC1.1 red commit 4299b80 is an ancestor of HEAD
+PASS  AC1.2 the base ac22c8f is an ancestor of the red commit
+PASS  AC1.3 the red commit adds only the test module and the corpus cases (no fix)
+PASS  AC1.4 validators and tools are unchanged at the red commit
+PASS  AC1.5 red commit: new test module exits 1 with 60 failing subtests
+PASS  AC1.6 red commit: test_valid_value_plus_newline_is_rejected_by_every_path is red
+PASS  AC1.6 red commit: test_one_fullwidth_digit_is_rejected_by_every_path is red
+PASS  AC1.6 red commit: test_the_f1_case_from_the_review is red
+
+== AC1b -- amendment 1, red first: at the second red commit the escape-translation tests fail ==
+PASS  AC1b.1 30ef7d5 is between the first red commit and HEAD
+PASS  AC1b.2 the second red commit changes only the test module (no fix)
+PASS  AC1b.3 validators and tools are unchanged by the second red commit
+PASS  AC1b.4 second red commit: exit 1 with 107 failing subtests
+PASS  AC1b.5 second red commit: test_backslash_s_rejects_unicode_whitespace is red
+PASS  AC1b.5 second red commit: test_dot_rejects_cr_and_line_separators_but_accepts_other_characters is red
+PASS  AC1b.5 second red commit: test_whitespace_escape_is_the_ecma_set is red
+PASS  AC1b.5 second red commit: test_unsupported_constructs_raise_not_silently_pass is red
+PASS  AC1b.5 second red commit: test_no_re_ascii_flag_remains_in_any_pattern_path is red
+PASS  AC1b.5 second red commit: test_rejection_message_names_the_ecma_reason_for_translated_cases is red
+PASS  AC1.7 red commit: all 10 of the 10 new corpus cases (8 trailing-newline, 2 fullwidth) disagree with Ajv; other disagreements: 0
+
+== AC2 -- fixed at HEAD: the cases are rejected, the controls kept ==
+PASS  AC2.1 HEAD: new test module green (Ran 27 tests in 0.012s; OK)
+PASS  AC2.2 HEAD: test_valid_samples_are_accepted_by_every_path ok
+PASS  AC2.2 HEAD: test_unanchored_pattern_still_matches_mid_string ok
+PASS  AC2.2 HEAD: test_end_anchor_only_pattern_still_matches_a_suffix ok
+PASS  AC2.2 HEAD: test_alternation_with_end_anchor_keeps_search_semantics ok
+PASS  AC2.2 HEAD: test_dollar_inside_class_or_escaped_is_literal_not_end_anchor ok
+PASS  AC2.2 HEAD: test_valid_value_plus_newline_is_rejected_by_every_path ok
+PASS  AC2.2 HEAD: test_one_fullwidth_digit_is_rejected_by_every_path ok
+PASS  AC2.3 HEAD: no expected-failure or skipped test remains (the Q1 gaps are closed by amendment 1)
+PASS  AC2.3b HEAD: test_backslash_s_rejects_unicode_whitespace ok
+PASS  AC2.3b HEAD: test_dot_rejects_cr_and_line_separators_but_accepts_other_characters ok
+PASS  AC2.3b HEAD: test_backslash_s_still_accepts_non_ascii_visible_characters ok
+PASS  AC2.3b HEAD: test_whitespace_escape_is_the_ecma_set ok
+PASS  AC2.3b HEAD: test_unsupported_constructs_raise_not_silently_pass ok
+PASS  AC2.3b HEAD: test_rejection_message_names_the_ecma_reason_for_translated_cases ok
+PASS  AC2.4 no re.fullmatch( call in the three pattern paths
+
+== AC3 -- agreement with Ajv (057 V1 corpus now carries the new cases) ==
+PASS  AC3.1 HEAD: Python and Ajv 8.20.0 (2020, strict:true) agree on all 168 corpus cases, including the 12 new ones
+PASS  AC3.2 057-verify.sh (V1) exits 0 at HEAD
+
+== AC4 -- no other suite moves ==
+PASS  AC4.1 unittest discover -s tests/contracts: Ran 32 tests in 0.016s
+PASS  AC4.1 unittest discover -s tests/registry: Ran 263 tests in 1.578s
+PASS  AC4.1 unittest discover -s tests/validation: Ran 66 tests in 3.798s
+PASS  AC4.1 unittest discover -s tests/pipeline: Ran 114 tests in 33.048s
+PASS  AC4.2 006-verify.sh exits 0 at HEAD
+PASS  AC4.2 032-verify.sh exits 0 at HEAD
+PASS  AC4.2 034-verify.sh exits 0 at HEAD
+PASS  AC4.2 057-verify.sh exits 0 at HEAD
+PASS  AC4.2 007a-verify.sh exits 0 at HEAD
+FAIL  AC4.2 007b-verify.sh exits 2 at HEAD; failing: FAIL  files outside the declared scope: .gitignore|FAIL  007a modules changed: tools/registry/schema.py|
+PASS  AC4.2 008a-verify.sh exits 0 at HEAD
+PASS  AC4.2 062-verify.sh exits 0 at HEAD
+PASS  AC4.2 066-verify.sh exits 0 at HEAD
+PASS  AC4.2 067-verify.sh exits 0 at HEAD
+PASS  AC4.2 069-verify.sh exits 0 at HEAD
+PASS  AC4.2 070-verify.sh exits 0 at HEAD
+
+== AC5 -- 034 C3.3 re-pinned, not weakened; C3.4 untouched; nothing else in a closed script ==
+PASS  AC5.1 the only closed verify script changed is 034-verify.sh
+PASS  AC5.2 exactly one line removed: the old C3.3 call text
+PASS  AC5.3 added: the new C3.3 call text (still re.search) plus a comment naming task 064
+PASS  AC5.4 C3.4 (no re.fullmatch call) is not edited
+PASS  AC5.5 034-verify.sh: 4 inserted lines (1 call, 3 comment), 1 removed
+PASS  AC5.6 tools/registry/schema.py: only ecma_pattern (translation, amendment 1) and the pattern call changed; no other function touched
+PASS  AC5.7 no re.ASCII anywhere in the three pattern paths (amendment 1)
+
+== File scope -- only the declared files differ from the base ==
+PASS  S1 changed files are within the declared scope
+PASS  S2 no schema in contracts/ changed
+PASS  S3 existing test files: exactly the 2 validator pattern calls and their 2 message lines changed (no test removed or weakened)
+PASS  S4 064-verify.sh is executable
+
+== RESULT ==
+1 CHECK(S) FAILED
+```
+
+  Output of one fresh `064-verify.sh --mutate`:
+
+```
+
+== AC1 -- red first: at the red commit the new cases fail ==
+PASS  AC1.1 red commit 4299b80 is an ancestor of HEAD
+PASS  AC1.2 the base ac22c8f is an ancestor of the red commit
+PASS  AC1.3 the red commit adds only the test module and the corpus cases (no fix)
+PASS  AC1.4 validators and tools are unchanged at the red commit
+PASS  AC1.5 red commit: new test module exits 1 with 60 failing subtests
+PASS  AC1.6 red commit: test_valid_value_plus_newline_is_rejected_by_every_path is red
+PASS  AC1.6 red commit: test_one_fullwidth_digit_is_rejected_by_every_path is red
+PASS  AC1.6 red commit: test_the_f1_case_from_the_review is red
+
+== AC1b -- amendment 1, red first: at the second red commit the escape-translation tests fail ==
+PASS  AC1b.1 30ef7d5 is between the first red commit and HEAD
+PASS  AC1b.2 the second red commit changes only the test module (no fix)
+PASS  AC1b.3 validators and tools are unchanged by the second red commit
+PASS  AC1b.4 second red commit: exit 1 with 107 failing subtests
+PASS  AC1b.5 second red commit: test_backslash_s_rejects_unicode_whitespace is red
+PASS  AC1b.5 second red commit: test_dot_rejects_cr_and_line_separators_but_accepts_other_characters is red
+PASS  AC1b.5 second red commit: test_whitespace_escape_is_the_ecma_set is red
+PASS  AC1b.5 second red commit: test_unsupported_constructs_raise_not_silently_pass is red
+PASS  AC1b.5 second red commit: test_no_re_ascii_flag_remains_in_any_pattern_path is red
+PASS  AC1b.5 second red commit: test_rejection_message_names_the_ecma_reason_for_translated_cases is red
+PASS  AC1.7 red commit: all 10 of the 10 new corpus cases (8 trailing-newline, 2 fullwidth) disagree with Ajv; other disagreements: 0
+
+== AC2 -- fixed at HEAD: the cases are rejected, the controls kept ==
+PASS  AC2.1 HEAD: new test module green (Ran 27 tests in 0.012s; OK)
+PASS  AC2.2 HEAD: test_valid_samples_are_accepted_by_every_path ok
+PASS  AC2.2 HEAD: test_unanchored_pattern_still_matches_mid_string ok
+PASS  AC2.2 HEAD: test_end_anchor_only_pattern_still_matches_a_suffix ok
+PASS  AC2.2 HEAD: test_alternation_with_end_anchor_keeps_search_semantics ok
+PASS  AC2.2 HEAD: test_dollar_inside_class_or_escaped_is_literal_not_end_anchor ok
+PASS  AC2.2 HEAD: test_valid_value_plus_newline_is_rejected_by_every_path ok
+PASS  AC2.2 HEAD: test_one_fullwidth_digit_is_rejected_by_every_path ok
+PASS  AC2.3 HEAD: no expected-failure or skipped test remains (the Q1 gaps are closed by amendment 1)
+PASS  AC2.3b HEAD: test_backslash_s_rejects_unicode_whitespace ok
+PASS  AC2.3b HEAD: test_dot_rejects_cr_and_line_separators_but_accepts_other_characters ok
+PASS  AC2.3b HEAD: test_backslash_s_still_accepts_non_ascii_visible_characters ok
+PASS  AC2.3b HEAD: test_whitespace_escape_is_the_ecma_set ok
+PASS  AC2.3b HEAD: test_unsupported_constructs_raise_not_silently_pass ok
+PASS  AC2.3b HEAD: test_rejection_message_names_the_ecma_reason_for_translated_cases ok
+PASS  AC2.4 no re.fullmatch( call in the three pattern paths
+
+== AC3 -- agreement with Ajv (057 V1 corpus now carries the new cases) ==
+PASS  AC3.1 HEAD: Python and Ajv 8.20.0 (2020, strict:true) agree on all 168 corpus cases, including the 12 new ones
+PASS  AC3.2 057-verify.sh (V1) exits 0 at HEAD
+
+== AC4 -- no other suite moves ==
+PASS  AC4.1 unittest discover -s tests/contracts: Ran 32 tests in 0.016s
+PASS  AC4.1 unittest discover -s tests/registry: Ran 263 tests in 1.500s
+PASS  AC4.1 unittest discover -s tests/validation: Ran 66 tests in 3.873s
+PASS  AC4.1 unittest discover -s tests/pipeline: Ran 114 tests in 33.041s
+PASS  AC4.2 006-verify.sh exits 0 at HEAD
+PASS  AC4.2 032-verify.sh exits 0 at HEAD
+PASS  AC4.2 034-verify.sh exits 0 at HEAD
+PASS  AC4.2 057-verify.sh exits 0 at HEAD
+PASS  AC4.2 007a-verify.sh exits 0 at HEAD
+FAIL  AC4.2 007b-verify.sh exits 2 at HEAD; failing: FAIL  files outside the declared scope: .gitignore|FAIL  007a modules changed: tools/registry/schema.py|
+PASS  AC4.2 008a-verify.sh exits 0 at HEAD
+PASS  AC4.2 062-verify.sh exits 0 at HEAD
+PASS  AC4.2 066-verify.sh exits 0 at HEAD
+PASS  AC4.2 067-verify.sh exits 0 at HEAD
+PASS  AC4.2 069-verify.sh exits 0 at HEAD
+PASS  AC4.2 070-verify.sh exits 0 at HEAD
+
+== AC5 -- 034 C3.3 re-pinned, not weakened; C3.4 untouched; nothing else in a closed script ==
+PASS  AC5.1 the only closed verify script changed is 034-verify.sh
+PASS  AC5.2 exactly one line removed: the old C3.3 call text
+PASS  AC5.3 added: the new C3.3 call text (still re.search) plus a comment naming task 064
+PASS  AC5.4 C3.4 (no re.fullmatch call) is not edited
+PASS  AC5.5 034-verify.sh: 4 inserted lines (1 call, 3 comment), 1 removed
+PASS  AC5.6 tools/registry/schema.py: only ecma_pattern (translation, amendment 1) and the pattern call changed; no other function touched
+PASS  AC5.7 no re.ASCII anywhere in the three pattern paths (amendment 1)
+
+== File scope -- only the declared files differ from the base ==
+PASS  S1 changed files are within the declared scope
+PASS  S2 no schema in contracts/ changed
+PASS  S3 existing test files: exactly the 2 validator pattern calls and their 2 message lines changed (no test removed or weakened)
+PASS  S4 064-verify.sh is executable
+
+== AC6 -- mutations in a temporary clone, each must turn the new tests red ==
+PASS  AC6.0 control: new tests green before mutating
+PASS  AC6 plain $ in tests/contracts/schema_check.py: red (20 failing subtests)
+PASS  AC6 translation \d removed in tests/contracts/schema_check.py: red (20 failing subtests)
+PASS  AC6 translation \S removed in tests/contracts/schema_check.py: red (3 failing subtests)
+PASS  AC6 translation . removed in tests/contracts/schema_check.py: red (5 failing subtests)
+PASS  AC6 positive control: tests/contracts/schema_check.py rejects every string: red (62 failing subtests)
+PASS  AC6 plain $ in tests/validation/schema_check.py: red (20 failing subtests)
+PASS  AC6 translation \d removed in tests/validation/schema_check.py: red (7 failing subtests)
+PASS  AC6 translation \S removed in tests/validation/schema_check.py: red (2 failing subtests)
+PASS  AC6 translation . removed in tests/validation/schema_check.py: red (5 failing subtests)
+PASS  AC6 positive control: tests/validation/schema_check.py rejects every string: red (31 failing subtests)
+PASS  AC6 plain $ in tools/registry/schema.py: red (19 failing subtests)
+PASS  AC6 translation \d removed in tools/registry/schema.py: red (19 failing subtests)
+PASS  AC6 translation \S removed in tools/registry/schema.py: red (3 failing subtests)
+PASS  AC6 translation . removed in tools/registry/schema.py: red (5 failing subtests)
+PASS  AC6 positive control: tools/registry/schema.py strict path rejects every string: red (62 failing subtests)
+PASS  AC6.10 restored: new tests green again
+
+== RESULT ==
+1 CHECK(S) FAILED
+```
