@@ -21,6 +21,26 @@ against `HEAD` before this task; changed here), **LIVE** (property of the tree a
 | 062-verify.sh:356 (new AC6.0) | `merge-base --is-ancestor "$FINAL062" HEAD` | new | An unreachable pin FAILS naming the commit; AC6.034, AC6.006.count, AC7.1 and the AC6.* ids also fail (their git reads fail), none skips. |
 | 067-verify.sh:21, 069-verify.sh:24 | ajv location | ajv default | argument, then `WOM_NODE_MODULES`, then `<repo root>/tools/dev/node_modules` (as 057/062 after 066). 067 AC3.2 and 069 AC4.0/AC7.0 fail naming `npm ci --prefix tools/dev` when ajv is absent. |
 
+## Pinned part AND live guard (fix round, review finding B1, F2, F3)
+
+Pinning an own-change check to `BASE..FINAL` stops a later task from reddening it, but it also stops the check from seeing a
+later task that deletes or renames a check. So every converted "nothing was removed / left alone" check now has two halves:
+the pinned half (unchanged, above) and a live half that reads HEAD. Additions (007b's shape: new files, README edits, new
+checks) stay green; a deleted or renamed check goes red.
+
+| Pinned part (above) | Live guard beside it | What the live guard asserts |
+|---|---|---|
+| 062 AC6.006, AC6.008a, AC6.032, AC6.057 (ids over `BASE062..FINAL062`) | 062 AC6L.006, AC6L.008a, AC6L.032, AC6L.057 | every check id (008a: label) in the script at `FINAL062` still exists in the script at `HEAD` (superset; the four 006 retirements are already absent at `FINAL062`, so nothing needs allowing) |
+| 062 AC6.034 (034 untouched except 064's C3.3 re-pin, over the range) | 062 AC6L.034 | same superset test for 034-verify.sh ids (034 has no diff check of its own; this is its only guard against a removed check) |
+| 062 AC6.006.count (4 fewer than at base, at `FINAL062`) | 062 AC6L.006.count | 006's evaluated-check count at `HEAD` is >= its count at `FINAL062` |
+| 062 AC7.1 (ownership.md, two hunks, over the range) | 062 AC7.4 (F3) | at `HEAD`, whitespace-normalised, `The permitted in-place mutations` is present and the stale `one permitted in-place mutation` quote is absent |
+| 067 AC2.2, AC2.3 (N5b lines changed, over the range) | 067 AC2.6 (F2) | at `HEAD`, 032-verify.sh's N5b call still pins the full sentence and not `in any of the three tasks` |
+| 062 SELF.1, 067 AC2.1, AC2.4 | none | scope/"README untouched" claims about the task's own commits; a live twin would be exactly the defect this task removes |
+
+070-verify.sh shows both halves: AC2 (additions branch: pinned and live all green), AC5 (a branch that deletes or renames one
+check in each of 006, 008a, 032, 034, 057: the six AC6L ids go red, the pinned ids stay green), and `--mutate` AC5.m1 to AC5.m3
+(guards removed, F2 broken, F3 broken: each reddens).
+
 ## Already pinned (own-change, range `BASE..FINAL` since tasks 062, 069)
 
 | Script:line | What it compares | Verdict |
