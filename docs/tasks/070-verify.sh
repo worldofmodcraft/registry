@@ -162,7 +162,7 @@ PY
 
     # ---- AC4: live-property checks are not converted; breaking the live property still reddens them
     expect_red "AC4.m1 README sentence deleted (committed) reddens 067's live AC2.5" 067 docs/contracts/README.md 'None of the three tasks implements checking logic' 'None of the tasks implement checking logic' '^FAIL  AC2\.5'
-    expect_red "AC4.m2 a 006 retirement successor renamed (committed) reddens 062's live AC5.1" 062 docs/tasks/006-verify.sh '#   successor:  057-textchecks.py required/born-pending' '#   successor:  057-textchecks.py required/born-pendingX' '^FAIL  AC5\.1'
+    expect_red "AC4.m2 a 006 retirement successor renamed (committed) reddens 062's live AC5.1" 062 docs/tasks/006-verify.sh '#   successor:  057-textchecks.py old-gone/rule2-born-removed' '#   successor:  057-textchecks.py old-gone/rule2-born-removedX' '^FAIL  AC5\.1'
 fi
 fi
 
