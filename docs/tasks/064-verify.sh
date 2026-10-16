@@ -129,7 +129,7 @@ else
     echo "  head corpus: n=$n n64=$n64 d64=$d64 dother=$dother"
     fail "AC3.1 HEAD: disagreement with Ajv"
 fi
-( cd "$TMP/head" && bash docs/tasks/057-verify.sh "$NM" >"$TMP/057.out" 2>&1 ); rc=$?
+( cd "$TMP/head" && env WOM_NODE_MODULES="$NM" bash docs/tasks/057-verify.sh >"$TMP/057.out" 2>&1 ); rc=$?
 if [ "$rc" = 0 ]; then pass "AC3.2 057-verify.sh (V1) exits 0 at HEAD"; else fail "AC3.2 057-verify.sh exits $rc at HEAD"; fi
 
 section "AC4 -- no other suite moves"
@@ -138,13 +138,13 @@ for d in tests/contracts tests/registry tests/validation tests/pipeline; do
     if [ "$rc" = 0 ]; then pass "AC4.1 unittest discover -s $d: $(grep -E '^Ran ' "$TMP/u.out")"; else fail "AC4.1 unittest discover -s $d exits $rc"; tail -8 "$TMP/u.out"; fi
 done
 for s in 006 032 034 057; do
-    ( cd "$TMP/head" && bash docs/tasks/$s-verify.sh "$NM" >"$TMP/s.out" 2>&1 ); rc=$?
+    ( cd "$TMP/head" && env WOM_NODE_MODULES="$NM" bash docs/tasks/$s-verify.sh >"$TMP/s.out" 2>&1 ); rc=$?
     if [ "$rc" = 0 ]; then pass "AC4.2 $s-verify.sh exits 0 at HEAD"; else fail "AC4.2 $s-verify.sh exits $rc at HEAD"; fi
 done
 # Every other closed verify script must be fully green at HEAD (no allowances: tasks 069/070 made 007a's scope check and
 # 062's AC6.034 pinned; 008a's temp-dir race is fixed). 007b, 066, 067, 069, 070 are closed scripts on main as well.
 for s in 007a 007b 008a 062 066 067 069 070; do
-    ( cd "$TMP/head" && bash docs/tasks/$s-verify.sh "$NM" >"$TMP/s.out" 2>&1 ); rc=$?
+    ( cd "$TMP/head" && env WOM_NODE_MODULES="$NM" bash docs/tasks/$s-verify.sh >"$TMP/s.out" 2>&1 ); rc=$?
     if [ "$rc" = 0 ]; then pass "AC4.2 $s-verify.sh exits 0 at HEAD"; else fail "AC4.2 $s-verify.sh exits $rc at HEAD; failing: $(grep -E '^FAIL' "$TMP/s.out" | cut -c1-80 | tr '\n' '|')"; fi
 done
 
