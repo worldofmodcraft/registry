@@ -78,3 +78,4 @@ After 069 (merged). Before 007b (PR #12) and 064 (PR #13) merge; both merge `mai
 
 ## Questions
 - Q1: 007b-verify.sh scope check uses origin/main...HEAD; it is right only if origin/main is current. A) manager re-runs it at the merge gate with origin/main = main after 070 merges ★ B) follow-up task for 007b.
+- 2026-10-16 qa-engineer: follow-up on the finding: with refs/remotes/origin/main set to this branch tip (0447827) in the 007b merge clone, 007b-verify.sh exits 0, SUMMARY failed=0, no FAIL line. So the earlier red was the stale origin/main of my clone, not a defect of the merge; Q1 stands only as a note that 007b-verify.sh needs a current origin/main.
