@@ -103,11 +103,15 @@ free-form string or a generic URL pattern, never an enum naming specific hosts �
   prose-and-schema only (the live `gh api` / `curl` commands pasted in `contracts/ownership.md` are
   one-off verification of environmental facts made *while writing* the document). The checking logic
   lives elsewhere: **built** (task 007a) are the PR classifier, schema validation and append-only
-  checkers in `tools/registry/`; **still to come** are the ownership checker (task 007b, including the
-  fail-closed rejection of T1/T3 and the R11 takedown authorisation), the GitHub Actions workflow,
-  PR comments and the one live org-membership API call (task 039), the build pipeline's remaining
-  parts (task 008) and the site build (task 009: archive extraction, rendering, deploy). The shape
-  checkers call no forge API and reach no network; they take parsed files and paths as input.
+  checkers in `tools/registry/`; **built** (task 007b) is the ownership checker
+  (`tools/registry/ownership.py`, CLI `ownership_cli.py`: R1-R11, the checker-constraining invariants, and the
+  fail-closed rejection of every T1/T3 for every author until task 008b adds the pipeline carve-out). Its R11
+  takedown authority is injected configuration that defaults to *nobody* (which `pulls.user.id` the platform's
+  own takedown PRs carry is an open question for Ludwig and task 039); **still to come** are the GitHub Actions
+  workflow that composes the shape and ownership verdicts, PR comments and the one live org-membership API call
+  (task 039), the pipeline carve-out in `ownership.md` (task 008b), the build pipeline's remaining parts (task
+  008) and the site build (task 009: archive extraction, rendering, deploy). The checkers call no forge API
+  and reach no network; they take parsed files, paths and an injected membership answer as input.
 - **No full `mod.lua` manifest.** `manifest.schema.json` is deliberately the ADR-0030 subset this
   task's acceptance criterion 4 names — fields meaningful only with a kernel (`declares`,
   `depends`, `permissions`, `server`/`client` blocks, …) are future work, once the kernel exists.
