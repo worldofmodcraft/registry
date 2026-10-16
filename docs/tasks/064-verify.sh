@@ -28,7 +28,9 @@ for a in "$@"; do
 done
 
 ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)" || exit 99
+[ -z "$NM" ] && NM="$ROOT/tools/dev/node_modules"   # default: the pinned ajv of tools/dev (npm ci --prefix tools/dev)
 BASE="ac22c8f"      # registry origin/main when task 064 was cut
+MAINB="70cedca"     # registry main merged into the branch (R1); the frame of the AC5 and file-scope checks
 RED="4299b80"       # the commit that adds the new failing cases and nothing else (AC1)
 RED2="30ef7d5"      # amendment 1: the commit that turns the Q1 expected failures into normal tests and adds the translation tests, no fix
 TESTF="tests/registry/test_pattern_semantics.py"
@@ -139,43 +141,32 @@ for s in 006 032 034 057; do
     ( cd "$TMP/head" && bash docs/tasks/$s-verify.sh "$NM" >"$TMP/s.out" 2>&1 ); rc=$?
     if [ "$rc" = 0 ]; then pass "AC4.2 $s-verify.sh exits 0 at HEAD"; else fail "AC4.2 $s-verify.sh exits $rc at HEAD"; fi
 done
-# 007a-verify.sh checks its declared file scope as `git diff origin/main...HEAD` against ITS OWN scope, so on any branch of a
-# later task that check is red by construction (062 does not include 007a in its later-branch set). Everything else it checks
-# must be green, and the one red line must list only task 064's declared files.
-( cd "$TMP/head" && bash docs/tasks/007a-verify.sh >"$TMP/s.out" 2>&1 ); rc=$?
-fails=$(grep -E '^FAIL' "$TMP/s.out")
-if [ "$rc" = 0 ]; then pass "AC4.2 007a-verify.sh exits 0 at HEAD"
-elif [ "$(printf '%s\n' "$fails" | grep -c .)" = 1 ] && printf '%s\n' "$fails" | grep -q '^FAIL  files outside the declared scope'; then
-    listed=$(awk '/^FAIL  files outside the declared scope/ {sub(/^FAIL  files outside the declared scope: /, ""); print; f=1; next} f && /^(docs|tests|tools|contracts)\// {print; next} {f=0}' "$TMP/s.out")
-    extra=$(printf '%s\n' "$listed" | grep -vxE 'tests/contracts/schema_check\.py|tests/validation/schema_check\.py|docs/tasks/057-corpus\.py|docs/tasks/034-verify\.sh|docs/tasks/064-schema-check-end-anchor\.md|docs/tasks/064-verify\.sh')
-    if [ -z "$extra" ]; then pass "AC4.2 007a-verify.sh: every check green except its by-construction branch-scope check, which lists only task 064's own declared files"; else fail "AC4.2 007a-verify.sh scope line lists files beyond task 064's scope: $extra"; fi
-else fail "AC4.2 007a-verify.sh exits $rc; failing lines: $fails"; fi
-# 062-verify.sh asserts `git diff $BASE062 HEAD -- docs/tasks/034-verify.sh` is empty (its AC6.034). Criterion 5 of task 064
-# edits exactly that file, so that one check is red by construction; this is reported, never hidden (see the task log, Questions).
-( cd "$TMP/head" && bash docs/tasks/062-verify.sh "$NM" >"$TMP/s.out" 2>&1 ); rc=$?
-fails=$(grep -E '^FAIL' "$TMP/s.out" | grep -vE '^FAIL  AC[0-9a-z.]*\.008a ')   # 008a's temp-dir count check is racy when another agent runs 008a concurrently
-if [ "$rc" = 0 ] || [ -z "$fails" ]; then pass "AC4.2 062-verify.sh exits 0 at HEAD"
-else fail "AC4.2 062-verify.sh: $(printf '%s\n' "$fails" | awk '{print $2}' | tr '\n' ' ') -- BLOCKED by its own AC6.034 pin on 034-verify.sh (spec criteria 4 and 5 conflict; task 069 amends 062-verify.sh, then 064 rebases and must be green)"; fi
+# Every other closed verify script must be fully green at HEAD (no allowances: tasks 069/070 made 007a's scope check and
+# 062's AC6.034 pinned; 008a's temp-dir race is fixed). 007b, 066, 067, 069, 070 are closed scripts on main as well.
+for s in 007a 007b 008a 062 066 067 069 070; do
+    ( cd "$TMP/head" && bash docs/tasks/$s-verify.sh "$NM" >"$TMP/s.out" 2>&1 ); rc=$?
+    if [ "$rc" = 0 ]; then pass "AC4.2 $s-verify.sh exits 0 at HEAD"; else fail "AC4.2 $s-verify.sh exits $rc at HEAD; failing: $(grep -E '^FAIL' "$TMP/s.out" | cut -c1-80 | tr '\n' '|')"; fi
+done
 
 section "AC5 -- 034 C3.3 re-pinned, not weakened; C3.4 untouched; nothing else in a closed script"
-CLOSED=$(git -C "$TMP/head" diff --name-only "$BASE" HEAD | grep -E '^docs/tasks/[0-9]+[a-z]?-verify\.sh$|^docs/tasks/(032|057)-' | grep -vE '^docs/tasks/(064-verify\.sh|057-corpus\.py)$')
+CLOSED=$(git -C "$TMP/head" diff --name-only "$MAINB" HEAD | grep -E '^docs/tasks/[0-9]+[a-z]?-verify\.sh$|^docs/tasks/(032|057)-' | grep -vE '^docs/tasks/(064-verify\.sh|057-corpus\.py)$')
 if [ "$CLOSED" = "docs/tasks/034-verify.sh" ]; then pass "AC5.1 the only closed verify script changed is 034-verify.sh"; else fail "AC5.1 closed-script files changed: $CLOSED"; fi
-D=$(git -C "$TMP/head" diff -U0 "$BASE" HEAD -- docs/tasks/034-verify.sh | grep -E '^[+-][^+-]')
+D=$(git -C "$TMP/head" diff -U0 "$MAINB" HEAD -- docs/tasks/034-verify.sh | grep -E '^[+-][^+-]')
 DM=$(printf '%s\n' "$D" | grep -E '^-')
 DP=$(printf '%s\n' "$D" | grep -E '^\+')
 if [ "$(printf '%s\n' "$DM" | grep -c .)" = 1 ] && printf '%s\n' "$DM" | grep -qF "re\\.search(schema\\[\"pattern\"\\], instance)"; then pass "AC5.2 exactly one line removed: the old C3.3 call text"; else fail "AC5.2 removed lines: $DM"; fi
 if printf '%s\n' "$DP" | grep -qF 're\.search(_ecma_pattern(schema\["pattern"\]), instance)' && printf '%s\n' "$DP" | grep -q 'task 064'; then pass "AC5.3 added: the new C3.3 call text (still re.search) plus a comment naming task 064"; else fail "AC5.3 added lines: $DP"; fi
 if printf '%s\n' "$D" | grep -vE '^\+#' | grep -qE 'C3\.4|fullmatch'; then fail "AC5.4 C3.4 / fullmatch lines were edited"; else pass "AC5.4 C3.4 (no re.fullmatch call) is not edited"; fi
-if [ "$(git -C "$TMP/head" diff --stat "$BASE" HEAD -- docs/tasks/034-verify.sh | tail -1 | grep -oE '[0-9]+ insertions?')" = "4 insertions" ]; then pass "AC5.5 034-verify.sh: 4 inserted lines (1 call, 3 comment), 1 removed"; else fail "AC5.5 unexpected 034-verify.sh diff size"; fi
-SRCDIFF=$(git -C "$TMP/head" diff -U0 "$BASE" HEAD -- tools/registry/schema.py | grep -E '^[+-][^+-]')
-if [ -n "$SRCDIFF" ] && ! git -C "$TMP/head" diff -U0 "$BASE" HEAD -- tools/registry/schema.py | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' | grep -qE 'def (check|validate|_strict_patterns|load_schema|loads_strict)'; then pass "AC5.6 tools/registry/schema.py: only ecma_pattern (translation, amendment 1) and the pattern call changed; no other function touched"; else fail "AC5.6 schema.py diff touches more than ecma_pattern"; fi
+if [ "$(git -C "$TMP/head" diff --stat "$MAINB" HEAD -- docs/tasks/034-verify.sh | tail -1 | grep -oE '[0-9]+ insertions?')" = "4 insertions" ]; then pass "AC5.5 034-verify.sh: 4 inserted lines (1 call, 3 comment), 1 removed"; else fail "AC5.5 unexpected 034-verify.sh diff size"; fi
+SRCDIFF=$(git -C "$TMP/head" diff -U0 "$MAINB" HEAD -- tools/registry/schema.py | grep -E '^[+-][^+-]')
+if [ -n "$SRCDIFF" ] && ! git -C "$TMP/head" diff -U0 "$MAINB" HEAD -- tools/registry/schema.py | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' | grep -qE 'def (check|validate|_strict_patterns|load_schema|loads_strict)'; then pass "AC5.6 tools/registry/schema.py: only ecma_pattern (translation, amendment 1) and the pattern call changed; no other function touched"; else fail "AC5.6 schema.py diff touches more than ecma_pattern"; fi
 if grep -rn 're\.ASCII' "$TMP/head/tests/contracts/schema_check.py" "$TMP/head/tests/validation/schema_check.py" "$TMP/head/tools/registry/schema.py"; then fail "AC5.7 re.ASCII is still present in a pattern path"; else pass "AC5.7 no re.ASCII anywhere in the three pattern paths (amendment 1)"; fi
 
 section "File scope -- only the declared files differ from the base"
-extra=$(git -C "$TMP/head" diff --name-only "$BASE" HEAD | grep -vxE 'tests/contracts/schema_check\.py|tests/validation/schema_check\.py|tools/registry/schema\.py|tests/registry/test_pattern_semantics\.py|docs/tasks/057-corpus\.py|docs/tasks/034-verify\.sh|docs/tasks/064-schema-check-end-anchor\.md|docs/tasks/064-verify\.sh')
+extra=$(git -C "$TMP/head" diff --name-only "$MAINB" HEAD | grep -vxE 'tests/contracts/schema_check\.py|tests/validation/schema_check\.py|tools/registry/schema\.py|tests/registry/test_pattern_semantics\.py|docs/tasks/057-corpus\.py|docs/tasks/034-verify\.sh|docs/tasks/064-schema-check-end-anchor\.md|docs/tasks/064-verify\.sh')
 if [ -z "$extra" ]; then pass "S1 changed files are within the declared scope"; else fail "S1 out-of-scope files changed: $(printf '%s' "$extra" | tr '\n' ' ')"; fi
-if git -C "$TMP/head" diff --quiet "$BASE" HEAD -- contracts; then pass "S2 no schema in contracts/ changed"; else fail "S2 contracts/ changed"; fi
-REM=$(git -C "$TMP/head" diff "$BASE" HEAD -- tests | grep -E '^-[^-]')
+if git -C "$TMP/head" diff --quiet "$MAINB" HEAD -- contracts; then pass "S2 no schema in contracts/ changed"; else fail "S2 contracts/ changed"; fi
+REM=$(git -C "$TMP/head" diff "$MAINB" HEAD -- tests | grep -E '^-[^-]')
 # the only existing lines that change are the two schema_check pattern calls and (task 064) the message line below them
 if [ "$(printf '%s\n' "$REM" | grep -c .)" = 4 ] && [ "$(printf '%s\n' "$REM" | grep -cF 're.search(schema["pattern"], instance) is None:')" = 2 ] && [ "$(printf '%s\n' "$REM" | grep -cF 'does not match pattern')" = 2 ]; then
     pass "S3 existing test files: exactly the 2 validator pattern calls and their 2 message lines changed (no test removed or weakened)"
