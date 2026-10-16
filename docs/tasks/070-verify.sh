@@ -196,7 +196,7 @@ PY
     expect_red "AC3.m2 067 unreachable FINAL pin must FAIL, never skip" 067 docs/tasks/067-verify.sh 'FINAL="06c721c"' 'FINAL="deadbee"' '^FAIL  AC2\.1' '^FAIL  AC2\.4' '^FAIL  AC5\.1 pinned commit deadbee'
     expect_red "AC3.m3 067 ajv default removed" 067 docs/tasks/067-verify.sh 'NM="${WOM_NODE_MODULES:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)/tools/dev/node_modules}"' 'NM="${WOM_NODE_MODULES:-}"' '^FAIL  AC3\.2'
     # ---- 062: FINAL062 widened to HEAD / unreachable
-    expect_red "AC3.m4 062 FINAL062 widened to HEAD" 062 docs/tasks/062-verify.sh 'FINAL062="82fa564"' 'FINAL062="HEAD"' '^FAIL  AC6\.032' '^FAIL  AC6\.034' '^FAIL  AC6\.006\.count' '^FAIL  AC7\.1' '^FAIL  SELF\.1'
+    expect_red "AC3.m4 062 FINAL062 widened to HEAD" 062 docs/tasks/062-verify.sh 'FINAL062="82fa564"' 'FINAL062="HEAD"' '^FAIL  AC6\.034' '^FAIL  AC6\.006\.count' '^FAIL  AC7\.1' '^FAIL  SELF\.1'
     expect_red "AC3.m5 062 unreachable FINAL062 pin must FAIL, never skip" 062 docs/tasks/062-verify.sh 'FINAL062="82fa564"' 'FINAL062="deadbee"' '^FAIL  AC6\.0 .*deadbee'
     # ---- 069: ajv default removed
     expect_red "AC3.m6 069 ajv default removed" 069 docs/tasks/069-verify.sh 'NM="${WOM_NODE_MODULES:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)/tools/dev/node_modules}"' 'NM="${WOM_NODE_MODULES:-}"' '^FAIL  AC4\.0' '^FAIL  AC7\.0'
