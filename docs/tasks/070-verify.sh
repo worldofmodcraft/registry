@@ -210,7 +210,7 @@ PY
 import sys
 p = sys.argv[1]
 s = open(p).read()
-for old, new in (('LIVE_IDS_SCRIPTS="006 008a 032 034 057"', 'LIVE_IDS_SCRIPTS=""'), ("LIVE_COUNT_GUARD=1", "LIVE_COUNT_GUARD=0")):
+for old, new in (('LIVE_IDS_SCRIPTS="006 008a 032 034 057"', 'LIVE_IDS_SCRIPTS=""'), ("\nLIVE_COUNT_GUARD=1\n", "\nLIVE_COUNT_GUARD=0\n")):
     assert s.count(old) == 1, old
     s = s.replace(old, new)
 open(p, "w").write(s)
