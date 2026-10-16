@@ -619,3 +619,4 @@ PASS  AC6.10 restored: new tests green again
 == RESULT ==
 1 CHECK(S) FAILED
 ```
+- 2026-10-16 manager: R1 accepted (e42f5bc: filters removed, every closed script required green). One red remains and is NOT this task's defect: `007b-verify.sh` exits 2 here — its scope check (`git diff origin/main...HEAD`) and "007a modules unchanged" check measure HEAD, and this task legitimately changes `tools/registry/schema.py` (amendment 1). 007b became a closed task when it merged (70cedca), after task 070's audit. Next session: a small re-pin task for 007b-verify.sh (PR #12 range: base = merge-base of 70cedca, final = 70cedca^2), then this task merges after a fresh gate. Session 10 handed over at the 30 % context threshold before starting it.
