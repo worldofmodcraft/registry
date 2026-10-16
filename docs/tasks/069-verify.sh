@@ -11,7 +11,8 @@
 #   (no flag)  AC1 (008a survives a foreign wom008a-* directory appearing in the global temp dir mid-run),
 #              AC3 (007a on a later branch), AC4 (062 runs 007a), AC5 (AC6.034 allowance accepts 064's change).
 #   --mutate   AC2 (a real leak inside the per-run TMPDIR reddens 008a), AC3/AC4 mutations, AC5 mutations.
-#   NODE_MODULES_DIR  (or env WOM_NODE_MODULES) a node_modules directory with ajv 8 (only the 062 runs need it).
+#   NODE_MODULES_DIR  (or env WOM_NODE_MODULES, else <repo root>/tools/dev/node_modules; install with
+#                     npm ci --prefix tools/dev) a node_modules directory with ajv 8 (only the 062 and 067 runs need it).
 # Everything runs on the COMMITTED state (HEAD) in temporary clones; the caller's worktree is never modified.
 # Deterministic, no network. Exit code: the number of failed checks. Run it with no other registry suite running
 # (the point of AC1 is that a concurrent run no longer matters, but a measuring run should still be quiet).
@@ -21,7 +22,7 @@ set -u
 set -o pipefail
 
 MUTATE=0
-NM="${WOM_NODE_MODULES:-}"
+NM="${WOM_NODE_MODULES:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)/tools/dev/node_modules}"
 for a in "$@"; do
     case "$a" in
         --mutate) MUTATE=1 ;;
@@ -178,7 +179,7 @@ else fail "AC3.4 HEAD's 007a-verify.sh exit $rc on the later branch; failing: $(
 
 # --------------------------------------------------------------------------------------------------
 section "AC4 -- 062-verify.sh runs 007a on HEAD and on a later branch"
-if [ -z "$NM" ] || [ ! -d "$NM/ajv" ]; then fail "AC4.0 a node_modules directory with ajv is required to run 062-verify.sh: pass NODE_MODULES_DIR"
+if [ -z "$NM" ] || [ ! -d "$NM/ajv" ]; then fail "AC4.0 a node_modules directory with ajv is required to run 062-verify.sh: run: npm ci --prefix tools/dev (or pass NODE_MODULES_DIR / set WOM_NODE_MODULES)"
 else
     new_clone "$TMP/h062" "$HEADREV" || fail "AC4.0 cannot clone HEAD"
     ( cd "$TMP/h062" && bash docs/tasks/062-verify.sh "$NM" ) > "$TMP/062.out" 2>&1; rc=$?
@@ -219,7 +220,7 @@ else
     [ "$(git -C "$ROOT" rev-parse "$lf^{commit}" 2>/dev/null)" = "$(git -C "$ROOT" rev-parse "$MERGE11^2")" ] && pass "AC7.1 FINAL=$lf is the last commit of PR #11 (git rev-parse $MERGE11^2)" || fail "AC7.1 FINAL=$lf is not $MERGE11^2"
     [ "$(git -C "$ROOT" rev-parse "$lb^{commit}" 2>/dev/null)" = "$(git -C "$ROOT" merge-base "$MERGE11^1" "$MERGE11^2")" ] && pass "AC7.2 BASE=$lb is PR #11's fork point" || fail "AC7.2 BASE=$lb is not the fork point of PR #11"
 fi
-if [ -z "$NM" ] || [ ! -d "$NM/ajv" ]; then fail "AC7.0 a node_modules directory with ajv is required to run 067-verify.sh: pass NODE_MODULES_DIR"
+if [ -z "$NM" ] || [ ! -d "$NM/ajv" ]; then fail "AC7.0 a node_modules directory with ajv is required to run 067-verify.sh: run: npm ci --prefix tools/dev (or pass NODE_MODULES_DIR / set WOM_NODE_MODULES)"
 else
     mk_later "$TMP/later67" || fail "AC7.0 cannot build the later branch"
     git -C "$TMP/later67" show "$BASE069:docs/tasks/067-verify.sh" > "$TMP/later67/docs/tasks/067-verify.sh"
@@ -275,7 +276,7 @@ mut007a 'tests/registry/|' '' "AC3.m4 declared-scope regex loses tests/registry/
 rc=$(run007a "$TMP/m3" "$TMP/mut.out"); [ "$rc" = 0 ] && pass "AC3.m5 restored: exit 0 on the later branch" || fail "AC3.m5 restored but exit $rc"
 
 section "AC4 -- 062-verify.sh --mutate carries the 007a mutations"
-if [ -z "$NM" ] || [ ! -d "$NM/ajv" ]; then fail "AC4.0 a node_modules directory with ajv is required to run 062-verify.sh --mutate"
+if [ -z "$NM" ] || [ ! -d "$NM/ajv" ]; then fail "AC4.0 a node_modules directory with ajv is required to run 062-verify.sh --mutate: run: npm ci --prefix tools/dev (or pass NODE_MODULES_DIR / set WOM_NODE_MODULES)"
 else
     new_clone "$TMP/m062" "$HEADREV" || fail "AC4.0 cannot clone HEAD"
     ( cd "$TMP/m062" && bash docs/tasks/062-verify.sh --mutate "$NM" ) > "$TMP/062m.out" 2>&1; rc=$?
@@ -288,7 +289,7 @@ else
 fi
 
 section "AC7 mutations -- 067's pinned-range check can fail"
-if [ -z "$NM" ] || [ ! -d "$NM/ajv" ]; then fail "AC7.m0 a node_modules directory with ajv is required to run 067-verify.sh"
+if [ -z "$NM" ] || [ ! -d "$NM/ajv" ]; then fail "AC7.m0 a node_modules directory with ajv is required to run 067-verify.sh: run: npm ci --prefix tools/dev (or pass NODE_MODULES_DIR / set WOM_NODE_MODULES)"
 else
     mk_later "$TMP/m7" || fail "AC7.m0 cannot build the later branch"
     S=docs/tasks/067-verify.sh
