@@ -9,7 +9,8 @@
 #   (no flag)  AC1 (red at the base), AC2 (only N5b changed, pattern not loosened), AC3 (032 + 062 green at HEAD),
 #              AC5 (file scope).
 #   --mutate   AC4: delete the sentence from docs/contracts/README.md in a temporary clone -> N5b red; restore -> green.
-#   NODE_MODULES_DIR  (or env WOM_NODE_MODULES) a node_modules directory containing ajv 8, needed by 062-verify.sh.
+#   NODE_MODULES_DIR  (or env WOM_NODE_MODULES, else <repo root>/tools/dev/node_modules; install with
+#                     npm ci --prefix tools/dev) a node_modules directory containing ajv 8, needed by 062-verify.sh.
 # Everything runs on the COMMITTED state (HEAD) in temporary clones; the caller's worktree is never modified.
 # Deterministic, no network. Exit code: the number of failed checks. Output has no timestamps or temp paths.
 # Requires: git, python3, node, plus everything 032-verify.sh and 062-verify.sh require.
@@ -18,7 +19,7 @@ set -u
 set -o pipefail
 
 MUTATE=0
-NM="${WOM_NODE_MODULES:-}"
+NM="${WOM_NODE_MODULES:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)/tools/dev/node_modules}"
 for a in "$@"; do
     case "$a" in
         --mutate) MUTATE=1 ;;
@@ -27,7 +28,14 @@ for a in "$@"; do
 done
 
 ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)" || exit 99
-BASE="3c94cf2"               # registry origin/main when task 067 was cut: the frame of AC1
+BASE="3c94cf2"               # registry origin/main when task 067 was cut: the frame of AC1, and the fork point of PR #11
+# Task 069 (amendment 1): AC5.1 measures 067's OWN commit range BASE..FINAL, so it gives the same answer on main, on any
+# later branch and in any fresh clone. FINAL is the last commit on task/067-repin-032-n5b before its merge (registry PR #11:
+# the second parent of merge ac22c8f, `git rev-parse ac22c8f^2`). An unreachable pin is a FAILURE naming the commit.
+FINAL="06c721c"
+# Task 070: AC2.1-AC2.4 describe 067's OWN change, so they measure BASE..FINAL (the same pinned PR #11 range as AC5.1), never
+# HEAD: a later task may legitimately edit 032-verify.sh or docs/contracts/README.md (007b edits the README). AC2.5 is a
+# live property of the README as it stands and stays live. An unreachable pin fails AC2.1-AC2.4 and AC5.1, never skips.
 SENTENCE='None of the three tasks implements checking logic'
 FAILURES=0
 pass() { printf 'PASS  %s\n' "$1"; }
@@ -58,7 +66,7 @@ if [ "$s" = "FAIL  N5b" ]; then pass "AC1.1 base $BASE: N5b reports FAIL"; else 
 if [ "$(run032 "$TMP/base")" != 0 ]; then pass "AC1.2 base $BASE: 032-verify.sh exits non-zero"; else fail "AC1.2 base: 032-verify.sh unexpectedly exits 0"; fi
 
 section "AC2 -- only N5b's pattern changed, and it still guards the claim"
-D=$(git -C "$TMP/head" diff -U0 "$BASE" HEAD -- docs/tasks/032-verify.sh | grep -E '^[+-][^+-]')
+D=$(git -C "$TMP/head" diff -U0 "$BASE" "$FINAL" -- docs/tasks/032-verify.sh | grep -E '^[+-][^+-]')
 DM=$(printf '%s\n' "$D" | grep -E '^-')
 DP=$(printf '%s\n' "$D" | grep -E '^\+')
 nchg=$(printf '%s\n' "$D" | grep -c .)
@@ -69,24 +77,37 @@ else fail "AC2.2 removed lines are not N5b's call and old pattern"; fi
 if printf '%s\n' "$DP" | grep -q 'N5b' && printf '%s\n' "$DP" | grep -qF "'$SENTENCE'"; then
     pass "AC2.3 the added pattern is the full sentence '$SENTENCE'"
 else fail "AC2.3 added lines do not carry the full sentence as pattern"; fi
-if git -C "$TMP/head" diff --quiet "$BASE" HEAD -- docs/contracts/README.md; then
+if git -C "$TMP/head" diff --quiet "$BASE" "$FINAL" -- docs/contracts/README.md; then
     pass "AC2.4 docs/contracts/README.md is untouched (the old phrase was not brought back)"
 else fail "AC2.4 docs/contracts/README.md was modified"; fi
+# Task 070 (fix round, F2): LIVE guard beside the pinned AC2.2/AC2.3: at HEAD, 032-verify.sh's N5b still pins the full sentence.
+n5b=$(grep -A1 '^expect_hits_flow "N5b ' "$TMP/head/docs/tasks/032-verify.sh")
+if [ "$(printf '%s\n' "$n5b" | grep -c .)" = 2 ] && printf '%s' "$n5b" | grep -qF "'$SENTENCE'" && ! printf '%s' "$n5b" | grep -qF 'in any of the three tasks'; then
+    pass "AC2.6 032-verify.sh at HEAD: N5b still pins the full sentence '$SENTENCE' and not the old phrase (live guard)"
+else fail "AC2.6 032-verify.sh at HEAD: N5b does not pin the full sentence (or the old phrase is back): $(printf '%s' "$n5b" | tr '\n' ' ' | cut -c1-160)"; fi
 if grep -qF "$SENTENCE" "$TMP/head/docs/contracts/README.md"; then pass "AC2.5 the current README states the sentence"; else fail "AC2.5 the README lacks the sentence"; fi
 
 section "AC3 -- 032-verify.sh and 062-verify.sh pass at HEAD"
 rc=$(run032 "$TMP/head")
 if [ "$rc" = 0 ]; then pass "AC3.1 032-verify.sh exits 0 at HEAD"; else fail "AC3.1 032-verify.sh exits $rc at HEAD"; fi
-if [ -z "$NM" ]; then
-    fail "AC3.2 062-verify.sh needs ajv: pass NODE_MODULES_DIR (a missing ajv is a failure, never a skip)"
+if [ -z "$NM" ] || [ ! -d "$NM/ajv" ]; then
+    fail "AC3.2 062-verify.sh needs ajv: run: npm ci --prefix tools/dev (or pass NODE_MODULES_DIR / set WOM_NODE_MODULES) (a missing ajv is a failure, never a skip)"
 else
     ( cd "$TMP/head" && bash docs/tasks/062-verify.sh "$NM" >/dev/null 2>&1 ); rc=$?
     if [ "$rc" = 0 ]; then pass "AC3.2 062-verify.sh exits 0 at HEAD"; else fail "AC3.2 062-verify.sh exits $rc at HEAD"; fi
 fi
 
 section "AC5 -- file scope: only the three declared files differ from the base"
-extra=$(git -C "$TMP/head" diff --name-only "$BASE" HEAD | grep -vxE 'docs/tasks/032-verify\.sh|docs/tasks/067-repin-032-n5b\.md|docs/tasks/067-verify\.sh')
-if [ -z "$extra" ]; then pass "AC5.1 changed files are within 032-verify.sh, the 067 log, 067-verify.sh"; else fail "AC5.1 out-of-scope files changed: $(printf '%s' "$extra" | tr '\n' ' ')"; fi
+pins_ok=1
+for pin in "$BASE" "$FINAL"; do
+    if ! git -C "$TMP/head" merge-base --is-ancestor "$pin" HEAD 2>/dev/null; then
+        fail "AC5.1 pinned commit $pin is not an ancestor of HEAD: the scope check cannot run"; pins_ok=0
+    fi
+done
+if [ "$pins_ok" = 1 ]; then
+    extra=$(git -C "$TMP/head" diff --name-only "$BASE" "$FINAL" | grep -vxE 'docs/tasks/032-verify\.sh|docs/tasks/067-repin-032-n5b\.md|docs/tasks/067-verify\.sh')
+    if [ -z "$extra" ]; then pass "AC5.1 every path changed in $BASE..$FINAL is within 032-verify.sh, the 067 log, 067-verify.sh"; else fail "AC5.1 out-of-scope files changed: $(printf '%s' "$extra" | tr '\n' ' ')"; fi
+fi
 if [ -x "$ROOT/docs/tasks/067-verify.sh" ]; then pass "AC5.2 067-verify.sh is executable"; else fail "AC5.2 067-verify.sh is not executable"; fi
 
 if [ "$MUTATE" = 1 ]; then

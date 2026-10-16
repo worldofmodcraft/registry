@@ -89,8 +89,25 @@ crit "F3            duplicate JSON keys rejected"                           "tes
 crit "schema        reuses schema_check; unsupported keyword is exit 2"    "test_(an_unsupported_schema|the_attacker_four_element_entry_is_schema|every_published_example)"
 
 # 3. structural checks
-SRC=$(ls tools/registry/*.py | wc -l)
-[ "$SRC" -le 5 ] && ok "size: $SRC source files in tools/registry (cap 5: report, classify, schema, append_only, cli)" || fail "size: $SRC source files in tools/registry (cap 5)"
+# Task 069: the size cap and the file-scope check below measure THIS task's own commit range, pinned at both ends, so
+# they give the same answer on main, on any later branch (007b adds two source files) and in any fresh clone -- the
+# same re-basing task 062 (D-1) applied to 006/008a/032/057. BASE is the registry commit the branch was cut from
+# (e009ef0, the merge of task 057); FINAL is the last commit on task/007a-registry-checkers-shape before its merge
+# (registry PR #10: the second parent of merge 3c94cf2, `git rev-parse 3c94cf2^2`). An unreachable pin is a FAILURE
+# naming the commit, never a skip.
+BASE=e009ef0
+FINAL=aaf4260
+PINS_OK=1
+for pin in "$BASE" "$FINAL"; do
+  if ! git merge-base --is-ancestor "$pin" HEAD 2>/dev/null; then
+    fail "pinned commit $pin is not an ancestor of HEAD: the size and scope checks cannot run"
+    PINS_OK=0
+  fi
+done
+if [ "$PINS_OK" = 1 ]; then
+  SRC=$(git ls-tree --name-only "$FINAL" tools/registry/ | grep -c '\.py$')
+  [ "$SRC" -le 5 ] && ok "size: $SRC source files in tools/registry at $FINAL (cap 5: report, classify, schema, append_only, cli)" || fail "size: $SRC source files in tools/registry at $FINAL (cap 5)"
+fi
 if grep -rnE '^\s*(import|from)\s+[^#]*(057-oracle|oracle)' tools tests/registry --include=*.py | grep -v 'mutate.py' >/dev/null; then fail "tools/ or tests/ imports the oracle"; else ok "no module imports 057-oracle.py"; fi
 if grep -rn '057-oracle' tools --include=*.py >/dev/null; then fail "tools/ mentions the oracle"; else ok "tools/ never mentions the oracle (no copied logic)"; fi
 if ls tests/registry | grep -q 'fixtures.*json'; then fail "tests/registry holds a copy of the fixtures"; else ok "057 fixtures are read from docs/tasks/057-transition-fixtures.json, not copied"; fi
@@ -107,12 +124,10 @@ python3 tools/registry/cli.py classify --reserved-file "$RES" mods/a.b/notes.txt
 python3 tools/registry/cli.py classify --reserved-file /nonexistent mods/a.b/page.json >/dev/null 2>&1; C=$?
 rm -f "$RES"
 [ "$A $B $C" = "0 1 2" ] && ok "CLI exit codes accepted/rejected/error = $A $B $C" || fail "CLI exit codes were '$A $B $C', expected '0 1 2'"
-# declared file scope (only when origin/main is known)
-if git rev-parse -q --verify origin/main >/dev/null 2>&1; then
-  BAD=$(git diff --name-only origin/main...HEAD | grep -vE '^(tools/registry/|tests/registry/|docs/tasks/007a-registry-checkers-shape\.md$|docs/tasks/007a-verify\.sh$|docs/contracts/README\.md$)' || true)
-  [ -z "$BAD" ] && ok "changed files all inside the declared scope" || fail "files outside the declared scope: $BAD"
-else
-  fail "scope check cannot run: no origin/main in this clone (fetch it; a skipped check proves nothing)"
+# declared file scope, measured over the pinned range BASE..FINAL (pins verified above)
+if [ "$PINS_OK" = 1 ]; then
+  BAD=$(git diff --name-only "$BASE" "$FINAL" | grep -vE '^(tools/registry/|tests/registry/|docs/tasks/007a-registry-checkers-shape\.md$|docs/tasks/007a-verify\.sh$|docs/contracts/README\.md$)' || true)
+  [ -z "$BAD" ] && ok "every path changed in $BASE..$FINAL is within the declared file scope" || fail "files outside the declared scope: $BAD"
 fi
 check_oracle_coverage
 
