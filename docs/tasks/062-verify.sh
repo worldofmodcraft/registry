@@ -40,6 +40,12 @@ BASE062="e009ef0"            # registry origin/main when task 062 was cut: the f
 # second parent of merge eba11b7, `git rev-parse eba11b7^2`). An unreachable pin is a FAILURE naming the commit
 # (AC6.0), never a skip.
 FINAL062="82fa564"
+# Task 070 (fix round): each pinned own-change check in AC6 has a LIVE guard beside it, because a pinned range cannot see a
+# later task that deletes or renames a check. LIVE_IDS_SCRIPTS: scripts whose check ids (labels, for 008a) at HEAD must be a
+# superset of those at FINAL062 (adding checks stays green; deleting or renaming one goes red). LIVE_COUNT_GUARD=1: 006's
+# evaluated-check count at HEAD must be >= its count at FINAL062. (Both are variables so 070-verify.sh can mutate them away.)
+LIVE_IDS_SCRIPTS="006 008a 032 034 057"
+LIVE_COUNT_GUARD=1
 FAILURES=0
 pass() { printf 'PASS  %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n' "$1"; FAILURES=$((FAILURES + 1)); }
@@ -367,6 +373,14 @@ done
 echo "  note: C8.1 is the PASS sibling of C8.2 (one 'if' printed C8.1 or C8.2): retiring C8.2 retires the pair, not a fifth check."
 # Task 069: 034-verify.sh stays untouched since the base, EXCEPT for task 064's re-pin of C3.3 (the call-text line and
 # its comment naming task 064), judged by the helper's c33 command; C3.4 and every other line stay protected.
+# Task 070 (fix round): the LIVE guard beside the pinned id comparison above. Ids/labels at FINAL062 must all still exist at HEAD.
+for n in $LIVE_IDS_SCRIPTS; do
+    git -C "$ROOT" show "$FINAL062:docs/tasks/$n-verify.sh" > "$TMP/fin.$n.sh" 2>/dev/null
+    git -C "$ROOT" show "HEAD:docs/tasks/$n-verify.sh" > "$TMP/hd.$n.sh"
+    "${H[@]}" diffids "$n" "$TMP/fin.$n.sh" "$TMP/hd.$n.sh" "" > "$TMP/dl.$n" 2>&1; rc=$?
+    sed 's/^/  live: /' "$TMP/dl.$n"
+    [ $rc = 0 ] && [ "$PIN062_OK" = 1 ] && pass "AC6L.$n every check id of $n-verify.sh at $FINAL062 still exists at HEAD (live guard; additions are fine)" || fail "AC6L.$n a check id of $n-verify.sh that existed at $FINAL062 is gone at HEAD (deleted or renamed; see the line above)"
+done
 # Task 070: judged over 062's own range BASE062..FINAL062 (a later task may legitimately edit 034-verify.sh; that is
 # that task's own scope check's business, and 064's C3.3 re-pin is exactly such a later edit).
 git -C "$ROOT" diff -U0 "$BASE062" "$FINAL062" -- docs/tasks/034-verify.sh > "$TMP/034.diff" 2>/dev/null
@@ -381,6 +395,10 @@ run_verify "$TMP/f062" 006 "$TMP/f.006" > /dev/null
 n006_pass=$(grep -c '^PASS' "$TMP/f.006" 2>/dev/null); n006_fail=$(grep -c '^FAIL' "$TMP/f.006" 2>/dev/null)
 b006_pass=$(grep -c '^PASS' "$TMP/o.main.006"); b006_fail=$(grep -c '^FAIL' "$TMP/o.main.006")
 printf '  006-verify.sh evaluated checks: before %d (%d PASS, %d FAIL), after %d (%d PASS, %d FAIL)\n' $((b006_pass + b006_fail)) "$b006_pass" "$b006_fail" $((n006_pass + n006_fail)) "$n006_pass" "$n006_fail"
+if [ "$LIVE_COUNT_GUARD" = 1 ]; then   # Task 070 (fix round): the LIVE guard beside the pinned count: HEAD's 006 evaluates at least as many checks as at FINAL062
+    h006=$(( $(grep -c '^PASS' "$TMP/h.006") + $(grep -c '^FAIL' "$TMP/h.006") ))
+    [ "$PIN062_OK" = 1 ] && [ "$h006" -ge $((n006_pass + n006_fail)) ] && pass "AC6L.006.count 006-verify.sh evaluates $h006 checks at HEAD, at least the $((n006_pass + n006_fail)) it evaluated at $FINAL062 (live guard)" || fail "AC6L.006.count 006-verify.sh evaluates $h006 checks at HEAD, fewer than at $FINAL062 ($((n006_pass + n006_fail))): a check was deleted"
+fi
 [ "$PIN062_OK" = 1 ] && [ $((n006_pass + n006_fail)) -gt 0 ] && [ $((b006_pass + b006_fail - 4)) = $((n006_pass + n006_fail)) ] && pass "AC6.006.count 006-verify.sh evaluates exactly 4 fewer checks than before (the four retired)" || fail "AC6.006.count 006-verify.sh evaluated-check count did not drop by exactly 4"
 
 # --------------------------------------------------------------------------------------------------
@@ -395,6 +413,11 @@ if [ "$PIN062_OK" = 1 ] && "${H[@]}" own "$TMP/own.old.md" "$TMP/own.new.md" "$T
 else
     sed 's/^/ /' "$TMP/own.out"; fail "AC7.1 ownership.md change is wrong (see FAILED lines)"
 fi
+# Task 070 (fix round, F3): LIVE guard beside the pinned AC7.1: the stale quoting sentences are not re-introduced at HEAD.
+ONORM=$(git -C "$ROOT" show HEAD:contracts/ownership.md | tr -s '[:space:]' ' ' | sed 's/\*\*//g')
+if printf '%s' "$ONORM" | grep -qF 'The permitted in-place mutations' && ! printf '%s' "$ONORM" | grep -qF 'one permitted in-place mutation'; then
+    pass "AC7.4 contracts/ownership.md at HEAD has the new heading text and no stale 'one permitted in-place mutation' quote (live guard)"
+else fail "AC7.4 contracts/ownership.md at HEAD lacks 'The permitted in-place mutations' or carries the stale 'one permitted in-place mutation' quote again"; fi
 [ "${HEADRC_032:-1}" = 0 ] && pass "AC7.2 032-verify.sh passes on HEAD with the edited ownership.md" || fail "AC7.2 032-verify.sh does not pass on HEAD"
 if grep -q 'one permitted in-place' "$ROOT/docs/tasks/032-verify.sh"; then fail "AC7.3 032-verify.sh pins the old quote (it must be updated)"; else pass "AC7.3 032-verify.sh holds no pin on the old quote (nothing to update; there is no pin mutation to re-show)"; fi
 

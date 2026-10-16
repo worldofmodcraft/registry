@@ -80,6 +80,11 @@ else fail "AC2.3 added lines do not carry the full sentence as pattern"; fi
 if git -C "$TMP/head" diff --quiet "$BASE" "$FINAL" -- docs/contracts/README.md; then
     pass "AC2.4 docs/contracts/README.md is untouched (the old phrase was not brought back)"
 else fail "AC2.4 docs/contracts/README.md was modified"; fi
+# Task 070 (fix round, F2): LIVE guard beside the pinned AC2.2/AC2.3: at HEAD, 032-verify.sh's N5b still pins the full sentence.
+n5b=$(grep -A1 '^expect_hits_flow "N5b ' "$TMP/head/docs/tasks/032-verify.sh")
+if [ "$(printf '%s\n' "$n5b" | grep -c .)" = 2 ] && printf '%s' "$n5b" | grep -qF "'$SENTENCE'" && ! printf '%s' "$n5b" | grep -qF 'in any of the three tasks'; then
+    pass "AC2.6 032-verify.sh at HEAD: N5b still pins the full sentence '$SENTENCE' and not the old phrase (live guard)"
+else fail "AC2.6 032-verify.sh at HEAD: N5b does not pin the full sentence (or the old phrase is back): $(printf '%s' "$n5b" | tr '\n' ' ' | cut -c1-160)"; fi
 if grep -qF "$SENTENCE" "$TMP/head/docs/contracts/README.md"; then pass "AC2.5 the current README states the sentence"; else fail "AC2.5 the README lacks the sentence"; fi
 
 section "AC3 -- 032-verify.sh and 062-verify.sh pass at HEAD"
