@@ -74,8 +74,21 @@ crit "R1..R10      verdict rules"                                            "te
 crit "CLI          ownership_cli exit codes in unittest"                     "test_cli_exit_codes"
 
 # 3. structural checks
-SRC=$(ls tools/registry/ownership*.py | wc -l)
-[ "$SRC" -le 2 ] && ok "size: $SRC ownership source files (cap 2: ownership.py, ownership_cli.py)" || fail "size: $SRC ownership source files (cap 2)"
+# Task 071: the scope and size claims below describe 007b's OWN change, so they measure 007b's pinned PR range (registry PR #12,
+# merge 70cedca), never HEAD or origin/main: BASE007B = merge-base of 70cedca's parents, FINAL007B = 70cedca^2 (its last commit).
+# A later task that legitimately edits tools/registry/schema.py or adds a file no longer reddens this script.
+BASE007B="fb76ee5"
+FINAL007B="17555d9"
+PINS_OK=1
+for pin in "$BASE007B" "$FINAL007B"; do
+  if git merge-base --is-ancestor "$pin" HEAD 2>/dev/null; then ok "pinned commit $pin is reachable from HEAD"; else fail "pinned commit $pin is not reachable from HEAD (a pin that cannot be read proves nothing; fetch the full history)"; PINS_OK=0; fi
+done
+if [ "$PINS_OK" -eq 1 ]; then
+  SRC=$(git ls-tree -r --name-only "$FINAL007B" -- tools/registry | grep -cE '^tools/registry/ownership[^/]*\.py$')
+  [ "$SRC" -le 2 ] && ok "size: $SRC ownership source files at $FINAL007B (cap 2: ownership.py, ownership_cli.py)" || fail "size: $SRC ownership source files at $FINAL007B (cap 2)"
+else
+  fail "size: cannot measure ownership source files at $FINAL007B (pin unreachable)"
+fi
 LINES=$(cat tools/registry/ownership*.py | wc -l)
 echo "info  ownership source lines: $LINES (spec expects 300-450 changed, over the 300 cap; reason in the spec's Size section)"
 if grep -nE '324218296|324089373|4831207' tools/registry/ownership*.py >/dev/null; then fail "tools/ hard-codes a real account id"; else ok "no real account or App id hard-coded in tools/ownership*"; fi
@@ -100,14 +113,15 @@ CLI=(python3 tools/registry/ownership_cli.py --author-provider github --old-root
 "${CLI[@]}" --author-id 7 --r11-identity bogus mods/alice.tool/entry.json >/dev/null 2>&1; C=$?
 rm -rf "$D"
 [ "$A $B $C" = "0 1 2" ] && ok "CLI exit codes owner/stranger/usage = $A $B $C" || fail "CLI exit codes were '$A $B $C', expected '0 1 2'"
-# declared file scope (only when origin/main is known)
-if git rev-parse -q --verify origin/main >/dev/null 2>&1; then
-  BAD=$(git diff --name-only origin/main...HEAD | grep -vE '^(tools/registry/ownership[a-z_]*\.py|tests/registry/test_ownership[a-z_]*\.py|docs/tasks/007b-registry-checker-ownership\.md|docs/tasks/007b-verify\.sh|docs/contracts/README\.md)$' || true)
-  [ -z "$BAD" ] && ok "changed files all inside the declared scope" || fail "files outside the declared scope: $BAD"
-  CH=$(git diff --name-only origin/main...HEAD -- tools/registry | grep -v ownership || true)
-  [ -z "$CH" ] && ok "007a's modules are untouched" || fail "007a modules changed: $CH"
+# declared file scope of 007b's own change: BASE007B..FINAL007B (Task 071; pinned, see above). Live-property checks elsewhere stay live.
+if [ "$PINS_OK" -eq 1 ]; then
+  BAD=$(git diff --name-only "$BASE007B" "$FINAL007B" | grep -vE '^(tools/registry/ownership[a-z_]*\.py|tests/registry/test_ownership[a-z_]*\.py|docs/tasks/007b-registry-checker-ownership\.md|docs/tasks/007b-verify\.sh|docs/contracts/README\.md)$' || true)
+  [ -z "$BAD" ] && ok "changed files in the pinned range $BASE007B..$FINAL007B all inside the declared scope" || fail "files outside the declared scope: $BAD"
+  CH=$(git diff --name-only "$BASE007B" "$FINAL007B" -- tools/registry | grep -v ownership || true)
+  [ -z "$CH" ] && ok "007a's modules are untouched in the pinned range" || fail "007a modules changed: $CH"
 else
-  fail "scope check cannot run: no origin/main in this clone (fetch it; a skipped check proves nothing)"
+  fail "scope check cannot run: pinned range $BASE007B..$FINAL007B unreachable (a skipped check proves nothing)"
+  fail "007a-modules-unchanged check cannot run: pinned range unreachable"
 fi
 
 echo "SUMMARY failed=$FAILS"
