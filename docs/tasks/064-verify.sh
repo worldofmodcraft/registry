@@ -31,6 +31,7 @@ ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)" || exit 99
 [ -z "$NM" ] && NM="$ROOT/tools/dev/node_modules"   # default: the pinned ajv of tools/dev (npm ci --prefix tools/dev)
 BASE="ac22c8f"      # registry origin/main when task 064 was cut
 MAINB="70cedca"     # registry main merged into the branch (R1); the frame of the AC5 and file-scope checks
+FINAL="69f74a1d0c34367757814daaa7c019be08d13481"   # 064's last own commit; AC5 and file-scope measure MAINB..FINAL (fixed range), never HEAD (task 072 pinning rule)
 RED="4299b80"       # the commit that adds the new failing cases and nothing else (AC1)
 RED2="30ef7d5"      # amendment 1: the commit that turns the Q1 expected failures into normal tests and adds the translation tests, no fix
 TESTF="tests/registry/test_pattern_semantics.py"
@@ -42,7 +43,7 @@ section() { printf '\n== %s ==\n' "$1"; }
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
 
-for c in "$BASE" "$RED" "$RED2"; do
+for c in "$BASE" "$RED" "$RED2" "$MAINB" "$FINAL"; do
     if ! git -C "$ROOT" rev-parse --verify -q "$c^{commit}" >/dev/null; then
         fail "P0 commit $c is reachable"
         exit "$FAILURES"
@@ -149,24 +150,24 @@ for s in 007a 007b 008a 062 066 067 069 070; do
 done
 
 section "AC5 -- 034 C3.3 re-pinned, not weakened; C3.4 untouched; nothing else in a closed script"
-CLOSED=$(git -C "$TMP/head" diff --name-only "$MAINB" HEAD | grep -E '^docs/tasks/[0-9]+[a-z]?-verify\.sh$|^docs/tasks/(032|057)-' | grep -vE '^docs/tasks/(064-verify\.sh|057-corpus\.py)$')
+CLOSED=$(git -C "$TMP/head" diff --name-only "$MAINB" "$FINAL" | grep -E '^docs/tasks/[0-9]+[a-z]?-verify\.sh$|^docs/tasks/(032|057)-' | grep -vE '^docs/tasks/(064-verify\.sh|057-corpus\.py)$')
 if [ "$CLOSED" = "docs/tasks/034-verify.sh" ]; then pass "AC5.1 the only closed verify script changed is 034-verify.sh"; else fail "AC5.1 closed-script files changed: $CLOSED"; fi
-D=$(git -C "$TMP/head" diff -U0 "$MAINB" HEAD -- docs/tasks/034-verify.sh | grep -E '^[+-][^+-]')
+D=$(git -C "$TMP/head" diff -U0 "$MAINB" "$FINAL" -- docs/tasks/034-verify.sh | grep -E '^[+-][^+-]')
 DM=$(printf '%s\n' "$D" | grep -E '^-')
 DP=$(printf '%s\n' "$D" | grep -E '^\+')
 if [ "$(printf '%s\n' "$DM" | grep -c .)" = 1 ] && printf '%s\n' "$DM" | grep -qF "re\\.search(schema\\[\"pattern\"\\], instance)"; then pass "AC5.2 exactly one line removed: the old C3.3 call text"; else fail "AC5.2 removed lines: $DM"; fi
 if printf '%s\n' "$DP" | grep -qF 're\.search(_ecma_pattern(schema\["pattern"\]), instance)' && printf '%s\n' "$DP" | grep -q 'task 064'; then pass "AC5.3 added: the new C3.3 call text (still re.search) plus a comment naming task 064"; else fail "AC5.3 added lines: $DP"; fi
 if printf '%s\n' "$D" | grep -vE '^\+#' | grep -qE 'C3\.4|fullmatch'; then fail "AC5.4 C3.4 / fullmatch lines were edited"; else pass "AC5.4 C3.4 (no re.fullmatch call) is not edited"; fi
-if [ "$(git -C "$TMP/head" diff --stat "$MAINB" HEAD -- docs/tasks/034-verify.sh | tail -1 | grep -oE '[0-9]+ insertions?')" = "4 insertions" ]; then pass "AC5.5 034-verify.sh: 4 inserted lines (1 call, 3 comment), 1 removed"; else fail "AC5.5 unexpected 034-verify.sh diff size"; fi
-SRCDIFF=$(git -C "$TMP/head" diff -U0 "$MAINB" HEAD -- tools/registry/schema.py | grep -E '^[+-][^+-]')
-if [ -n "$SRCDIFF" ] && ! git -C "$TMP/head" diff -U0 "$MAINB" HEAD -- tools/registry/schema.py | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' | grep -qE 'def (check|validate|_strict_patterns|load_schema|loads_strict)'; then pass "AC5.6 tools/registry/schema.py: only ecma_pattern (translation, amendment 1) and the pattern call changed; no other function touched"; else fail "AC5.6 schema.py diff touches more than ecma_pattern"; fi
+if [ "$(git -C "$TMP/head" diff --stat "$MAINB" "$FINAL" -- docs/tasks/034-verify.sh | tail -1 | grep -oE '[0-9]+ insertions?')" = "4 insertions" ]; then pass "AC5.5 034-verify.sh: 4 inserted lines (1 call, 3 comment), 1 removed"; else fail "AC5.5 unexpected 034-verify.sh diff size"; fi
+SRCDIFF=$(git -C "$TMP/head" diff -U0 "$MAINB" "$FINAL" -- tools/registry/schema.py | grep -E '^[+-][^+-]')
+if [ -n "$SRCDIFF" ] && ! git -C "$TMP/head" diff -U0 "$MAINB" "$FINAL" -- tools/registry/schema.py | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' | grep -qE 'def (check|validate|_strict_patterns|load_schema|loads_strict)'; then pass "AC5.6 tools/registry/schema.py: only ecma_pattern (translation, amendment 1) and the pattern call changed; no other function touched"; else fail "AC5.6 schema.py diff touches more than ecma_pattern"; fi
 if grep -rn 're\.ASCII' "$TMP/head/tests/contracts/schema_check.py" "$TMP/head/tests/validation/schema_check.py" "$TMP/head/tools/registry/schema.py"; then fail "AC5.7 re.ASCII is still present in a pattern path"; else pass "AC5.7 no re.ASCII anywhere in the three pattern paths (amendment 1)"; fi
 
 section "File scope -- only the declared files differ from the base"
-extra=$(git -C "$TMP/head" diff --name-only "$MAINB" HEAD | grep -vxE 'tests/contracts/schema_check\.py|tests/validation/schema_check\.py|tools/registry/schema\.py|tests/registry/test_pattern_semantics\.py|docs/tasks/057-corpus\.py|docs/tasks/034-verify\.sh|docs/tasks/064-schema-check-end-anchor\.md|docs/tasks/064-verify\.sh')
+extra=$(git -C "$TMP/head" diff --name-only "$MAINB" "$FINAL" | grep -vxE 'tests/contracts/schema_check\.py|tests/validation/schema_check\.py|tools/registry/schema\.py|tests/registry/test_pattern_semantics\.py|docs/tasks/057-corpus\.py|docs/tasks/034-verify\.sh|docs/tasks/064-schema-check-end-anchor\.md|docs/tasks/064-verify\.sh')
 if [ -z "$extra" ]; then pass "S1 changed files are within the declared scope"; else fail "S1 out-of-scope files changed: $(printf '%s' "$extra" | tr '\n' ' ')"; fi
-if git -C "$TMP/head" diff --quiet "$MAINB" HEAD -- contracts; then pass "S2 no schema in contracts/ changed"; else fail "S2 contracts/ changed"; fi
-REM=$(git -C "$TMP/head" diff "$MAINB" HEAD -- tests | grep -E '^-[^-]')
+if git -C "$TMP/head" diff --quiet "$MAINB" "$FINAL" -- contracts; then pass "S2 no schema in contracts/ changed"; else fail "S2 contracts/ changed"; fi
+REM=$(git -C "$TMP/head" diff "$MAINB" "$FINAL" -- tests | grep -E '^-[^-]')
 # the only existing lines that change are the two schema_check pattern calls and (task 064) the message line below them
 if [ "$(printf '%s\n' "$REM" | grep -c .)" = 4 ] && [ "$(printf '%s\n' "$REM" | grep -cF 're.search(schema["pattern"], instance) is None:')" = 2 ] && [ "$(printf '%s\n' "$REM" | grep -cF 'does not match pattern')" = 2 ]; then
     pass "S3 existing test files: exactly the 2 validator pattern calls and their 2 message lines changed (no test removed or weakened)"
