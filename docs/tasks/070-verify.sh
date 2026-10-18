@@ -38,7 +38,7 @@ fail() { printf 'FAIL  %s\n' "$1"; FAILURES=$((FAILURES + 1)); }
 section() { printf '\n== %s ==\n' "$1"; }
 GITID=(-c user.name=verify070 -c user.email=verify070@invalid -c commit.gpgsign=false)
 HEADREV="$(git -C "$ROOT" rev-parse HEAD)"
-CLOSED="006 007a 008a 032 034 057 062 066 067 069"
+CLOSED="006 007a 007b 008a 032 034 057 062 066 067 069"
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
