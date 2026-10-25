@@ -242,3 +242,35 @@ the normative block with `pipeline.yml` on parsed keys (PT block paragraph), not
   independent spec review. Merge needs Ludwig.
 - 2026-10-25 manager: spec review round 1 FAIL (4 HIGH, 3 MED, 2 LOW); folded in; C20-C22 decided; round 2 pending.
 - 2026-10-25 manager: spec review round 2 FAIL on N1 (HIGH: the App key needs the same binding; repo-level copies must be deleted), N2/N3 LOW — all three fixed by the manager (C20 extended). **spec-approved** (manager, 2026-10-25 night).
+- 2026-10-25 doc-writer (opus 5.5, session 11c): executed. Worktree `~/wt/registry-task-082`, branch `task/082-pipeline-trigger-contract`,
+  cut from registry `origin/main`; **BASE = `4356583fb2360592a680f40bee396f9f23df35a4`** (merge of PR #18, task 075).
+  **FINAL = `afa48f20756c2fca793a0732cf7834e924663c3b`** (contract + README row + this log's spec copy); the verify script is
+  the next commit (`405695a`), this log entry the one after it.
+  - Delivered: `contracts/pipeline-trigger.md` (236 lines: house header, scope vs E12, rule-id explainer, PT1-PT12 each ending
+    in a `Source:` line, the normative trigger block, attack attempts, not-covered, questions); `docs/contracts/README.md` (E15
+    row in the file table, the intro now says four tasks / twelfth contract, the prose-document count is nine, the "does not
+    exist yet" bullet is gone); `docs/tasks/082-verify.sh`. Nothing else in the registry was touched.
+  - `082-verify.sh` (no flags), run 2026-10-25 on the committed state: exit **0**, 58 PASS, 0 FAIL. It covers AC1-AC11:
+    BASE/FINAL pins and ancestry, scope (`git diff --name-only BASE FINAL -- contracts/` = only the new file), control
+    FINAL=BASE red, file absent at BASE, header, rule ids, the normative block byte-compared with the script's literal,
+    every sentence of PT1-PT12 plus heading and Source line pinned by full text (a paragraph must equal the pinned pieces
+    joined, so a tail append is red), the nine `[unverified]` statements, the README row and bullet (control: bullet present at
+    BASE). 26 mutations, each applied to a copy of the FINAL blob, shown red, the copy restored from the blob and shown
+    sha256-identical and green: block `paths` -> `mods/**`, `cancel-in-progress: true`, `pull_request:` added, group renamed;
+    PT1 closed-list sentence deleted; PT5 "pending" dropped, zero-pending deleted, fault-ends-that-version deleted, `env:`
+    clause dropped; PT7 termination sentence deleted; PT10 exit 2 opens a T3 PR, log commit after the T3 PR; PT3 tail-append,
+    `refs/heads/*`, write-access sentence dropped, `signing` environment dropped, `write-back` environment dropped, "repo-level
+    copies deleted" dropped; PT11 `GITHUB_TOKEN` allowed, 30-minute deadline dropped; PT12 production key; PT6
+    `cancel-in-progress` edited; PT7 `[unverified]` dropped; a `PT13` id added; README bullet re-added and README row deleted.
+    Every one was red on the check named for it.
+  - AC12 (advisory): `--platform /home/ludwig/wt/session-11c` prints the normative block next to 008b design 1 and 3.
+  - Spec points the executor met and resolved without deciding anything (reported to the manager):
+    1. PT8's source line in the spec cites `docs/pipeline/build-pipeline.md` for "manual recovery". That file has no recovery
+       text (grep for re-run, retry, recover, already, exists finds nothing relevant), so the contract says "recovery is manual" and
+       "by hand" and does not cite that file. 008b is where the recovery procedure gets written.
+    2. PT7 as specified says "N pending versions -> at most N + 1 runs from pipeline-caused pushes". The tight bound is N runs
+       from pipeline-caused pushes (N + 1 counting the author's own merge). The spec's number is a valid upper bound, so it is
+       kept verbatim; the manager may want to tighten it.
+    3. PT9 cites "fail-closed" from `append-only.rules.md` "Coexistence" rather than `ownership.md`, because `ownership.md`
+       itself does not state the T1/T3 fail-closed default (the 007b checker does).
+    4. The spec's "Size" says ~170-280 lines; the contract is 236 lines.
