@@ -267,15 +267,19 @@ def check(author, files, reserved_base, membership_oracle, *, login=None, r11_id
             "ownership.md R11"))
     hits, unreadable = _takedown_paths(files)
     mixed = bool(hits or unreadable) and not shape
-    if mixed:
+    if mixed and hits:
         findings.append(report.finding(
-            ["R11"], "this PR contains a takedown mutation (a version's status becoming 'removed'"
-            + (f": {', '.join(hits)}" if hits else "") + (f"; could not be evaluated, so treated as one: "
-                                                         f"{', '.join(unreadable)}" if unreadable else "")
-            + ") together with other changes, or the takedown could not be told apart from them; whoever its author is, "
-            "a PR is a takedown only if it is nothing but takedown mutations opened by the platform's own identity",
+            ["R11"], f"this PR contains a takedown mutation (a version's status becoming 'removed': {', '.join(hits)}) "
+            "together with other changes; whoever its author is, a PR is a takedown only if it is nothing but takedown "
+            "mutations opened by the platform's own identity",
             "split the PR: removals alone in a platform-opened PR, every other change in its own PR (ADR-0041, "
             "Ludwig 2026-10-17)", "ownership.md R11"))
+    if mixed and unreadable:
+        findings.append(report.finding(
+            ["R11"], f"the entry at {', '.join(unreadable)} could not be evaluated (check_entry raised), so it cannot "
+            "be ruled out that this PR carries a takedown mutation; rejected fail-closed",
+            "make the merge-base and the PR's entry.json well formed so the diff can be classified",
+            "ownership.md R11, ADR-0121"))
     by_ns = {}
     for path in files:
         p = classify.parse_mod_path(path)
