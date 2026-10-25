@@ -53,6 +53,16 @@ class F1TrailingNewlineAppendOnly(unittest.TestCase):
                 self.assertEqual(t1_with(**{k: val})["verdict"], "accepted")
                 self.assertEqual(schema.check({ENTRY: entry(dict(published(), **{k: val}))})["verdict"], "accepted")
 
+    def test_f1_key_id_with_trailing_newline_is_rejected_task_065(self):
+        """Task 065 (the one deliberate assertion reversal, objective item 2b): contracts/signature-format.md
+        "Deriving `key_id`" says `key_id` is exactly 16 uppercase hex characters, so entry.schema.json now carries
+        `^[0-9A-F]{16}$` and a trailing newline is rejected. Before 065 there was no such rule and this value was
+        accepted (the signature half of the old test keeps that assertion unchanged)."""
+        for value in ("platform-2026-01\n", "E7A1B2C3D4E5F607\n"):
+            with self.subTest(key_id=value):
+                self.assertEqual(t1_with(key_id=value)["verdict"], "rejected")
+                self.assertEqual(schema.check({ENTRY: entry(dict(published(), key_id=value))})["verdict"], "rejected")
+
     def test_f1_t3_build_log_url_with_trailing_newline_is_rejected(self):
         v = append_only.check_entry(entry(pending()), entry(rejected(url="https://x.org/log\n")))
         self.assertEqual(v["verdict"], "rejected")
