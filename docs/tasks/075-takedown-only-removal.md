@@ -99,3 +99,26 @@ ADR-0041:15 alone.
   ToolError and four extra test cases, 032 T16/T17 named and the table row edit made additive, the line reference fixed,
   a named mutation entry. Round 2 pending.
 - 2026-10-18 manager: spec review round 2 PASS; minors a ("all cases") and b (ToolError → R11 finding naming the path) folded in. spec-approved. Dispatch after 064 merges.
+- 2026-10-25 implementer: executed. Base 79d5377. AC5 base runs from the worktree root: 032-verify.sh exit 0; 062-verify.sh
+  exit 1 on the first run ONLY because AC0 (057-verify V1) found no tools/dev/node_modules in this fresh worktree; with
+  WOM_NODE_MODULES pointing at another worktree's installed ajv (the documented 066 resolution order) 062 exits 0.
+  Pins (AC6): BASE 79d5377, RED 45c5be9 (tests/registry/test_ownership.py only; 17 tests fail on the old checker, incl.
+  the owner + removal + new version case), FIX 067a45d (ownership.md, ownership.py, test_ownership_mutations.py).
+  Checker: `_takedown_paths` (per element: T2 per check_entry, or raw published->removed; ToolError -> path reported and
+  the PR rejected by R11) and `mixed = bool(hits or unreadable) and not shape` -> one R11 finding naming the paths and
+  saying to split the PR. Contract: R3, R7, R11 (3 sentences + source ADR-0041:15 / Ludwig 2026-10-17 + detection
+  definition), table row (additive), Attempts 8 and 9. R11's pinned sentence "Every other author is rejected by `R3` or
+  `R7`" was kept verbatim (032 B5.4 pins it) and a following clause added. Mutations: b7-r11-mixed-pr-branch-removed,
+  b7-r11-mixed-ignores-checker-error, b7-r11-mixed-ignores-raw-status-change; full mutation run 59 mutations, not_red=0.
+  Final exits, one at a time from the worktree root on HEAD: 006 0, 007a 0, 007b 0, 008a 0, 032 0, 034 0, 057 0,
+  062 0, 064 0, 066 0, 067 0, 069 0, 070 0, 071 0, 075 0 (WOM_NODE_MODULES set; the machine was shared with other
+  agents' verify runs during the 062-071 pass, no script reddened).
+  Full `unittest discover -s tests/registry`: 272 tests OK.
+
+## Questions
+1. Existing test `test_r11_reject_malformed_t2_is_not_a_takedown` asserted `rules(v) == ["R3"]` for the platform
+   identity's PR with a removal lacking its `reason`. Task Approach 2 defines a raw published->removed change as a
+   takedown mutation, so R11 now also rejects it and the assertion became `["R11", "R3"]` (same inputs, strictly more
+   specific; no assertion removed). Flagged because it edits an existing assertion; Ludwig/manager to confirm at review.
+2. A malformed merge-base entry (check_entry raises ToolError) now yields an R11 finding even when the PR contains no
+   removal, per the fail-closed clause of Approach 2. Confirm that is intended.
