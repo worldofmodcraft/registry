@@ -164,7 +164,10 @@ else
 fi
 
 expect_hits "C3.3 schema_check.py matches 'pattern' with re.search (not re.fullmatch) -- the anchoring detail every pattern in this repo, old and new, is written around" \
-    're\.search(schema\["pattern"\], instance)' "$CHECK_FILE"
+    're\.search(_ecma_pattern(schema\["pattern"\]), instance)' "$CHECK_FILE"
+# Re-pinned by task 064 (successor of the original text 're.search(schema["pattern"], instance)', as task 067 re-pinned
+# 032 N5b): same intent -- search semantics, the schema's pattern, the instance -- now with ECMA-262 end-of-input
+# (`$` rewritten to \Z by _ecma_pattern) and ECMA escapes translated explicitly (amendment 1). re.fullmatch stays forbidden (C3.4, unedited).
 # Matches an actual call (open paren), never the docstring's plain-prose mention
 # of re.fullmatch (schema_check.py's own docstring names it by contrast, on
 # purpose, to explain why re.search is used instead).
