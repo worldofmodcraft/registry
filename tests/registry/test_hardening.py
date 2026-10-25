@@ -45,10 +45,11 @@ class F1TrailingNewlineAppendOnly(unittest.TestCase):
                 self.assertEqual(v["elements"][0]["rules"], ["rule 1"])
                 self.assertEqual(v["elements"][0]["attempted"], "T1")
 
-    def test_f1_signature_and_key_id_carry_no_pattern_so_a_trailing_newline_is_contract_valid(self):
-        """entry.schema.json gives these two minLength only, and signature-format.md says `signature` holds
-        multi-line text. Rejecting them would invent a rule; reported to the manager (task log, Questions)."""
-        for k, val in (("signature", "c" * 62 + "\n"), ("key_id", "platform-2026-01\n")):
+    def test_f1_signature_carries_no_pattern_so_a_trailing_newline_is_contract_valid(self):
+        """entry.schema.json gives `signature` minLength only, and signature-format.md says it holds multi-line
+        text. Rejecting it would invent a rule; reported to the manager (task log, Questions). Task 065 split the
+        `key_id` half of this test out: that field now has a rule (see the next test)."""
+        for k, val in (("signature", "c" * 62 + "\n"),):
             with self.subTest(field=k):
                 self.assertEqual(t1_with(**{k: val})["verdict"], "accepted")
                 self.assertEqual(schema.check({ENTRY: entry(dict(published(), **{k: val}))})["verdict"], "accepted")
