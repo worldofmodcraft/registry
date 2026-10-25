@@ -274,3 +274,7 @@ the normative block with `pipeline.yml` on parsed keys (PT block paragraph), not
     3. PT9 cites "fail-closed" from `append-only.rules.md` "Coexistence" rather than `ownership.md`, because `ownership.md`
        itself does not state the T1/T3 fail-closed default (the 007b checker does).
     4. The spec's "Size" says ~170-280 lines; the contract is 236 lines.
+  - **AC13 NOT RUN.** The rule is one closed verify script at a time, and for about 70 minutes (23:20-00:30 CET) other agents'
+    verify scripts (065, 064, 070, 069, 062, 067, 039a, 008a) were running without a quiet moment, so `docs/tasks/082-verify.sh
+    --full` (fresh clone of HEAD, every other `*-verify.sh` one at a time) was not started. It is not claimed green. Run it
+    before merge when the machine is quiet: `PYTHONDONTWRITEBYTECODE=1 bash docs/tasks/082-verify.sh --full`.
