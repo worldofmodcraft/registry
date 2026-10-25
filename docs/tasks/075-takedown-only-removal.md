@@ -122,3 +122,8 @@ ADR-0041:15 alone.
    specific; no assertion removed). Flagged because it edits an existing assertion; Ludwig/manager to confirm at review.
 2. A malformed merge-base entry (check_entry raises ToolError) now yields an R11 finding even when the PR contains no
    removal, per the fail-closed clause of Approach 2. Confirm that is intended.
+- 2026-10-25 implementer (review fix, PR #18 blocking finding): the R11 mixed-PR message wrongly claimed "contains a takedown
+  mutation" when only unreadable entries (check_entry raised) existed. Red commit 49a64f3 (test only, failing), fix 4509f57:
+  two separate R11 findings, "split the PR" only for real hits; unreadable entries get "could not be evaluated ... rejected
+  fail-closed (ADR-0121)". No contract change. 075-verify.sh pins unchanged (its checks cover base..HEAD). Results on
+  4509f57: 064-verify.sh exit 0 (no timeout), 075-verify.sh exit 0, tests/registry 273 tests OK.
