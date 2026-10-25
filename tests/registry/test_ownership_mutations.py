@@ -98,6 +98,17 @@ mut("b6-malformed-t2-authorised", [
     ["test_r11_reject_malformed_t2"])
 mut("b6-reserved-list-edit-beside-t2-authorised", [(PATHGATE, PATHGATE.replace("return False", "continue"))],
     ["test_r11_reject_reserved_list_edit_beside_a_t2"])
+mut("b7-r11-mixed-pr-branch-removed", [('    mixed = bool(hits or unreadable) and not shape', '    mixed = False')],
+    ["test_r11_reject_owner_bundling_a_removal", "test_r11_reject_platform_identity_bundling",
+     "test_r11_reject_mixed_pr_when_r11_is_unconfigured", "test_r11_reject_two_entries_one_removal",
+     "test_r11_reject_page_change_plus_a_removal", "test_r11_reject_t2_element_plus_a_malformed",
+     "test_r11_reject_checker_error_on_an_entry", "test_r11_reject_removal_in_a_reserved_namespace_bundled",
+     "test_r11_reject_a_takedown_plus_any_other_change"])
+mut("b7-r11-mixed-ignores-checker-error", [('    mixed = bool(hits or unreadable) and not shape', '    mixed = bool(hits) and not shape')],
+    ["test_r11_reject_checker_error_on_an_entry"])
+mut("b7-r11-mixed-ignores-raw-status-change", [('        if "T2" in kinds or raw:', '        if "T2" in kinds:')],
+    ["test_r11_reject_t2_element_plus_a_malformed", "test_r11_reject_malformed_t2_is_not_a_takedown"])
+
 mut("b6-r11-identity-read-from-reserved-list", [(
     'r11 = None if r11_identity is None else _pair(r11_identity, "r11_identity")',
     'r11 = _owner_pair({"owner": reserved_base["namespaces"]["mc"]["owner"]})')],

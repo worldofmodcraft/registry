@@ -16,7 +16,7 @@ reserved_base     the parsed reserved-namespaces.json AS AT THE MERGE-BASE (I4).
 membership_oracle (org, author) -> int, the HTTP status of the membership question: 204 member, 404 not a member,
                   anything else (302, 500, an exception) is R9's closed rejection (I5: a 302 is never followed).
 r11_identity      (provider, id) that R11 authorises for takedowns. Configuration, never data from the PR. None
-                  (the default) means R11 authorises nobody: every takedown PR is then rejected by R3/R7.
+                  (the default) means R11 authorises nobody: every takedown PR is then rejected by R11 (and R3/R7).
 pipeline_app_id   accepted and deliberately ignored: it confers nothing until task 008b amends ownership.md.
 namespace_owners  {namespace: (provider, id)} read from EVERY mods/*/entry.json at the merge-base (never from the
                   PR's files). A namespace is first published by a PR only if absent from this mapping and from the
@@ -109,6 +109,29 @@ def _takedown_shape(files):
         if v["findings"] or "T2" not in kinds or any(k not in ("unchanged", "T2") for k in kinds):
             return False
     return True
+
+
+def _takedown_paths(files):
+    """(hits, errors): the entry.json paths whose diff contains a takedown mutation, and those where 007a's check_entry
+    raised so the question cannot be answered (task 075). A path with both old and new present contains one iff any
+    element is a T2 per check_entry, or is a raw published -> removed status change; evaluated per element and
+    independent of findings elsewhere in the file or the PR, so a malformed neighbour cannot hide a removal."""
+    hits, errors = [], []
+    for path in sorted(files):
+        p = classify.parse_mod_path(path)
+        old, new = files[path]
+        if p is None or p[2] != "entry" or old is None or new is None:
+            continue
+        try:
+            kinds = [e["classification"] for e in append_only.check_entry(old, new, path)["elements"]]
+        except report.ToolError:
+            errors.append(path)
+            continue
+        raw = any(_status(o) == "published" and _status(n) == "removed"
+                  for o, n in zip(_versions(old), _versions(new)))
+        if "T2" in kinds or raw:
+            hits.append(path)
+    return hits, errors
 
 
 def _membership(ns, org, author, oracle):
@@ -242,6 +265,17 @@ def check(author, files, reserved_base, membership_oracle, *, login=None, r11_id
             "platform's own identity" + (" (R11 is not configured, so it authorises nobody)" if r11 is None else ""),
             "only the platform's own account may open a takedown (Ludwig, 2026-09-07); ordinary R3/R7 apply",
             "ownership.md R11"))
+    hits, unreadable = _takedown_paths(files)
+    mixed = bool(hits or unreadable) and not shape
+    if mixed:
+        findings.append(report.finding(
+            ["R11"], "this PR contains a takedown mutation (a version's status becoming 'removed'"
+            + (f": {', '.join(hits)}" if hits else "") + (f"; could not be evaluated, so treated as one: "
+                                                         f"{', '.join(unreadable)}" if unreadable else "")
+            + ") together with other changes, or the takedown could not be told apart from them; whoever its author is, "
+            "a PR is a takedown only if it is nothing but takedown mutations opened by the platform's own identity",
+            "split the PR: removals alone in a platform-opened PR, every other change in its own PR (ADR-0041, "
+            "Ludwig 2026-10-17)", "ownership.md R11"))
     by_ns = {}
     for path in files:
         p = classify.parse_mod_path(path)
