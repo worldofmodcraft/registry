@@ -357,13 +357,15 @@ class Takedowns(unittest.TestCase):
                 v = run(R11, files, r11_identity=R11)
                 self.assertEqual(v["verdict"], "rejected")
                 self.assertFalse(v["authorised_takedown"])
+                self.assertIn("R11", rules(v))  # task 075: R11 itself rejects the mixed PR
 
     def test_r11_reject_malformed_t2_is_not_a_takedown(self):
         old, new = takedown()[P("alice", "cooltool")]
         del new["versions"][0]["reason"]
         v = run(R11, {P("alice", "cooltool"): (old, new)}, r11_identity=R11)
         self.assertFalse(v["authorised_takedown"])
-        self.assertEqual(rules(v), ["R3"])
+        # task 075: a raw published->removed change counts as a takedown mutation, so R11 now also rejects this PR
+        self.assertEqual(rules(v), ["R11", "R3"])
 
     def test_r11_reject_reserved_list_edit_beside_a_t2_is_not_authorised(self):
         edited = {"schema_version": "1.0.0", "namespaces": {}}
@@ -390,6 +392,96 @@ class Takedowns(unittest.TestCase):
     def test_r11_pipeline_app_id_equal_to_r11_identity_behaves_as_r11_for_t2(self):
         v = run(R11, takedown(), r11_identity=R11, pipeline_app_id=R11[1])
         self.assertEqual(v["verdict"], "accepted")
+
+
+def removal_plus_new_version(ns="alice", name="cooltool", owner=None):
+    """One entry: element 0 is taken down (T2) and a pending version is appended in the same file."""
+    old, new = takedown(ns, name, owner=owner)[P(ns, name)]
+    new = copy.deepcopy(new)
+    new["versions"].append(pending("2.0.0", "c" * 40))
+    return {P(ns, name): (old, new)}
+
+
+class R11MixedPr(unittest.TestCase):
+    """Task 075: ANY PR whose diff contains a takedown mutation is rejected by R11 unless it is nothing but takedown
+    mutations from the platform's own identity (ADR-0041:15; Ludwig 2026-10-17). Whoever the author is."""
+
+    def assertR11Mixed(self, v, msg=""):
+        self.assertEqual(v["verdict"], "rejected", msg)
+        self.assertFalse(v["authorised_takedown"], msg)
+        hits = [f for f in v["findings"] if "R11" in f["rules"] and "split" in f["message"].lower()]
+        self.assertTrue(hits, f"no R11 finding saying to split the PR: {v['findings']!r} {msg}")
+
+    def test_r11_reject_owner_bundling_a_removal_with_a_new_version(self):
+        v = run(ALICE, removal_plus_new_version(), r11_identity=R11, namespace_owners={"alice": ALICE})
+        self.assertR11Mixed(v)
+
+    def test_r11_reject_platform_identity_bundling_a_removal_with_another_change(self):
+        t = takedown()
+        for label, files in {"appended version": removal_plus_new_version(),
+                             "page edit": dict(t, **{P("alice", "cooltool", "page"): ({"description": "a"}, {"description": "b"})}),
+                             "new entry": dict(t, **first_publish("zed", "thing", owner=own(OTHER_ID, "zed")))}.items():
+            with self.subTest(change=label):
+                self.assertR11Mixed(run(R11, files, r11_identity=R11, namespace_owners={"alice": ALICE}), label)
+
+    def test_r11_reject_mixed_pr_when_r11_is_unconfigured(self):
+        self.assertR11Mixed(run(ALICE, removal_plus_new_version(), r11_identity=None, namespace_owners={"alice": ALICE}))
+
+    def test_r11_reject_two_entries_one_removal_one_unrelated_edit(self):
+        files = dict(takedown("alice", "cooltool"), **add_version("alice", "other"))
+        for author in (ALICE, R11):
+            with self.subTest(author=author):
+                self.assertR11Mixed(run(author, files, r11_identity=R11, namespace_owners={"alice": ALICE}))
+
+    def test_r11_reject_page_change_plus_a_removal_from_the_owner(self):
+        files = dict(takedown(), **{P("alice", "cooltool", "page"): ({"description": "a"}, {"description": "b"})})
+        self.assertR11Mixed(run(ALICE, files, r11_identity=R11, namespace_owners={"alice": ALICE}))
+
+    def test_r11_reject_t2_element_plus_a_malformed_second_element(self):
+        old = ent("alice", "cooltool", published("1.0.0", "a" * 40), published("1.1.0", "b" * 40))
+        new = ent("alice", "cooltool", removed("1.0.0", "a" * 40), "garbage")
+        for author in (ALICE, R11):
+            with self.subTest(author=author):
+                self.assertR11Mixed(run(author, {P("alice", "cooltool"): (old, new)}, r11_identity=R11,
+                                        namespace_owners={"alice": ALICE}))
+
+    def test_r11_reject_checker_error_on_an_entry_fails_closed_naming_the_path(self):
+        old = ent("alice", "cooltool", "garbage")  # the merge-base entry is not well formed: check_entry raises
+        new = ent("alice", "cooltool", published(), pending("2.0.0", "c" * 40))
+        v = run(ALICE, {P("alice", "cooltool"): (old, new)}, r11_identity=R11, namespace_owners={"alice": ALICE})
+        self.assertEqual(v["verdict"], "rejected")
+        self.assertTrue([f for f in v["findings"] if "R11" in f["rules"] and P("alice", "cooltool") in f["message"]],
+                        v["findings"])
+
+    def test_r11_reject_unreadable_only_message_does_not_claim_a_takedown(self):
+        old = ent("alice", "cooltool", "garbage")  # check_entry raises; no removal is known to exist
+        new = ent("alice", "cooltool", published(), pending("2.0.0", "c" * 40))
+        v = run(ALICE, {P("alice", "cooltool"): (old, new)}, r11_identity=R11, namespace_owners={"alice": ALICE})
+        msgs = [f["message"] for f in v["findings"] if "R11" in f["rules"]]
+        self.assertTrue(msgs, v["findings"])
+        for m in msgs:
+            self.assertNotIn("contains a takedown mutation", m)
+            self.assertIn("could not be evaluated", m)
+            self.assertIn(P("alice", "cooltool"), m)
+            self.assertIn("ADR-0121", m)
+            self.assertNotIn("split the PR", m)
+
+    def test_r11_reject_removal_in_a_reserved_namespace_bundled_with_another_change(self):
+        files = dict(takedown("mc", "core", owner=ORG), **add_version())
+        self.assertR11Mixed(run(R11, files, r11_identity=R11, namespace_owners={"alice": ALICE, "mc": ("github", ORG_ID)}))
+        files = removal_plus_new_version("mc", "core", owner=ORG)
+        self.assertR11Mixed(run(ORG_MEMBER, files, r11_identity=R11, oracle=status(204),
+                                namespace_owners={"mc": ("github", ORG_ID)}))
+
+    def test_r11_accept_unchanged_neighbours_of_the_mixed_rule(self):
+        """Only the presence of a removal changes the verdict: an owner's plain new version is still accepted, the
+        platform's removal-only PR is still authorised, and an owner's removal-only PR is still rejected."""
+        self.assertEqual(run(ALICE, add_version(), r11_identity=R11, namespace_owners={"alice": ALICE})["verdict"], "accepted")
+        v = run(R11, takedown(n=2), r11_identity=R11, namespace_owners={"alice": ALICE})
+        self.assertEqual((v["verdict"], v["authorised_takedown"]), ("accepted", True))
+        v = run(ALICE, takedown(), r11_identity=R11, namespace_owners={"alice": ALICE})
+        self.assertEqual((v["verdict"], v["authorised_takedown"]), ("rejected", False))
+        self.assertNotIn("split", " ".join(f["message"] for f in v["findings"]).lower())
 
 
 def t1(ns="alice", signature=True):

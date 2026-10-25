@@ -123,7 +123,9 @@ nothing but the takedown mutation `contracts/append-only.rules.md` defines — `
 that PR at all**, so `I7`'s "every rule that applies to it" is satisfied without it. In every other
 case, and specifically including a PR that makes the takedown mutation *and* any other change,
 `R11` authorises nothing, `R3` applies in full, and the PR is rejected exactly as any other
-unauthorised PR is. The exception turns on `R11` *authorising*, never on the diff merely looking
+unauthorised PR is — and `R11` rejects it as well: a PR that makes the takedown mutation *and* any
+other change is rejected by `R11` whoever opened it, not left to `R3` alone (task 075; `R11` below). The
+exception turns on `R11` *authorising*, never on the diff merely looking
 like a takedown: Attempt 9 below is what that distinction is for.
 
 For a namespace that does not yet exist at the PR's merge-base with the target branch (no `old`
@@ -620,7 +622,9 @@ itself, applied to list membership instead of the ownership field.
 is a **current member** of the organisation `reserved-namespaces.json` records as that namespace's
 owner, **unless `R11` authorises the PR as a takedown**, on exactly the terms and with exactly the
 precedence `R3` states above: `R11` is evaluated first, and only a PR whose author is the
-platform's own identity and whose diff is nothing but the takedown mutation escapes this rule. The
+platform's own identity and whose diff is nothing but the takedown mutation escapes this rule; every
+other takedown PR, and any PR that bundles the takedown mutation with another change, is rejected by `R11`
+as well as by this rule (task 075). The
 exception is load-bearing here rather than decorative: **a GitHub organisation is not a member of
 itself**, so the platform's own identity fails this rule's membership test outright, and `R11` is
 the only thing that can authorise the platform's own legally-mandated takedown of a version inside
@@ -684,7 +688,7 @@ one: it is exactly as long as the set of verdict rules is, and it grows when the
 | `R8` | at a reserved namespace's first publish, `new.owner` is not what `reserved-namespaces.json` records | the namespace, the recorded owner, and the `owner` the PR proposed instead |
 | `R9` | the membership question answered neither `204` nor `404` — a `302`, or anything else | the status received, that membership could not be determined, and that the check fails closed rather than guessing |
 | `R10` | a `page.json` is touched where no `entry.json` exists at the merge-base and none is created in the same PR | the path, and that no entry exists for that namespace to own it |
-| `R11` | a takedown PR is opened by an account other than the platform's own identity | the namespace, the author's real `(provider, id)`, and that only the platform's own account may open a takedown (Ludwig, 2026-09-07) |
+| `R11` | a takedown PR is opened by an account other than the platform's own identity, or a takedown mutation appears in a PR that is not nothing but takedown mutations (whoever opened it) | the namespace, the author's real `(provider, id)`, and that only the platform's own account may open a takedown (Ludwig, 2026-09-07) |
 
 This is the same actionable-rejection standard `append-only.rules.md` and the asset scanner already
 meet — no generic "ownership check failed," always the specific mismatch a reader can act on.
@@ -883,7 +887,7 @@ implementing `R11` classifies the PR as "a takedown" from the presence of the st
 then exempts the *whole PR* from the ordinary rules. **What the contract does about it:** `R11`'s
 authorisation covers nothing but the takedown mutation itself, in the shape
 `append-only.rules.md` defines; a PR that makes any other change is not a takedown for `R11`'s
-purposes and is judged in full by `R3`/`R7` — which reject it either because the platform account
+purposes and is rejected by `R11` itself, whoever its author is (task 075), and judged in full by `R3`/`R7` — which reject it either because the platform account
 does not own that namespace (`R3`), or, for `mc:`/`test:`, because the organisation is not a member
 of itself and so fails the membership test (`R7`). `append-only.rules.md`'s own frozen-field rule is the second, independent
 barrier against the `owner`-editing variant, exactly as it is for Attempt 1.
@@ -903,7 +907,7 @@ does about it:** the precedence in `R3`, `R7` and `R11` is conditional on `R11` 
 PR — "if, and only if, `R11` authorises a PR as a takedown" — and never on the PR being
 takedown-shaped. `R11` authorises exactly one identity and, until task 007's implementer
 establishes which concrete `pulls.user.id` the platform's own takedown PRs carry, it authorises
-nobody at all, so the precedence never fires and every takedown PR is rejected by `R3`/`R7`. The
+nobody at all, so the precedence never fires and every takedown PR is rejected by `R11` and by `R3`/`R7`. The
 exception has two clauses that are load-bearing in opposite directions — **who** (`R11`'s identity
 test, this attempt) and **what** (`R11`'s "nothing but the takedown mutation itself", Attempt 8) —
 and removing either one opens one of the two attempts. `docs/tasks/032-verify.sh`'s `P` checks fail
@@ -1015,14 +1019,22 @@ namespaces the platform's own content lives in — so a rule scoped to namespace
 not own would leave review round 1's finding B5 alive there, and would leave the half of the
 precedence below that names `R7` firing on nothing at all (review round 4, finding 1). Every other
 author is rejected by `R3` or `R7` exactly as any other unauthorised PR is, with no takedown
-carve-out at all. The two conditions this rule names — the platform's own identity **and** the
+carve-out at all, and `R11` rejects that author's takedown PR as well (task 075). The two conditions this rule names — the platform's own identity **and** the
 diff described next — are not merely necessary but jointly **sufficient**: a PR meeting both is
 authorised, and no third condition is held back elsewhere in this document, which is what `R3`'s
 and `R7`'s "if, and only if" already say from their own ends. The authorisation
 covers **nothing but** the takedown mutation itself, in the shape `append-only.rules.md` defines: a
 PR that sets `status` to `"removed"` with its reason *and* makes any other change — a new version,
-an edited `owner`, a `page.json` rewrite — is not a takedown for this rule's purposes and is judged
-in full by the ordinary rules (Attempt 8 above). **How many takedown mutations one authorised PR
+an edited `owner`, a `page.json` rewrite — is not a takedown for this rule's purposes and is **rejected
+by `R11` itself, whoever its author is** (the platform's own identity included), with a finding that
+names `R11` and says to split the PR; its non-takedown part is still judged by the ordinary rules,
+but the presence of the removal alone fails the PR (Attempt 8 above). **Source of this amendment:**
+ADR-0041 line 15 (owners cannot remove a published version) and Ludwig, 2026-10-17 (removal policy,
+mission log, task 075): an earlier revision let an owner bundle a removal with a new version of their
+own entry and pass `R3` as the owner (task 007b review finding F2). A PR *contains* a takedown
+mutation iff some `entry.json` it changes has an element that `append-only.rules.md` classifies as the
+takedown mutation, or whose `status` goes from `"published"` to `"removed"`, whatever else is wrong
+with that file or PR; if that cannot be evaluated the PR is rejected by `R11` too (fail closed, ADR-0121). **How many takedown mutations one authorised PR
 may carry**: any number, provided the diff contains nothing else — "the takedown mutation" names a
 *kind* of change here, matching `append-only.rules.md`'s own heading "The permitted in-place mutations",
 so a legal notice covering three versions of one entry is one PR and not
@@ -1034,7 +1046,8 @@ was equally faithful to the words this rule already had, the manager chose the w
 takedown; it is what makes one openable at all, and the rules it lifts are named here rather than
 left for a reader to infer — Precedence: R11 over R3, R7.** For the one PR `R11` authorises, `R3`
 and `R7` do not apply, so `I7`'s "every rule that applies to it" is satisfied without them; for
-every other PR `R11` grants nothing and `R3`/`R7` apply in full. This sentence exists because
+every other PR `R11` grants nothing, `R3`/`R7` apply in full, and a PR containing a takedown mutation is
+rejected by `R11` itself. This sentence exists because
 review round 3 (finding 2) found the ruling written into this document's prose while its logic left
 `R3` unconditional, so a checker built faithfully from the text still rejected the platform's own
 legally-mandated takedown — review round 1's finding B5, unchanged. **A decision that lives in
@@ -1049,7 +1062,7 @@ rule above names the *identity*; task 007's implementer must establish which id 
 takedown PRs present and configure `R11` against it. The rule is required as written — that belief
 about the mechanism is what is untested, not the rule. **Until it is configured, `R11` authorises
 nobody:** the check fails closed, the precedence above never fires because there is no authorised
-PR for it to fire on, and every takedown PR is rejected by `R3`/`R7`, which is exactly today's
+PR for it to fire on, and every takedown PR is rejected by `R11` (and by `R3`/`R7`), which is exactly today's
 state. It never fails the other way, into "accept any PR that says it is a takedown."
 
 **I8 (MUST)** — passing this gate is not authorisation to merge. MANAGER.md §7 requires Ludwig's
