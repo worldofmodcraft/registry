@@ -173,12 +173,12 @@ others_running() { ps -eo args | grep -E 'docs/tasks/[^ ]*-verify\.sh' | grep -v
 wait_quiet() {
     local waited=0
     while others_running; do
-        [ "$waited" -ge 3600 ] && return 1
+        [ "$waited" -ge 21600 ] && return 1
         sleep 10; waited=$((waited + 10))
     done
     return 0
 }
-wait_quiet && pass "no other *-verify.sh is running" || fail "another *-verify.sh kept running for an hour"
+wait_quiet && pass "no other *-verify.sh is running" || fail "another *-verify.sh kept running for six hours"
 ( cd "$TMP/head" && CLEAN python3 -I -B -m unittest discover -s tests/registry > "$TMP/all.out" 2>&1 ); rc=$?
 [ "$rc" = 0 ] && pass "full tests/registry suite: $(grep -E '^Ran ' "$TMP/all.out")" || { fail "full tests/registry suite red"; tail -8 "$TMP/all.out"; }
 if [ -d "$NM/ajv" ] && command -v node >/dev/null 2>&1; then
