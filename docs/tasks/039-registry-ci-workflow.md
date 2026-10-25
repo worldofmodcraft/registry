@@ -342,3 +342,19 @@ permission scope) — its README at the pinned SHA.
 - Red commit: tests + fixtures + this spec/log committed before `ci_gate.py` exists; 77 tests, all 77 fail/error at that commit
   (checked: two argument-error tests would have passed spuriously on Python's "can't open file" exit 2, so they now also
   assert the composer's own stderr text; every exit-code assertion also requires `verdict.json`, which only the composer writes).
+- 2026-10-25 implementer (session 1), STOPPED at the size tripwire. Red commit `88c97ac` (77 tests, all failing). First draft of
+  `tools/registry/ci_gate.py` is **418 lines** (369 non-blank; plus `config/r11-identity.json`, 1 line): over the 300-line
+  per-session limit, so I stopped and reported instead of golfing it down. State, not green: 67 of 77 tests pass, 10 fail:
+  AC9 (config file only just added), `test_bad_path_components` (git `ls-tree` itself exits 128 on `..`/empty/`.` names, so the
+  guard never sees them: either the composer must treat that git failure as the answer or the test fragment changes),
+  `res.cls` has a trailing newline in 3 tests (test-side fix: strip), `test_emits_class_org_and_login_only` (`class=entry` came
+  back `other` for a plain add-version PR in the pre-pass: pre-pass bug to find), and 4 AC2 positive controls plus
+  `test_hostile_namespace_and_path_strings_never_reach_outputs` (not yet diagnosed; likely one shared cause in the accepted
+  path). AC8 scan (4 tests), AC3 matrix (almost all), AC4, AC5, AC6 symlink/gitlink/rename/argv-injection already pass.
+  Caps chosen: blob 1 MiB, tree total 32 MiB, 5000 entries per tree and per diff, 256 KiB of path text; git timeout 30 s,
+  checker timeout 120 s. Notes for session 2: comment.md line 1 is `<!-- registry-ci-gate -->`; OUT/outputs keys are exactly
+  `result route class pr head_sha merge_base` (full gate) and `class [org login]` (pre-pass), nothing on exit 2 except
+  `result=undecided`; the comment job must still list comments with `--paginate`; AC3 "absent from the workflow" for
+  `--tools-dir` is still to be asserted in test_ci_workflow.py; blobs are read one `git cat-file` per file (fine for v1,
+  `--batch` if the registry grows to thousands). Question for the manager: the total estimate (400-500 lines) is already
+  exceeded by the composer alone; continue as C19 (one PR), or fire the 039a/039b split fallback?
