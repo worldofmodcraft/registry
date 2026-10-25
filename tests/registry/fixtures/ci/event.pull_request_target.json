@@ -1,0 +1,13 @@
+{
+  "action": "opened",
+  "number": 7,
+  "pull_request": {
+    "number": 7,
+    "state": "open",
+    "user": {"login": "alice", "id": 100200300, "type": "User"},
+    "head": {"sha": "0000000000000000000000000000000000000000", "ref": "patch-1", "label": "alice:patch-1"},
+    "base": {"ref": "main", "sha": "0000000000000000000000000000000000000000", "repo": {"full_name": "worldofmodcraft/registry"}}
+  },
+  "repository": {"full_name": "worldofmodcraft/registry"},
+  "sender": {"login": "alice", "id": 100200300}
+}
