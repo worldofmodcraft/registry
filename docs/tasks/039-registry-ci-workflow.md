@@ -358,3 +358,11 @@ permission scope) — its README at the pinned SHA.
   `--tools-dir` is still to be asserted in test_ci_workflow.py; blobs are read one `git cat-file` per file (fine for v1,
   `--batch` if the registry grows to thousands). Question for the manager: the total estimate (400-500 lines) is already
   exceeded by the composer alone; continue as C19 (one PR), or fire the 039a/039b split fallback?
+- 2026-10-25 manager: session 1 hit the size tripwire (composer 418 lines, 369 non-blank). **Split fallback applied (C23):**
+  **039a** = this branch's composer work: `ci_gate.py`, `config/r11-identity.json`, `test_ci_gate.py`, fixtures; criteria AC1-AC6
+  (incl. AC2a), AC8, AC9, AC11 (own-change pins), AC12 (live guards, fresh clone); its own `docs/tasks/039a-verify.sh`; its own
+  PR (merge needs Ludwig). Source size over the 300 soft cap is accepted with this justification: the composer is one cohesive
+  trust-boundary unit; splitting it further would review its parts without each other. **039b** (later task, after 039a merges)
+  = the workflow YAML, AC7, AC10, CONTRIBUTING/README, the platform runbook M9/M10/M11 note, `039b-verify.sh`. Rule for the
+  failing path-component test: any git failure on a crafted tree (e.g. `ls-tree` exit 128) maps to composer exit 2; the test
+  asserts exit 2 and nothing written outside the temp root, not which guard fired.

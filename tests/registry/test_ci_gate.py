@@ -162,7 +162,7 @@ class Result:
     def __init__(self, code, out, stderr=""):
         self.code, self.out, self.stderr = code, Path(out), stderr
         self.comment = self._read("comment.md")
-        self.cls = self._read("class")
+        self.cls = self._read("class").strip()
         self.outputs = self._read("outputs")
         v = self._read("verdict.json")
         self.verdict = json.loads(v) if v else None
@@ -777,8 +777,9 @@ class AC6TreeHandlingAndArgv(Base):
         t = w.raw_tree([("100644", "entry.json", w.blob("{}"))])
         for comp in (b"..", b".", b"", b".git", b".GIT"):
             entries = [("40000", comp, t)]
-            self.assert_materialise_fails(w, entries, "component")
-            self.e2e_exit_2(w, entries, "component")
+            # git itself may refuse such a tree (ls-tree/diff exit 128); either guard is exit 2 (manager, C23)
+            self.assert_materialise_fails(w, entries, "")
+            self.e2e_exit_2(w, entries, "")
 
     def test_duplicate_entry(self):
         w = self.world()

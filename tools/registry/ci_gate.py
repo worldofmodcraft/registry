@@ -26,8 +26,7 @@ from pathlib import Path
 GIT_TIMEOUT, CHECKER_TIMEOUT = 30, 120
 MAX_BLOB_BYTES, MAX_TOTAL_BYTES, MAX_ENTRIES = 1 << 20, 32 << 20, 5000  # per blob, per tree, per tree / per diff
 MARKER = "<!-- registry-ci-gate -->"
-ENV = {"PATH": "/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_TERMINAL_PROMPT": "0",
-       "PYTHONDONTWRITEBYTECODE": "1", "PYTHONUTF8": "1"}
+ENV = {"PATH": "/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_TERMINAL_PROMPT": "0"}
 SHA, NAME = r"[0-9a-f]{40}", r"[A-Za-z0-9](-?[A-Za-z0-9]){0,38}"
 CLASSES = ("entry", "page-only", "reserved-namespace", "other")
 STRICT = {k: re.compile(v) for k, v in {  # the only lines OUT/outputs may hold (never PR free text)
@@ -55,7 +54,7 @@ def _git(repo, *args, timeout=GIT_TIMEOUT, ok=(0,)):
 
 def _checker(tools_dir, script, args, timeout):
     try:
-        r = subprocess.run([sys.executable, "-I", str(Path(tools_dir) / script), *args], capture_output=True,
+        r = subprocess.run([sys.executable, "-I", "-B", str(Path(tools_dir) / script), *args], capture_output=True,
                            timeout=timeout, env=ENV, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
         return None, b"", b""
