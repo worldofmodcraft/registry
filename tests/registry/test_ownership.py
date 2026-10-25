@@ -453,6 +453,19 @@ class R11MixedPr(unittest.TestCase):
         self.assertTrue([f for f in v["findings"] if "R11" in f["rules"] and P("alice", "cooltool") in f["message"]],
                         v["findings"])
 
+    def test_r11_reject_unreadable_only_message_does_not_claim_a_takedown(self):
+        old = ent("alice", "cooltool", "garbage")  # check_entry raises; no removal is known to exist
+        new = ent("alice", "cooltool", published(), pending("2.0.0", "c" * 40))
+        v = run(ALICE, {P("alice", "cooltool"): (old, new)}, r11_identity=R11, namespace_owners={"alice": ALICE})
+        msgs = [f["message"] for f in v["findings"] if "R11" in f["rules"]]
+        self.assertTrue(msgs, v["findings"])
+        for m in msgs:
+            self.assertNotIn("contains a takedown mutation", m)
+            self.assertIn("could not be evaluated", m)
+            self.assertIn(P("alice", "cooltool"), m)
+            self.assertIn("ADR-0121", m)
+            self.assertNotIn("split the PR", m)
+
     def test_r11_reject_removal_in_a_reserved_namespace_bundled_with_another_change(self):
         files = dict(takedown("mc", "core", owner=ORG), **add_version())
         self.assertR11Mixed(run(R11, files, r11_identity=R11, namespace_owners={"alice": ALICE, "mc": ("github", ORG_ID)}))
