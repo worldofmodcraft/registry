@@ -322,3 +322,9 @@ the 008 umbrella; the Q2 follow-up.
   does not have the script yet)**: `compared=3 differ=0` against the FINAL clone.
   **AC11 (live): NOT RUN.** Pending: Ludwig finishes runbook step M12; then the manager runs
   `docs/tasks/092-verify.sh --live` (unauthenticated `curl`, no credentials) and pastes the capture here; it gates the merge (Q7).
+  **AC12 closed-script sweep: PENDING (not run).** `docs/tasks/092-verify.sh --closed --nm <node_modules with ajv>` was started and polled the
+  machine for ~15 minutes; `ps -eo args | grep -E 'docs/tasks/.*-verify\.sh'` never showed it quiet (other sessions' 007a, 062, 064, 065, 067,
+  069, 070 verify runs were in flight, e.g. `062-verify.sh /tmp/tmp.W34JSvI2pC/L/tools/dev/node_modules`). The run was stopped before sweeping
+  anything, so no closed script was measured concurrently with another. To complete: when `ps` shows no other `*-verify.sh`, run
+  `PYTHONDONTWRITEBYTECODE=1 docs/tasks/092-verify.sh --closed --nm /home/ludwig/wt/registry-task-084/tools/dev/node_modules` (foreground; it
+  polls up to 60 minutes itself) and paste the result here. After merge, 039a's sweep calls 092 in default mode (no node, no network, no flag).
