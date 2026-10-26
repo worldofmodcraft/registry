@@ -200,3 +200,14 @@ reuse `tests/registry/support.py`, whose `key_id` value this task changes). Befo
    if you want one; I did not add it.
 6. **Registry-commit reference for the site README.** The site's `schemas/README.md` "taken on" line names the registry branch
    tip it was synced from (the PR merge commit does not exist yet); the schema bytes are what `check-schemas` enforces.
+- 2026-10-26 implementer: **final evidence.** `065-verify.sh --mutate` in the worktree at `4707254`: exit 0, `ALL CHECKS PASSED`
+  (AC1 red-first incl. each of the 10 value/state cases and the hardening test red on `3b53628`; AC2 three validators agree;
+  AC3 diffs; AC5 7 embedded JSON blocks, 4 with `key_id`, all valid; AC6 pattern removed -> 34 failing subtests, lowercase
+  allowed -> 7, `{16,}` -> 7, each including a criterion-1 rejection test; AC4 is skipped under `--mutate`).
+  `065-verify.sh` (no flag) in a **fresh clone from GitHub** of `task/065-entry-schema-key-id` at `4707254` with
+  `WOM_NODE_MODULES` set (another agent's 078/051 scripts ran concurrently for part of it), about 2 hours 5 minutes:
+  49 PASS, 1 FAIL, exit 1. Green: AC1.1-AC1.9, AC2.1-AC2.4, AC3.1-AC3.5, AC4.1 (contracts 32, registry 284, validation 66,
+  pipeline 114 tests), AC4.2 for 007a, 007b, 008a, 032, 034, 062, 064, 066, 067, 069, 070, 071, AC4.3 006, AC5.1. The one
+  failure is the known `AC4.2 075-verify.sh exits 1 at HEAD; failing: FAIL out-of-scope files in base..HEAD:
+  contracts/append-only.rules.md` (Questions 3). The site PR (worldofmodcraft/site#4) is independent of that and its evidence
+  is in the entry above. PRs: registry #19, site #4; neither merged (Ludwig's approval, signing-adjacent contract).
