@@ -37,15 +37,16 @@ TIP=3348f0a52b95887c034c1835b604433c19237f6c    # last commit before this script
                                                 # with registry main cannot redden it. Commits after TIP change only the task log and
                                                 # this script (both in scope), which no check can pin without a cycle.
 
-MODE_MUTATE=0; MODE_LIVE=0; MODE_CLOSED=0; SITE=""; NMARG=""
+MODE_MUTATE=0; MODE_LIVE=0; MODE_SELFTEST=0; MODE_CLOSED=0; SITE=""; NMARG=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --mutate) MODE_MUTATE=1 ;;
         --live) MODE_LIVE=1 ;;
+        --live-selftest) MODE_SELFTEST=1 ;;
         --closed) MODE_CLOSED=1 ;;
         --site) shift; SITE="${1:-}"; [ -n "$SITE" ] || { echo "092-verify: --site needs a directory" >&2; exit 99; } ;;
         --nm) shift; NMARG="${1:-}"; [ -n "$NMARG" ] || { echo "092-verify: --nm needs a directory" >&2; exit 99; } ;;
-        *) echo "usage: 092-verify.sh [--mutate] [--live] [--closed [--nm DIR]] [--site DIR]" >&2; exit 99 ;;
+        *) echo "usage: 092-verify.sh [--mutate] [--live] [--live-selftest] [--closed [--nm DIR]] [--site DIR]" >&2; exit 99 ;;
     esac
     shift
 done
@@ -755,32 +756,38 @@ PY
 fi
 
 # ---------------------------------------------------------------------------------------------------------------------
+hop1() {  # hop1 URL -> prints "CODE|redirect_url|raw Location header" (no -L: hop 1 is invisible to auto-following clients)
+    local w loc
+    w="$(curl -s -o /dev/null --max-time 30 -D "$TMP/hdr" -w '%{http_code} %{redirect_url}' "$1")" || { echo "curl-exit-$?||"; return; }
+    loc="$(tr -d '\r' < "$TMP/hdr" | awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]*: */, ""); print; exit}')"
+    echo "${w%% *}|${w#* }|$loc"
+}
+# The AC11 verdict functions (code, redirect_url, raw Location [, wanted]). Live mode and --live-selftest call the same ones.
+is3xx() { case "$1" in 301|302|307|308) return 0 ;; *) return 1 ;; esac; }
+live_check() {  # live_check LABEL URL EXPECTED_LOCATION
+    local r code ru raw
+    r="$(hop1 "$2")"; code="${r%%|*}"; ru="$(echo "$r" | cut -d'|' -f2)"; raw="$(echo "$r" | cut -d'|' -f3-)"
+    printf '  $ curl -s -o /dev/null -w "%%{http_code} %%{redirect_url}" %s\n    -> %s %s\n    raw Location: %s\n' "$2" "$code" "$ru" "$raw"
+    if ac11_exact_ok "$code" "$ru" "$raw" "$3"; then pass "$1: $code, Location byte-equal to the derived target"
+    else fail "$1: expected 301/302/307/308 with Location $3, got '$code' redirect_url '$ru' raw '$raw'"; fi
+}
+ac11_exact_ok() { is3xx "$1" && [ "$2" = "$4" ] && [ "$3" = "$4" ]; }   # AC11a/b: status class + redirect_url AND raw Location byte-equal
+ac11c_ok() { is3xx "$1" && [ "$2" = "$EX1_T" ]; }                      # AC11c: no query forwarded
+ac11f_ok() { is3xx "$1" && case "$2" in https://archive.worldofmodcraft.com/*) true ;; *) false ;; esac; }   # AC11f
+
+# ---------------------------------------------------------------------------------------------------------------------
 section "AC11 -- LIVE (hop 1 of the real front)"
 if [ "$MODE_LIVE" = 0 ]; then
     echo "LIVE not run; merge gate satisfied by the log capture of <date> (run with --live after runbook step M12; paste the capture in the task log)"
 else
     command -v curl >/dev/null 2>&1 || { fail "AC11 prerequisite: curl is missing"; }
     echo "LIVE capture $(date -u +%Y-%m-%dT%H:%M:%SZ)  host: $(uname -n)  curl: $(curl --version | head -1)"
-    hop1() {  # hop1 URL -> prints "CODE|redirect_url|raw Location header" (no -L: hop 1 is invisible to auto-following clients)
-        local w loc
-        w="$(curl -s -o /dev/null --max-time 30 -D "$TMP/hdr" -w '%{http_code} %{redirect_url}' "$1")" || { echo "curl-exit-$?||"; return; }
-        loc="$(tr -d '\r' < "$TMP/hdr" | awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]*: */, ""); print; exit}')"
-        echo "${w%% *}|${w#* }|$loc"
-    }
-    is3xx() { case "$1" in 301|302|307|308) return 0 ;; *) return 1 ;; esac; }
-    live_check() {  # live_check LABEL URL EXPECTED_LOCATION
-        local r code ru raw
-        r="$(hop1 "$2")"; code="${r%%|*}"; ru="$(echo "$r" | cut -d'|' -f2)"; raw="$(echo "$r" | cut -d'|' -f3-)"
-        printf '  $ curl -s -o /dev/null -w "%%{http_code} %%{redirect_url}" %s\n    -> %s %s\n    raw Location: %s\n' "$2" "$code" "$ru" "$raw"
-        if is3xx "$code" && [ "$ru" = "$3" ] && [ "$raw" = "$3" ]; then pass "$1: $code, Location byte-equal to the derived target"
-        else fail "$1: expected 301/302/307/308 with Location $3, got '$code' redirect_url '$ru' raw '$raw'"; fi
-    }
     live_check "AC11a tarball URL of mc.hello-world-1.0.0" "$EX1_URL" "$EX1_T"
     live_check "AC11b '+' build URL keeps the literal +" "$EX2_URL" "$EX2_T"
     live_check "AC11b uppercase prerelease keeps its case" "$RC_URL" "$RC_T"
-    r="$(hop1 "$EX1_URL?x=1")"; code="${r%%|*}"; ru="$(echo "$r" | cut -d'|' -f2)"
+    r="$(hop1 "$EX1_URL?x=1")"; code="${r%%|*}"; ru="$(echo "$r" | cut -d'|' -f2)"; raw="$(echo "$r" | cut -d'|' -f3-)"
     printf '  $ curl ... %s?x=1\n    -> %s %s\n' "$EX1_URL" "$code" "$ru"
-    if is3xx "$code" && [ "$ru" = "$EX1_T" ]; then pass "AC11c a request with ?x=1 gets a Location without any query"
+    if ac11c_ok "$code" "$ru" "$raw"; then pass "AC11c a request with ?x=1 gets a Location without any query"
     else fail "AC11c STOP: the front must send no query (M12 is path-only); got '$code' '$ru' -- record this and change the contract text, do not patch the check"; fi
     printf '  $ curl -sI https://archive.worldofmodcraft.com/\n'
     curl -sI --max-time 30 https://archive.worldofmodcraft.com/ > "$TMP/root.hdr" 2> "$TMP/root.err"; rc=$?
@@ -794,11 +801,87 @@ else
         6) fail "AC11e the name does not resolve (curl exit 6): runbook step M12 is not done" ;;
         *) fail "AC11e plain curl failed (exit $rc: $(head -c 200 "$TMP/tls.err"))" ;;
     esac
-    r="$(hop1 "http://archive.worldofmodcraft.com/mc.hello-world-1.0.0/mc.hello-world-1.0.0.tar.gz")"; code="${r%%|*}"; ru="$(echo "$r" | cut -d'|' -f2)"
+    r="$(hop1 "http://archive.worldofmodcraft.com/mc.hello-world-1.0.0/mc.hello-world-1.0.0.tar.gz")"; code="${r%%|*}"; ru="$(echo "$r" | cut -d'|' -f2)"; raw="$(echo "$r" | cut -d'|' -f3-)"
     printf '  $ curl ... http://archive.worldofmodcraft.com/mc.hello-world-1.0.0/mc.hello-world-1.0.0.tar.gz\n    -> %s %s\n' "$code" "$ru"
-    if is3xx "$code" && case "$ru" in https://archive.worldofmodcraft.com/*) true ;; *) false ;; esac; then pass "AC11f http:// is redirected ($code) to an https Location"
+    if ac11f_ok "$code" "$ru" "$raw"; then pass "AC11f http:// is redirected ($code) to an https Location"
     else fail "AC11f http:// did not redirect to https://archive.worldofmodcraft.com/... (got '$code' '$ru')"; fi
     echo "  not proven by AC11: that GitHub resolves a '+' tag or keeps a '+' asset filename (Q10 covers it; 008b criterion 6 / task 010 carry the end-to-end bytes check)."
+fi
+
+# ---------------------------------------------------------------------------------------------------------------------
+# --live-selftest: the AC11 verdict functions against a throwaway fake front on 127.0.0.1 (python3 stdlib). OFFLINE: the real host is never
+# contacted (every URL below is http://127.0.0.1:PORT/...). Each case names the verdict function, the expected verdict, and what the fake sends.
+if [ "$MODE_SELFTEST" = 1 ]; then
+    section "AC11 --live-selftest -- the AC11 verdict functions against a local fake front (never the real host)"
+    command -v curl >/dev/null 2>&1 || fail "selftest prerequisite: curl is missing"
+    cat > "$TMP/fakefront.py" <<'PY'
+import http.server, sys
+EX1_T = sys.argv[2]
+ARCH = "https://archive.worldofmodcraft.com/mc.hello-world-1.0.0/mc.hello-world-1.0.0.tar.gz"
+# path -> (status, Location or None)
+CASES = {
+    "/http-to-github": (302, EX1_T),
+    "/http-to-github-301": (301, EX1_T),
+    "/http-to-github-308": (308, EX1_T),
+    "/http-to-archive": (302, ARCH),
+    "/wrong-target": (302, "https://github.com/worldofmodcraft/archive/releases/download/other/other.tar.gz"),
+    "/query": (302, EX1_T + "?x=1"),
+    "/clean": (302, EX1_T),
+    "/upper-scheme-host": (302, "HTTPS://GITHUB.COM" + EX1_T[len("https://github.com"):]),
+    "/dot-segment": (302, EX1_T.replace("/download/", "/download/x/../")),   # curl normalises ../ in redirect_url; the raw header keeps it
+    "/trailing-slash": (302, EX1_T + "/"),
+    "/status-303": (303, EX1_T),
+    "/status-200-with-location": (200, EX1_T),
+    "/status-404": (404, None),
+}
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        code, loc = CASES.get(self.path.split("?")[0], (404, None))
+        self.send_response(code)
+        if loc is not None:
+            self.send_header("Location", loc)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+    def log_message(self, *a):
+        pass
+srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+open(sys.argv[1], "w").write(str(srv.server_address[1]))
+srv.serve_forever()
+PY
+    python3 "$TMP/fakefront.py" "$TMP/fake.port" "$EX1_T" & FAKE_PID=$!
+    for _ in $(seq 1 50); do [ -s "$TMP/fake.port" ] && break; sleep 0.1; done
+    if [ ! -s "$TMP/fake.port" ]; then fail "selftest: the fake front did not start"; else
+        FAKE="http://127.0.0.1:$(cat "$TMP/fake.port")"
+        selftest_case() {  # selftest_case LABEL VERDICT-FUNCTION PATH WANT(PASS|FAIL)
+            local r code ru raw got
+            r="$(hop1 "$FAKE$3")"; code="${r%%|*}"; ru="$(echo "$r" | cut -d'|' -f2)"; raw="$(echo "$r" | cut -d'|' -f3-)"
+            case "$2" in
+                f) ac11f_ok "$code" "$ru" "$raw" ;;
+                c) ac11c_ok "$code" "$ru" "$raw" ;;
+                exact) ac11_exact_ok "$code" "$ru" "$raw" "$EX1_T" ;;
+            esac && got=PASS || got=FAIL
+            if [ "$got" = "$4" ]; then pass "selftest $1: verdict $got as required (code '$code', redirect_url '$ru', raw '$raw')"
+            else fail "selftest $1: verdict $got, required $4 (code '$code', redirect_url '$ru', raw '$raw')"; fi
+        }
+        selftest_case "AC11f http -> https GitHub target (302)"          f /http-to-github PASS
+        selftest_case "AC11f http -> https GitHub target (301)"          f /http-to-github-301 PASS
+        selftest_case "AC11f http -> https GitHub target (308)"          f /http-to-github-308 PASS
+        selftest_case "AC11f http -> https://archive.worldofmodcraft.com" f /http-to-archive FAIL
+        selftest_case "AC11f wrong target"                               f /wrong-target FAIL
+        selftest_case "AC11f target plus a query"                        f /query FAIL
+        selftest_case "AC11f target plus a trailing slash"               f /trailing-slash FAIL
+        selftest_case "AC11f status 303 (not in the set)"                f /status-303 FAIL
+        selftest_case "AC11f status 200 carrying a Location"             f /status-200-with-location FAIL
+        selftest_case "AC11f status 404"                                 f /status-404 FAIL
+        selftest_case "AC11c clean Location"                             c /clean PASS
+        selftest_case "AC11c raw Location carries a query"               c "/query?x=1" FAIL
+        selftest_case "AC11c raw Location differs only in scheme/host case" c /upper-scheme-host FAIL
+        selftest_case "AC11c raw Location has a dot segment (redirect_url is normalised and looks right)" c /dot-segment FAIL
+        selftest_case "AC11a/b exact: clean Location"                    exact /clean PASS
+        selftest_case "AC11a/b exact: raw Location differs only in scheme/host case" exact /upper-scheme-host FAIL
+        selftest_case "AC11a/b exact: wrong target"                      exact /wrong-target FAIL
+    fi
+    kill "$FAKE_PID" 2>/dev/null; wait "$FAKE_PID" 2>/dev/null
 fi
 
 # ---------------------------------------------------------------------------------------------------------------------
