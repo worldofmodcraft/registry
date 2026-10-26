@@ -380,3 +380,13 @@ the 008 umbrella; the Q2 follow-up.
   HEAD's first-parent chain, which is the post-merge state. Option A (assumed, ★): skip with a message. Option B: always red after merge
   (039a's sweep would fail). Option C: pin a second TIP after merge in a follow-up task.
   **Fresh clone** (`git clone -b task/092-artifact-naming-archive-url`, at 1d9570b, default mode): exit 0, 187 PASS, `SUMMARY failed=0`, `PASS  post-TIP: commits after TIP touch only docs/tasks/092-* files (2 file name(s))`.
+- 2026-10-26 implementer (delta-review amendments A1/A2, Q11 ruled by the manager): **A1** `post_tip_check` now skips only when TIP is an ancestor
+  of HEAD but off its first-parent chain (the merged case); that case prints `NA    post-TIP NOT-APPLICABLE (merged): ...`, not a PASS. If TIP
+  is not an ancestor of HEAD at all the check is RED. **A2** a comment at the check records that `git log --first-parent --name-only` lists no files
+  for merge commits (conflict-resolution edits in a main-into-branch merge after TIP are not seen; mitigation: BASE..TIP pinned, main reviewed
+  separately). Two new AC9 controls (the second uses a temp clone with a synthetic `--no-ff` merge of TIP into BASE). **Red before the fix**
+  (fixture commit, old skip logic, default run, SUMMARY failed=2): `FAIL  AC9 control: a non-ancestor TIP did not fail the post-TIP check` and
+  `FAIL  AC9 control: the merged case did not print NOT-APPLICABLE (merged) alone (rc 0: PASS  post-TIP check skipped on purpose: ...)`.
+  **Green after**: default, `--live-selftest` and `--mutate` each exit 0, `SUMMARY failed=0`, with `PASS  AC9 control: a TIP that is not an ancestor of
+  HEAD (rewritten away) makes the post-TIP check red` and `PASS  AC9 control: the merged case prints NOT-APPLICABLE (merged), not a PASS`. Pins
+  unchanged (contract untouched; FINAL = TIP = ab31a88). Q11 closed.

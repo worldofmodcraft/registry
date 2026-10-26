@@ -654,14 +654,18 @@ own_change_checks() {  # own_change_checks FINALREV
     return "$n"
 }
 
-# AC9 post-TIP: the commits after TIP (first-parent chain, name-only) touch only docs/tasks/092-* files. A merge of registry main into the
-# branch adds a merge commit, which lists no files without -m. If TIP is not on HEAD's first-parent chain (the branch was merged into main),
-# the check says so and passes: the pinned BASE..TIP checks above still hold.
-post_tip_check() {  # post_tip_check TIPREV HEADREV -> PASS/FAIL line; returns 0/1
+# AC9 post-TIP: the commits after TIP (first-parent chain, name-only) touch only docs/tasks/092-* files. Note: `git log --first-parent --name-only`
+# lists no files for merge commits, so a conflict-resolution edit inside a main-into-branch merge after TIP is not seen (mitigation: BASE..TIP is
+# pinned above and main is reviewed separately). If TIP is an ancestor of HEAD but not on its first-parent chain (the branch was merged into main),
+# the check prints a NA line, NOT a PASS: NOT-APPLICABLE (merged). If TIP is not an ancestor of HEAD at all (rewritten away), it is RED.
+post_tip_check() {  # post_tip_check TIPREV HEADREV -> PASS/FAIL/NA line; returns 0/1
     local t="$1" h="$2" files bad
     G cat-file -e "$t^{commit}" 2>/dev/null && G cat-file -e "$h^{commit}" 2>/dev/null || { fail "post-TIP check: pin $t or $h does not exist"; return 1; }
+    if ! G merge-base --is-ancestor "$t" "$h" 2>/dev/null; then
+        fail "post-TIP: TIP $t is not an ancestor of $h (history rewritten away from the pin)"; return 1
+    fi
     if ! G rev-list --first-parent "$h" 2>/dev/null | grep -x -F "$t" >/dev/null; then
-        pass "post-TIP check skipped on purpose: $t is not on the first-parent chain of $h (branch merged into main; BASE..TIP pins above still apply)"; return 0
+        printf 'NA    post-TIP NOT-APPLICABLE (merged): %s is an ancestor of %s but not on its first-parent chain (BASE..TIP pins above still apply)\n' "$t" "$h"; return 0
     fi
     files="$(G log --first-parent --name-only --format= "$t..$h" 2>/dev/null | sort -u | sed '/^$/d')"
     bad="$(printf '%s\n' "$files" | sed '/^$/d' | grep -v -E '^docs/tasks/092-[^/]+$')"
