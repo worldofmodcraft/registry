@@ -446,3 +446,15 @@ permission scope) — its README at the pinned SHA.
   FINAL range), TIP re-pinned to this log commit. No existing check changed. `039b-verify.sh` not run (forbidden this round); the manager runs it.
   ## Questions: none blocking. (For Ludwig, S5: tick "Require a pull request before merging" and "Do not allow bypassing"? lean: yes for the
   first, unticked-bypass kept off only if an emergency path matters.)
+- 2026-10-26 implementer (039b): `039b-verify.sh` pinned (BASE `4268735`, RED `6b94a31`, FINAL `2a98fa1`, TIP `a3901e5`; script commits `1eb15e4`
+  then `8f44c9d` which only adds a retry around the anonymous `git ls-remote`; the first run had one transient failure of that check).
+  Run on HEAD `8f44c9d` (ajv from another worktree, 2 h 50 min because other agents' verify scripts queue the machine): **AC11 all PASS**
+  incl. control (FINAL=BASE fails 4 checks), red commit: all 11 tests fail; **AC7**: 11/11 tests, 34 mutations all red (listed one per line in
+  the output), unmodified file passes, real workflow file byte-identical before/after, all 4 `uses:` pinned and present upstream
+  (`git ls-remote`), only trigger `pull_request_target`, no interpolation in any `run:`; **AC10** all PASS incl. control; **AC12** full
+  `tests/registry` suite 373 tests green; 006 007a 007b 008a 032 034 057 062 064 066 067 069 070 071 075 084 exit 0 one at a time;
+  **065-verify.sh exits 1 on HEAD**: its AC4.2 runs 070 (exit 2 = 2 failed checks: 067 and 069 "exit 1 on the later branch", with 062
+  AC3.2/AC4.3) at a time when other agents' verify scripts (087, 082, 039a) were running on the machine. None of my files is among theirs.
+  Control (065 on a clean clone of base `4268735`) was started and then died silently after its 064 step (no `EXIT` line; killed by
+  something other than me) so it proves nothing. **OPEN: rerun 065 (and 070) on a quiet machine, on HEAD and on base**, before this
+  PR is called green. Not hidden, not weakened: no closed script was edited.
