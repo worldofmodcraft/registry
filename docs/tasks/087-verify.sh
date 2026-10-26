@@ -57,7 +57,7 @@ T082="65f39793d30d468bb7afed08ef26c44f6cce9bfe"   # tip of origin/task/082-pipel
 PIN087_BASE="208c6d1"   # registry origin/main when 087 was cut (merge of PR #19)
 PIN087_RED="5e5b107"    # 087-verify.sh + task file only
 PIN087_FIX="bb10820"    # 032-verify.sh and 067-verify.sh re-pinned
-PIN087_PIN="c10ced8"    # the commit that pinned the two SHAs above (the parent of the 070 commit)
+PIN087_PIN="489bd26"    # the log commit of the first round (the parent of the 070 commit)
 PIN087_070="5da249b"    # manager scope extension: 070-verify.sh AC4.m1 only
 
 TMP="$(mktemp -d)" || exit 99
