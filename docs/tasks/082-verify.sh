@@ -24,7 +24,7 @@ set -o pipefail
 
 BASE="4356583fb2360592a680f40bee396f9f23df35a4"    # registry origin/main at the cut (merge of PR #18, task 075)
 FINAL="afa48f20756c2fca793a0732cf7834e924663c3b"   # the commit carrying the contract and the README row
-TIP="002a59ac15917c7a92e9a2d03e8d9ce8e457a62c"      # the last content commit of the branch (own-change checks never use HEAD)
+TIP="2e521ee227606c59cd30121c87eb4ae525b0fe5c"      # the last content commit of the branch (own-change checks never use HEAD)
 
 ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)" || exit 99
 FULL=0

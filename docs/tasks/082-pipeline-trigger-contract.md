@@ -278,3 +278,13 @@ the normative block with `pipeline.yml` on parsed keys (PT block paragraph), not
     verify scripts (065, 064, 070, 069, 062, 067, 039a, 008a) were running without a quiet moment, so `docs/tasks/082-verify.sh
     --full` (fresh clone of HEAD, every other `*-verify.sh` one at a time) was not started. It is not claimed green. Run it
     before merge when the machine is quiet: `PYTHONDONTWRITEBYTECODE=1 bash docs/tasks/082-verify.sh --full`.
+- 2026-10-26 doc-writer (opus 5.5): review of PR #20 found two blocking points in the verify script; fixed. (1) AC10.head diffed
+  BASE..HEAD; it is now AC10.tip, BASE..TIP with the pinned `TIP=2e521ee227606c59cd30121c87eb4ae525b0fe5c`, inside the file scope; no own-change check uses HEAD
+  or origin/main (only AC13's `--full` clones HEAD, which is not an own-change check). (2) New AC10.bytes: `git diff FINAL TIP --
+  contracts/pipeline-trigger.md docs/contracts/README.md` is empty, so the merged bytes equal the verified bytes. (3) AC2 now also
+  fails on any paragraph in the Rules section that does not start with a PT rule id (an unnumbered "Exception:" paragraph).
+  Mutations red then restored green: out-of-scope file committed on top of TIP, post-FINAL edit of the contract, post-FINAL edit of
+  the README (all three as commits in a throw-away clone made by the script), and an inserted unnumbered paragraph after PT3.
+  **TIP = `2e521ee227606c59cd30121c87eb4ae525b0fe5c` is the last content commit.** The commits after it touch only `docs/tasks/082-verify.sh` (the TIP constant) and
+  this log: that TIP-recording commit and anything after it. Commit chain: `afa48f2` (FINAL, contract+README), `405695a` script,
+  two log commits, `2e521ee227606c59cd30121c87eb4ae525b0fe5c` (TIP, script fix), then the TIP-recording commit. AC13 stays NOT RUN (see above).
