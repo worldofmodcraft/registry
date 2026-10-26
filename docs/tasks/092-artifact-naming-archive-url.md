@@ -379,3 +379,4 @@ the 008 umbrella; the Q2 follow-up.
   **Questions (booked, conservative option assumed):** Q11. The AC9 post-TIP check skips (with an explicit PASS line) when TIP is not on
   HEAD's first-parent chain, which is the post-merge state. Option A (assumed, ★): skip with a message. Option B: always red after merge
   (039a's sweep would fail). Option C: pin a second TIP after merge in a follow-up task.
+  **Fresh clone** (`git clone -b task/092-artifact-naming-archive-url`, at 1d9570b, default mode): exit 0, 187 PASS, `SUMMARY failed=0`, `PASS  post-TIP: commits after TIP touch only docs/tasks/092-* files (2 file name(s))`.
