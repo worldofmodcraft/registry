@@ -774,8 +774,8 @@ PY
     mutate "hash-and-signature-before-use sentence deleted" AC5 "$A" resub '5\. A consumer uses the received bytes only after.*?render them\.\n' ''
     mutate "permissive tail: may fall back to the github.com URL" AC5 "$A" replace1 "(a contract amendment), not consumers." "(a contract amendment), not consumers. A consumer may fall back to the github.com URL."
     mutate "tail: consumers enforce hop 1's target (Q9)" AC5 "$A" replace1 "(a contract amendment), not consumers." "(a contract amendment), not consumers. A consumer also requires hop 1's Location to equal the redirect target."
-    mutate "observed-case sentence loses its basis" AC5 "$A" replace1 "observed 2026-10-26 by unauthenticated curl, recorded in the task 092 log: the live front does preserve it." "the manager's live checks record whether it does."
-    mutate "case-insensitivity claim loses its source" AC5 "$A" replace1 "(source: platform runbook step M12 in \`docs/runbooks/site-v1-manual-steps.md\`, task 091, which cites Cloudflare's documentation as read on 2026-10-26; this document has not re-read that documentation)" ""
+    mutate "observed-case sentence loses its basis" AC5 "$A" resub 'observed 2026-10-26 by\s+unauthenticated curl, recorded in the task 092 log: the live front does preserve it\.' "the manager's live checks record whether it does."
+    mutate "case-insensitivity claim loses its source" AC5 "$A" resub '\s+\(source: platform runbook step M12.*?re-read that documentation\)' ''
     mutate "5 hops -> bounded" AC5 "$A" replaceall "5 hops" "bounded"
     mutate "an [unverified] marker dropped" AC5 "$A" replace1 "- **[unverified]** Whether GitHub keeps an uploaded asset filename containing" "- Whether GitHub keeps an uploaded asset filename containing"
     mutate "one byte of entry.schema.json's description changed" AC7.2 contracts/entry.schema.json replace1 "Mutability rules for this document are NOT" "Mutability rules for this document are Not"
