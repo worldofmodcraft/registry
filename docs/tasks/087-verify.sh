@@ -46,6 +46,7 @@ GITID=(-c user.name=verify087 -c user.email=verify087@invalid -c commit.gpgsign=
 HEADREV="$(git -C "$ROOT" rev-parse HEAD)"
 S032=docs/tasks/032-verify.sh
 S067=docs/tasks/067-verify.sh
+S070=docs/tasks/070-verify.sh
 README=docs/contracts/README.md
 
 # Fixed SHAs. The frame of every own-change check below is one of these, never HEAD (REVIEW-CHECKLIST item 12).
@@ -56,6 +57,8 @@ T082="65f39793d30d468bb7afed08ef26c44f6cce9bfe"   # tip of origin/task/082-pipel
 PIN087_BASE="208c6d1"   # registry origin/main when 087 was cut (merge of PR #19)
 PIN087_RED="5e5b107"    # 087-verify.sh + task file only
 PIN087_FIX="bb10820"    # 032-verify.sh and 067-verify.sh re-pinned
+PIN087_PIN="c10ced8"    # the commit that pinned the two SHAs above (the parent of the 070 commit)
+PIN087_070="5da249b"    # manager scope extension: 070-verify.sh AC4.m1 only
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
@@ -156,13 +159,25 @@ else
     [ "$fix_files" = "docs/tasks/032-verify.sh docs/tasks/067-verify.sh " ] \
         && pass "AC4.6 the fix commit touches only 032-verify.sh and 067-verify.sh" || fail "AC4.6 the fix commit touches: $fix_files"
     # the whole PR range stays inside the declared file scope
-    extra="$(git -C "$ROOT" diff --name-only "$PIN087_BASE" HEAD 2>/dev/null | grep -vxE 'docs/tasks/032-verify\.sh|docs/tasks/067-verify\.sh|docs/tasks/087-repin-032-067-readme\.md|docs/tasks/087-verify\.sh' | tr '\n' ' ')"
+    extra="$(git -C "$ROOT" diff --name-only "$PIN087_BASE" HEAD 2>/dev/null | grep -vxE 'docs/tasks/032-verify\.sh|docs/tasks/067-verify\.sh|docs/tasks/070-verify\.sh|docs/tasks/087-repin-032-067-readme\.md|docs/tasks/087-verify\.sh' | tr '\n' ' ')"
     [ -z "$extra" ] && pass "AC4.7 base..HEAD stays inside the declared file scope" || fail "AC4.7 out-of-scope files changed in base..HEAD: $extra"
     # the fix commit changes README-pin checks only: in 067 only the AC2.5 line, in 032 only the pin block, N5/N5b and the variable
     d067="$(git -C "$ROOT" diff -U0 "$PIN087_RED" "$PIN087_FIX" -- $S067 | grep -E '^[+-][^+-]' | grep -vE 'AC2\.5|Task 087|^[+-]#' | wc -l)"
     [ "$d067" = 0 ] && pass "AC4.8 in 067-verify.sh only the AC2.5 check (and comments) changed" || fail "AC4.8 067-verify.sh changed outside AC2.5 and comments ($d067 lines)"
     d032="$(git -C "$ROOT" diff -U0 "$PIN087_RED" "$PIN087_FIX" -- $S032 | grep -E '^[+-][^+-]' | grep -vE '^[+-]#|README|CONTRACTS_README|N5|^\+(if|else|fi|    fail|    pass|    : )' | wc -l)"
     [ "$d032" = 0 ] && pass "AC4.9 in 032-verify.sh only the README pin block, the N5/N5b file argument and comments changed" || fail "AC4.9 032-verify.sh changed outside the README pin ($d032 lines)"
+    # the manager's scope extension: 070-verify.sh changed in ONE hunk, replacing the single AC4.m1 line
+    if [ "$PIN087_070" = "__070__" ]; then fail "AC4.11 the 070 SHA is not pinned yet"; else
+        [ "$(git -C "$ROOT" rev-parse "$PIN087_070^" 2>/dev/null)" = "$(git -C "$ROOT" rev-parse "$PIN087_PIN^{commit}" 2>/dev/null)" ] \
+            && pass "AC4.11 the 070 commit follows the pin commit directly" || fail "AC4.11 the 070 commit does not follow the pin commit"
+        git -C "$ROOT" merge-base --is-ancestor "$PIN087_070" HEAD && pass "AC4.12 the 070 commit is an ancestor of HEAD" || fail "AC4.12 the 070 commit is not an ancestor of HEAD"
+        files070="$(git -C "$ROOT" diff --name-only "$PIN087_PIN" "$PIN087_070" 2>/dev/null | tr '\n' ' ')"
+        d070="$(git -C "$ROOT" diff -U0 "$PIN087_PIN" "$PIN087_070" -- $S070 2>/dev/null)"
+        if [ "$files070" = "$S070 " ] && [ "$(printf '%s\n' "$d070" | grep -c '^@@')" = 1 ] \
+            && [ "$(printf '%s\n' "$d070" | grep -cE '^-[^-]')" = 1 ] && printf '%s\n' "$d070" | grep -E '^-[^-]' | grep -q 'AC4\.m1'; then
+            pass "AC4.13 the 070 commit touches only 070-verify.sh, one hunk, replacing the one AC4.m1 line"
+        else fail "AC4.13 the 070 commit is not a single-hunk AC4.m1 replacement (files: $files070)"; fi
+    fi
     # the patterns of N5 and N5b are not loosened: still the exact old strings
     grep -qF "'eight prose' \"\$CONTRACTS_README\"" "$ROOT/$S032" && grep -qF "'None of the three tasks implements checking logic' \"\$CONTRACTS_README\"" "$ROOT/$S032" \
         && pass "AC4.10 N5 and N5b keep their exact patterns ('eight prose', 'None of the three tasks implements checking logic')" || fail "AC4.10 N5 / N5b patterns changed"

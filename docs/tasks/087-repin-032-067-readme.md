@@ -98,3 +98,13 @@ Loosening any check beyond moving an own-change check to its pinned FINAL; pinni
   demonstration on 032 and 067 only. The full sequential run (006 007a 007b 008a 032 034 057 062 064 065 066 067 069 070 071 075 084
   on HEAD and on the merge with 082's tip) still has to be done on a quiet machine before merge.
   Not run separately: 032 alone on the unmerged HEAD (the AC2.c1 control runs it on the merge; 067's AC3.1 runs it at HEAD).
+- 2026-10-26 manager (scope extension, on the qa-engineer's 070 finding): 087's file scope is extended by `docs/tasks/070-verify.sh`, the
+  AC4.m1 mutation only. Criterion 3 stays required before merge; the five latent README-at-HEAD reads (007a, 007b, 008a,
+  057-textchecks, test_hardening) are NOT touched here and are booked for a sweep task.
+- 2026-10-26 qa-engineer: 070 AC4.m1 re-targeted (commit `5da249b`). New mechanism: in the throw-away later-branch clone, a replacement
+  commit X (tree of 067's pinned FINAL with the README sentence reworded, parent FINAL) is made an ancestor of the clone's HEAD
+  (`merge -s ours`) and 067's `FINAL` pin is pointed at X; AC2.5 must then read X's README and FAIL (AC2.4 reddens too, as it must).
+  Single hunk replacing the single AC4.m1 line; 087-verify.sh AC4.7 scope now includes 070-verify.sh and AC4.11-AC4.13 check that the
+  070 commit (pinned `PIN087_070`) is exactly that.
+  Booked for a sweep task (NOT touched): 007a-verify.sh:117-118, 007b-verify.sh:100-101, 008a-verify.sh:74, 057-textchecks.py:180,
+  tests/registry/test_hardening.py:153 (README-at-HEAD reads; all green on the merge with 082 today).
