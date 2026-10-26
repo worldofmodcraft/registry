@@ -431,3 +431,18 @@ permission scope) — its README at the pinned SHA.
   note to M10 (fix round). S5 (LOW) M9 ticks only the required check: ★ the runbook states the trade-off; the choice of also ticking "Require a
   pull request before merging" / not allowing bypass is Ludwig's -> "For Ludwig" (morning). S6 (LOW) infra-route PRs (workflow/tools edits) are
   green without mods checks: ★ M9 states that such PRs need a careful human read (fix round).
+- 2026-10-26 implementer (039b, fix round for the session-12 security review): registry commits RED `791270a`, fix `b829636` (new FINAL);
+  platform `PLATFORM_HEAD`. **S3:** new AC7 test `test_missing_artifact_comment_is_worded_by_the_gate_result` committed first and run red:
+  `AssertionError: Regex didn't match: '\[ "\$GATE_RESULT" = failure \]' not found in 'set -eu ... "registry CI could not decide (gate job:
+  ${GATE_RESULT:-unknown}); this is not a rejection. See the run log." ...'` (11 other tests ok, 1 FAIL). Fix: the comment job's fixed text is
+  chosen by `[ "$GATE_RESULT" = failure ]` -> "registry CI: the gate failed; see the run log." else the old undecided wording; `GATE_RESULT` still
+  comes in through `env:` (no `${{ }}` in `run:`, asserted). Green: `python3 -m unittest tests.registry.test_ci_workflow` 12 tests OK
+  (pytest is not installed here; unittest is the file's documented runner). Workflow now 149 lines. **S1:** runbook M9 step 8 (confirm `gate`
+  shows "Required" in a real PR's merge box; otherwise stop, M9 not done; basis marked `[unverified]`, U1 stays open). **S4:** one-line
+  exposure note in M10 step 9. **S5:** M9 step 7 states the trade-off as an open choice for Ludwig, not decided ("until then the box stays
+  unticked as written"); belongs in `## For Ludwig`. **S6:** M9 paragraph on infra-route PRs needing a careful human read. **S2:** no
+  concurrency group (booked). `bash docs/tasks/068-verify.sh` in the platform worktree: ALL PASS. Verify-script pins updated (explicit SHAs):
+  FINAL `2a98fa1` -> `b829636`, RED `6b94a31` unchanged (workflow absent there; new RED `791270a` is an extra test-only commit inside the
+  FINAL range), TIP re-pinned to this log commit. No existing check changed. `039b-verify.sh` not run (forbidden this round); the manager runs it.
+  ## Questions: none blocking. (For Ludwig, S5: tick "Require a pull request before merging" and "Do not allow bypassing"? lean: yes for the
+  first, unticked-bypass kept off only if an emergency path matters.)
