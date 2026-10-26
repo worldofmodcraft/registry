@@ -420,3 +420,14 @@ permission scope) — its README at the pinned SHA.
   Not decided by the spec, chosen: `comment` job's artifact download has `continue-on-error: true` (no artifact must still yield the fixed
   comment); AC7 checks that only for the gate job. Booked for the manager: `039a-verify.sh` runs every `*-verify.sh` including
   `039b-verify.sh`, which skips `039a-verify.sh` (else infinite recursion): running 039a after 039b merges re-runs the whole suite twice.
+- 2026-10-26 manager (session 12): **independent security review of 039b (read-only, registry 8f44c9d + platform 8f90393): PASS-WITH-AMENDMENTS,
+  no HIGH.** PR content data-only (base checkout, head as objects, no PR code executed); all four `uses:` SHAs verified against their tags by
+  anonymous ls-remote; permissions minimal (top `{}`; gate contents:read + pull-requests:read; comment pull-requests:write); no `${{ }}` in `run:`;
+  artifact from base code only; fail-closed. Findings and the manager's ★ dispositions (Ludwig's overnight instruction "Ta stjärna på alla beslut"):
+  S1 (MED) U1 open — whether a `pull_request_target` check run satisfies a required `gate` on the PR head: ★ runbook L1/M9 gain an explicit step
+  "confirm `gate` shows as Required in a real PR's merge box before M9 is done; if not, stop and report" (fix round). S2 (LOW) no `concurrency`
+  group: ★ booked, not added tonight (needs proof that cancelled runs leave the gate red). S3 (LOW) missing-artifact comment text says "not a
+  rejection" even when the gate failed: ★ word it by `needs.gate.result` (fix round). S4 (LOW) M10 key is repo-level: ★ add the one-line exposure
+  note to M10 (fix round). S5 (LOW) M9 ticks only the required check: ★ the runbook states the trade-off; the choice of also ticking "Require a
+  pull request before merging" / not allowing bypass is Ludwig's -> "For Ludwig" (morning). S6 (LOW) infra-route PRs (workflow/tools edits) are
+  green without mods checks: ★ M9 states that such PRs need a careful human read (fix round).
