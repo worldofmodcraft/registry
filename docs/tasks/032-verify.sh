@@ -67,7 +67,7 @@ set -o pipefail
 
 DOC="contracts/ownership.md"
 TASKLOG="docs/tasks/032-ownership-contract.md"
-CONTRACTS_README="docs/contracts/README.md"
+CONTRACTS_README_PATH="docs/contracts/README.md"   # task 087: the PATH only; N5/N5b read $CONTRACTS_README, the copy pinned below
 B1_FIXTURE="docs/tasks/032-b1-fixtures.json"
 # The task file's own header -- everything before the first `---` separator, i.e. the spec, the
 # Context list and the acceptance-criteria evidence, and NOT the review rounds or the round logs.
@@ -1364,6 +1364,20 @@ if [ -x "docs/tasks/032-verify.sh" ]; then
 else
     fail "N4 docs/tasks/032-verify.sh is not executable"
 fi
+# Task 087: N5 and N5b are task 032's OWN change to docs/contracts/README.md (the "eight prose documents" count, the paragraph
+# naming the tasks that implement no checking logic), so they read the README at task 032's pinned FINAL commit -- the last
+# commit of registry PR #4 (`git rev-parse 4d4a204^2`; the same commit as SCOPE_FINAL below) -- and never at HEAD. A later task
+# may legitimately edit the README (task 082: "eight" -> "nine", "three tasks" -> "four") and must not redden a closed task's
+# check (REVIEW-CHECKLIST item 12). $CONTRACTS_README is that pinned copy. An unreachable pin FAILS (N5pin), and N5 and N5b
+# then fail too on the empty copy; it never skips.
+README_PIN_FINAL="76af1bb"
+CONTRACTS_README="$BLOBDIR/contracts-README.at-pin.md"
+if git show "$README_PIN_FINAL:$CONTRACTS_README_PATH" > "$CONTRACTS_README" 2>/dev/null && [ -s "$CONTRACTS_README" ]; then
+    pass "N5pin $CONTRACTS_README_PATH is readable at task 032's pinned FINAL $README_PIN_FINAL (N5 and N5b read that copy, never HEAD)"
+else
+    : > "$CONTRACTS_README"
+    fail "N5pin pinned commit $README_PIN_FINAL (or $CONTRACTS_README_PATH at it) is not readable, so N5 and N5b have no README to read"
+fi
 expect_hits "N5 docs/contracts/README.md's worked-examples count names eight prose documents" \
     'eight prose' "$CONTRACTS_README"
 expect_hits_flow "N5b docs/contracts/README.md's checking-logic paragraph names three tasks and says none of them implements checking logic (task 067: re-pinned to the sentence task 007a rewrote)" \
@@ -1717,8 +1731,8 @@ fi
 #   * expect_no_hits x4 -- absence claims, where whole-document scope IS the claim ("this string
 #     appears nowhere in the document"). Since fix round 4 each one is proven able to fire, by
 #     G1-G4 and W1-W4 above.
-#   * expect_hits x2 (N5, N5b) -- against docs/contracts/README.md, a 30-line index with no
-#     internal sections to scope to; the pattern is unique in that file.
+#   * expect_hits x2 (N5, N5b) -- against docs/contracts/README.md as it stood at task 032's pinned FINAL (task 087),
+#     a 30-line index with no internal sections to scope to; the pattern is unique in that file.
 #   * expect_hits_flow x1 (B4.6) -- against the task log, where the claim genuinely is "this
 #     appears somewhere in the file".
 

@@ -36,6 +36,8 @@ FINAL="06c721c"
 # Task 070: AC2.1-AC2.4 describe 067's OWN change, so they measure BASE..FINAL (the same pinned PR #11 range as AC5.1), never
 # HEAD: a later task may legitimately edit 032-verify.sh or docs/contracts/README.md (007b edits the README). AC2.5 is a
 # live property of the README as it stands and stays live. An unreachable pin fails AC2.1-AC2.4 and AC5.1, never skips.
+# Task 087: AC2.5 is NOT live after all -- the sentence is 067's own pinned subject and a later task may legitimately reword it
+# (task 082: "three tasks" -> "four"), so AC2.5 reads the README at FINAL as well; the unreachable pin fails it too.
 SENTENCE='None of the three tasks implements checking logic'
 FAILURES=0
 pass() { printf 'PASS  %s\n' "$1"; }
@@ -85,7 +87,7 @@ n5b=$(grep -A1 '^expect_hits_flow "N5b ' "$TMP/head/docs/tasks/032-verify.sh")
 if [ "$(printf '%s\n' "$n5b" | grep -c .)" = 2 ] && printf '%s' "$n5b" | grep -qF "'$SENTENCE'" && ! printf '%s' "$n5b" | grep -qF 'in any of the three tasks'; then
     pass "AC2.6 032-verify.sh at HEAD: N5b still pins the full sentence '$SENTENCE' and not the old phrase (live guard)"
 else fail "AC2.6 032-verify.sh at HEAD: N5b does not pin the full sentence (or the old phrase is back): $(printf '%s' "$n5b" | tr '\n' ' ' | cut -c1-160)"; fi
-if grep -qF "$SENTENCE" "$TMP/head/docs/contracts/README.md"; then pass "AC2.5 the current README states the sentence"; else fail "AC2.5 the README lacks the sentence"; fi
+if git -C "$TMP/head" show "$FINAL:docs/contracts/README.md" 2>/dev/null | grep -qF "$SENTENCE"; then pass "AC2.5 the README at 067's pinned FINAL $FINAL states the sentence"; else fail "AC2.5 the README at 067's pinned FINAL $FINAL lacks the sentence (or the pin is unreachable)"; fi
 
 section "AC3 -- 032-verify.sh and 062-verify.sh pass at HEAD"
 rc=$(run032 "$TMP/head")
