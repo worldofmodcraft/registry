@@ -54,8 +54,8 @@ M067="ac22c8f"          # registry PR #11, task 067's merge commit
 T082="65f39793d30d468bb7afed08ef26c44f6cce9bfe"   # tip of origin/task/082-pipeline-trigger-contract (registry PR #20) when 087 was cut
 # 087's own commits (AC4). Filled in by the pin commit after the red and fix commits exist.
 PIN087_BASE="208c6d1"   # registry origin/main when 087 was cut (merge of PR #19)
-PIN087_RED="__RED__"    # 087-verify.sh + task file only
-PIN087_FIX="__FIX__"    # 032-verify.sh and 067-verify.sh re-pinned
+PIN087_RED="5e5b107"    # 087-verify.sh + task file only
+PIN087_FIX="bb10820"    # 032-verify.sh and 067-verify.sh re-pinned
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
