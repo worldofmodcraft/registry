@@ -70,6 +70,130 @@ tools (including `git` itself in some invocations) can misparse as an option fla
 positional argument. This is a consequence of a rule already fixed in `entry.schema.json`, stated
 here only because this document is where it matters.
 
+## The archived-source URL (`source_archive`)
+
+`entry.json`'s `source_archive` is a second deterministic function of the same inputs, and nothing
+else enters it:
+
+```
+source_archive = "https://archive.worldofmodcraft.com/" + tag + "/" + tag + ".tar.gz"
+```
+
+`tag` is the release tag defined in "The naming scheme" above (`ns.nm-v`). The host is the constant
+`archive.worldofmodcraft.com`; the URL has scheme `https`, no port, no userinfo, no query, no
+fragment and no trailing slash. This section is the only place the hostname is fixed; task 008c's
+single named constant takes its value from here. The signature asset's URL is `source_archive` plus
+`.minisig`; it is derived, never stored (`entry.json` carries the signature inline, in `signature`).
+The **redirect target** of a request for `<tag>/<asset>` is
+`https://github.com/worldofmodcraft/archive/releases/download/<tag>/<asset>` — byte for byte what
+`naming.release_asset_url("worldofmodcraft", "archive", tag, asset)` returns (task 008a,
+`tools/pipeline/naming.py`; decision Q-E fixes the repository).
+
+**Worked examples** (typed literally; a consumer's derived string must equal them):
+
+1. `mc`, `hello-world`, `1.0.0` gives the tag `mc.hello-world-1.0.0` and
+   - `source_archive`: `https://archive.worldofmodcraft.com/mc.hello-world-1.0.0/mc.hello-world-1.0.0.tar.gz`
+   - signature URL: `https://archive.worldofmodcraft.com/mc.hello-world-1.0.0/mc.hello-world-1.0.0.tar.gz.minisig`
+   - redirect target of the tarball: `https://github.com/worldofmodcraft/archive/releases/download/mc.hello-world-1.0.0/mc.hello-world-1.0.0.tar.gz`
+   - redirect target of the signature: the tarball's redirect target plus `.minisig`.
+2. `a`, `b`, `1.0.0-rc.1+build.5` gives the tag `a.b-1.0.0-rc.1+build.5` and
+   - `source_archive`: `https://archive.worldofmodcraft.com/a.b-1.0.0-rc.1+build.5/a.b-1.0.0-rc.1+build.5.tar.gz`
+   - redirect target of the tarball: `https://github.com/worldofmodcraft/archive/releases/download/a.b-1.0.0-rc.1+build.5/a.b-1.0.0-rc.1+build.5.tar.gz`
+
+**Path safety and injectivity** (derived from the rules above, not new rules). Every character of
+`tag` is in `[0-9A-Za-z._+-]`: `namespace` and `name` allow `[a-z0-9_-]`, the join adds `.` and `-`,
+and a semver `version` adds `[0-9A-Za-z.+-]`. All of these are legal path characters (RFC 3986
+`pchar`), so no percent-encoding is needed or permitted: `+` is written literally and `%2B` is a
+different string. A tag starts with `[a-z0-9]`, so no path segment is `.` or `..`. Distinct
+`(namespace, name, version)` triples give distinct URLs: `namespace` and `name` contain no `.`, so
+the first `.` ends the namespace and the next `.` is inside the version; the version's major is a
+digit run ending at that `.`, so the name ends at the last `-` before it. Injectivity is over byte
+strings. The reserved-device-name rule in "Rejected namespaces" applies unchanged to the namespace
+in this URL, which is built from the same tag. Cloudflare's wildcard matching is case-insensitive
+and GitHub tags are case-sensitive, so the redirect must preserve the case of the captured path
+(uppercase prerelease identifiers such as `-RC.1` are legal in semver); the manager's live checks
+record whether it does.
+
+**How the address works: a pointer, not configuration.** `archive.worldofmodcraft.com` is a real
+HTTP redirect configured at Cloudflare, per the platform runbook step M12 (`docs/runbooks/
+site-v1-manual-steps.md`, task 091), which is the source of truth for the rule's syntax. It is
+path-only, with the status 302 chosen in task 091; nobody may depend on which of the four 3xx
+statuses it sends. A **hop** is one redirect response (301, 302, 307 or 308); the response that
+ends the chain is not a hop. Hop 1 is the response from `archive.worldofmodcraft.com`, and its
+target is the `worldofmodcraft/archive` Release asset above (decision Q-G: a project-owned URL
+fronts `source_archive`, so the registry can move off GitHub, ADR-0077, by repointing the front
+without rewriting any entry). Hop 2 is GitHub's own redirect to a signed, expiring asset host
+(`release-assets.githubusercontent.com`, observed in task 058) and is never stored anywhere.
+Integrity comes from the hash and the signature (ADR-0041), never from the address; what that
+requires of consumers is in "Consumer rules".
+
+**Consumer rules (normative).** "Consumer" means the site (task 055), the pipeline's own checks
+(task 008b), the runbook check in task 010 and any later launcher or installer.
+
+1. A consumer compares `source_archive` by exact string equality with the URL derived above from
+   the entry's own `id` and `version`; it never parses the URL and accepts one that is "close
+   enough".
+2. A consumer requests `archive.worldofmodcraft.com` with no query string; this applies to the
+   request to the front only.
+3. A consumer follows every later hop (hop 2 onward, any 301, 302, 307 or 308: GitHub, then its
+   signed asset host) unchanged, including its query, only over https with TLS verified, within at
+   most 5 hops in total; the hosts on those hops are not an allowlist and not a trust anchor.
+4. A consumer accepts the final 2xx response body only within 52,428,800 bytes (50 MiB) and aborts
+   the download at that cap. The number equals `MAX_COMPRESSED_BYTES` in `tools/pipeline/archive.py`
+   and the site downloader's ceiling (`docs/pipeline/build-pipeline.md`); `archive-layout.md`
+   states no cap of its own. Raising task 008a's compressed-size limit above this number requires
+   amending this contract.
+5. A consumer uses the received bytes only after `source_sha256` and the signature verify, meaning
+   none of the rejection rules 1-11 of `signature-format.md` ("What a verifier must reject")
+   applies; before that point it does not install, extract or render them.
+6. A consumer never executes or parses HTML received at any hop.
+7. Consumers do not enforce hop 1's target. Reason: a client that follows redirects automatically
+   (`curl -L`, a browser fetch) cannot see hop 1, and this way the front can be repointed without
+   a consumer release; a repoint changes runbook step M12 and the redirect-target sentence in this
+   section (a contract amendment), not consumers.
+
+**Producer obligations (task 008c writes the entry, task 008b runs the pipeline).**
+
+1. `source_archive` is exactly the URL derived above from the entry's own `id` and `version`,
+   never taken from upload output, the GitHub API or `result.json` text.
+2. Before opening T1 (`contracts/append-only.rules.md`) the pipeline (i) requests the front
+   without following redirects and applies the hop-1 check of "Fail closed" (a), then (ii) fetches
+   `source_archive` through the full chain under the consumer rules and requires the SHA-256 of
+   the received bytes to equal its own computed `source_sha256`. Any failure is a pipeline fault
+   (task 082 PT10, exit 2): no T3 is written, the version stays `pending` and the run fails naming
+   the URL. This is the only point where a URL that does not resolve can be stopped before it
+   becomes permanent in an append-only record. The manager performs the hop-1 check live
+   (runbook step M12, "the manager checks").
+3. The pipeline publishes no version whose `version` contains `+` (build metadata) until a live
+   Release proves that GitHub resolves `+` in `releases/download` (task 010). Such a version gets
+   a T3 `rejected` with the reason "versions with build metadata (+) are not yet published —
+   pending proof that GitHub resolves them (task 010)"; it is not left `pending`. The derivation
+   above still defines the URL of such a version.
+
+**Fail closed (normative).** There are two lists.
+
+- **(a) Hop 1, checked by the producer (before T1) and the manager (live), not by consumers.** The
+  hop-1 check fails when the response from `archive.worldofmodcraft.com` is anything other than a
+  301, 302, 307 or 308 whose `Location` equals the redirect target byte for byte: a 200 with any
+  body (for example a meta-refresh HTML page, task 058's option A), any 4xx or 5xx, any other
+  `Location`.
+- **(b) Everywhere, consumers and producer.** Each of these makes the artefact **unverified**: DNS
+  failure (for example runbook step M12 not done yet, so the name does not resolve), TLS failure,
+  any hop that is not https (no downgrade), any 4xx or 5xx on a later hop, a final response that
+  is not 2xx, more than 5 hops, a body over the size cap, a hash mismatch, a signature rejection.
+  Consumers then do not install, extract or render the artefact, and never fall back to another
+  URL, in particular never to a self-built `github.com` URL (decision Q4). The producer does not
+  write T1 and the version stays `pending`.
+
+**Unverified in this environment** (each is a fact about Cloudflare or GitHub behaviour not yet
+observed; none is a trust dependency, because "Fail closed" catches each):
+
+- **[unverified]** Whether the Cloudflare rule preserves the case of the captured path, which
+  matters for uppercase prerelease identifiers.
+- **[unverified]** Whether GitHub resolves a tag containing `+` in `releases/download`.
+- **[unverified]** Whether GitHub keeps an uploaded asset filename containing `+` unchanged.
+- **[unverified]** How long certificate issuance for the proxied name takes.
+
 ## Rejected namespaces: Windows reserved device names
 
 Beyond the character set itself (already filename-safe on every mainstream OS — see the next
@@ -163,12 +287,33 @@ mission scope excludes). Satisfying `entry.schema.json` was never sufficient on 
 validity and filename validity are different properties, and this document exists specifically
 because the graph's one-line E7 definition does not say so.
 
+**Attempt 3 — a hostile or compromised redirect.** A Cloudflare account takeover (or a bad
+repoint) points `archive.worldofmodcraft.com` at attacker bytes, or at another genuine signed
+artefact. **Outcome: the hash does not match `source_sha256`, or `signature-format.md` rule 11
+rejects the artefact because the trusted comment's `id` and `version` are not the entry's own;
+at worst this is a denial of service, never a substituted install.** The producer's and the
+manager's hop-1 check detects the repoint itself; consumers, which do not check hop 1, still hold
+because of the hash and signature rules.
+
+**Attempt 4 — a plausible variant URL accepted by a lenient consumer.** A consumer that parses
+`source_archive` and accepts `HTTPS://ARCHIVE.WORLDOFMODCRAFT.COM/...`, `%2B` for `+`, a trailing
+`/`, `?x=` or `/../` would fetch something other than the derived string. **Outcome: exact string
+equality (consumer rule 1) rejects every one of these.** The redirect forwards any path to
+`github.com/worldofmodcraft/archive/releases/download/`, so a consumer that fetched non-derived
+paths could be steered to another file there; consumers fetch only the derived string, and
+verification still applies.
+
 ## What this document does not cover
 
-- **Which specific org-owned repository hosts these Releases** (a dedicated artifact-store repo
-  versus Releases on the `registry` repository itself) — no ADR or graph node fixes this; it is a
-  build-pipeline setup detail (task 008), not a naming-scheme question, and this scheme's inputs
-  and outputs are unaffected by which repository holds them.
+- **Which repository hosts these Releases** — decided: `worldofmodcraft/archive` (decision Q-E,
+  008 umbrella F6). The redirect-target sentence of "The archived-source URL" carries it.
+- **The Cloudflare rule's exact configuration** — runbook step M12 (platform) is the source of
+  truth for its syntax.
+- **`build_log_url`** — a repository file at `logs/<ns>.<nm>/<version>.log`, not a Release asset;
+  this front does not serve it.
+- **Enforcing the equality of `source_archive` with the derived URL in registry CI** — booked as a
+  follow-up (needs a refresh of task 057's pins and checker code); `append-only.rules.md` T1 checks
+  shape only.
 - **The bytes inside the two assets** — the tarball's interior is `contracts/archive-layout.md`
   (E11); the signature's encoding is `contracts/signature-format.md` (E9).
 - **Retry/idempotency behaviour if the pipeline is re-run for a version already archived** — a
@@ -177,6 +322,4 @@ because the graph's one-line E7 definition does not say so.
 
 ## Questions
 
-- (none — the two decisions this contract needed to make, the delimiter substitution and the
-  reserved-device-name rejection, are both settled above with their reasoning; nothing here was
-  left for a future ADR to decide.)
+- (none open; task 092's Q1-Q10 were decided by Ludwig on 2026-10-26.)

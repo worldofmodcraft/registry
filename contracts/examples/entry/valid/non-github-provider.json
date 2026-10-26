@@ -12,7 +12,7 @@
         "version": "0.3.1",
         "commit": "283e7d56075110b7cb5489fff000571e289b5a8a",
         "source_url": "https://git.sr.ht/~orrin/garden-paths",
-        "source_archive": "https://archive.worldofmodcraft.com/orrin/garden-paths/0.3.1.tar.gz",
+        "source_archive": "https://archive.worldofmodcraft.com/orrin.garden-paths-0.3.1/orrin.garden-paths-0.3.1.tar.gz",
         "source_sha256": "a19e2352ad406da577f86f7a2fdb466f1b9f8b33584f95a9d9ae393ee587c42f",
         "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
         "key_id": "E7A1B2C3D4E5F607",
