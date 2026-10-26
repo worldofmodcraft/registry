@@ -161,7 +161,14 @@ print(bad); sys.exit(1 if bad else 0)
 PY
 # the pinned actions exist upstream (anonymous git ls-remote; no credential)
 while read -r repo sha; do
-    if CLEAN git ls-remote "https://github.com/$repo" 2>/dev/null | cut -f1 | grep -q -x "$sha"; then pass "pin exists upstream: $repo@${sha:0:12}"; else fail "pin not found upstream: $repo@$sha"; fi
+    found=no   # anonymous and over the network: retry a transient failure twice, then fail
+    for try in 1 2 3; do
+        if CLEAN git ls-remote "https://github.com/$repo" > "$TMP/lsr.out" 2>/dev/null && [ -s "$TMP/lsr.out" ]; then
+            cut -f1 "$TMP/lsr.out" | grep -q -x "$sha" && found=yes; break
+        fi
+        sleep 3
+    done
+    [ "$found" = yes ] && pass "pin exists upstream: $repo@${sha:0:12}" || fail "pin not found upstream (after $try attempt(s)): $repo@$sha"
 done < <(grep -E '^\s*(- )?uses:' "$WF" | sed -E 's/^\s*(- )?uses: ([^@]+)@([0-9a-f]{40}).*/\2 \3/' | sort -u)
 
 # ---------------------------------------------------------------------------------------------------------------------
