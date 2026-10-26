@@ -328,3 +328,25 @@ the 008 umbrella; the Q2 follow-up.
   anything, so no closed script was measured concurrently with another. To complete: when `ps` shows no other `*-verify.sh`, run
   `PYTHONDONTWRITEBYTECODE=1 docs/tasks/092-verify.sh --closed --nm /home/ludwig/wt/registry-task-084/tools/dev/node_modules` (foreground; it
   polls up to 60 minutes itself) and paste the result here. After merge, 039a's sweep calls 092 in default mode (no node, no network, no flag).
+- 2026-10-26 manager (session 12): **AC11 live capture** — run on a quiet machine (queue log: 0 other verify processes at start),
+  `docs/tasks/092-verify.sh --live` at 2e1cd15, 2026-10-26T19:56:52Z, unauthenticated curl 8.18.0: AC1-AC8 159 PASS 0 FAIL;
+  AC11a (tarball URL -> 302, Location byte-equal to the derived target), AC11b (`+` kept; `-RC.1` case kept), AC11c (`?x=1` -> Location
+  without query), AC11d (`server: cloudflare`), AC11e (plain curl, certificate valid) PASS; **AC11f FAIL**: `http://archive.../mc.hello-world-1.0.0/
+  mc.hello-world-1.0.0.tar.gz` -> `302 https://github.com/worldofmodcraft/archive/releases/download/mc.hello-world-1.0.0/mc.hello-world-1.0.0.tar.gz`;
+  the script requires the Location on `https://archive.worldofmodcraft.com/`. SUMMARY failed=1. This FAIL line is the red-before-fix evidence.
+  **Manager ruling (§8b 3a, follows from the spec):** script defect. The task's AC11(f) requires only "an `http://` request -> 302 to an https
+  `Location`", and runbook M12's third check (task/091, 46f3a20) expects exactly the observed GitHub target. The front is correct.
+- 2026-10-26 independent review (reviewer, read-only, no suite run): **PASS-WITH-AMENDMENTS.** Scope clean; Q1-Q10 implemented; examples change
+  only `source_archive`. Agrees with the AC11f ruling. Required for the fix round:
+  F1 (MED, §3.6c) `contracts/artifact-naming.md:112-115` states Cloudflare's case-insensitive wildcard matching as fact with no source or inline
+  caveat: cite runbook M12 / Cloudflare docs at the claim or mark it [unverified] there; re-pin AC5's text.
+  F2 (LOW) the [unverified] markers for case preservation, the literal `+` in the path and certificate issuance (:191-195) are now observed
+  (capture above): update them to "observed 2026-10-26, unauthenticated curl, task 092 log", and fix the "the manager's live checks record whether
+  it does" sentence (:114-115); re-pin AC5.
+  F3 AC11f: require 3xx in {301,302,307,308} with `redirect_url` AND the raw Location byte-equal to `EX1_T`; no host-prefix match; new failure text.
+  Add an offline `--live-selftest` (local fake front on 127.0.0.1) with a passing case (http -> the https GitHub target) and a failing case (wrong
+  target), shown red against the current check before the fix. AC11c: also compare the raw Location header. AC9: add a name-only check that
+  TIP..HEAD touches only `docs/tasks/092-*` files.
+  Merge-order condition: platform #82 (091, runbook M12) merges before 092 (the contract cites M12). Before merge: `--mutate`, a fresh-clone default
+  run at the new head, `--live`, and the AC12 `--closed` sweep, all pasted here.
+  Fix round dispatched after the session-12 quiet-machine queue ends (its runs would overlap the queue).
