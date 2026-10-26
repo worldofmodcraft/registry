@@ -9,7 +9,7 @@
 # Usage:  docs/tasks/039a-verify.sh [NODE_MODULES_DIR]      (any cwd inside the repository)
 #   NODE_MODULES_DIR (or env WOM_NODE_MODULES, else <repo root>/tools/dev/node_modules; install with npm ci --prefix tools/dev)
 #   is only needed by the closed verify scripts of AC12 (they use ajv).
-# Own-change checks use the EXPLICIT SHAs below, never HEAD or origin/main. Behaviour checks run on the COMMITTED HEAD in a
+# Own-change checks use the EXPLICIT SHAs below (BASE, RED, FINAL, TIP), never HEAD or origin/main. Behaviour checks run on the COMMITTED HEAD in a
 # temporary clone under `env -i`; the caller's worktree is not modified. The composer's own tests use throwaway git repos in
 # mktemp dirs and recorded payloads: no credential, no gh, no curl, no live PR. Network: only 066-verify.sh (anonymous npm ci).
 # AC12 runs the whole registry suite and every closed verify script ONE AT A TIME, and waits while another *-verify.sh runs.
@@ -22,6 +22,9 @@ set -o pipefail
 BASE=4356583        # registry origin/main (task 075 merged) the branch was cut from
 RED=88c97ac         # tests + fixtures only; ci_gate.py does not exist yet
 FINAL=ceb0458       # last commit that changes the composer, config or tests (later commits: log and this script only)
+TIP=999b2b7         # last commit of the branch before the one that pinned TIP: BASE..TIP is the scope-checked range, so a later
+                    # merge with registry main (other tasks' files in BASE..HEAD) cannot redden it. The one commit after TIP changes
+                    # only this script (in scope), which no check can pin without a cycle.
 
 ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)" || exit 99
 NM="${1:-${WOM_NODE_MODULES:-$ROOT/tools/dev/node_modules}}"
@@ -40,20 +43,22 @@ SCOPE='^(tools/registry/ci_gate\.py|config/r11-identity\.json|tests/registry/tes
 # ---------------------------------------------------------------------------------------------------------------------
 own_change_checks() {  # own_change_checks FINALREV : prints PASS/FAIL lines, returns the number of failures it found
     local final="$1" n=0 s
-    for s in "$BASE" "$RED" "$final"; do
+    for s in "$BASE" "$RED" "$final" "$TIP"; do
         G cat-file -e "$s^{commit}" 2>/dev/null && pass "pin $s exists" || { fail "pin $s does not exist"; n=$((n + 1)); }
     done
     G merge-base --is-ancestor "$BASE" "$RED" 2>/dev/null && pass "BASE is an ancestor of the red commit" || { fail "BASE is not an ancestor of the red commit"; n=$((n + 1)); }
     G merge-base --is-ancestor "$RED" "$final" 2>/dev/null && pass "the red commit is an ancestor of FINAL (red first)" || { fail "the red commit is not an ancestor of FINAL"; n=$((n + 1)); }
-    G merge-base --is-ancestor "$final" HEAD 2>/dev/null && pass "FINAL is an ancestor of HEAD" || { fail "FINAL is not an ancestor of HEAD"; n=$((n + 1)); }
+    G merge-base --is-ancestor "$final" "$TIP" 2>/dev/null && pass "FINAL is an ancestor of TIP" || { fail "FINAL is not an ancestor of TIP"; n=$((n + 1)); }
     if G cat-file -e "$RED:tools/registry/ci_gate.py" 2>/dev/null; then fail "ci_gate.py already exists at the red commit"; n=$((n + 1)); else pass "ci_gate.py does not exist at the red commit"; fi
     if G cat-file -e "$final:tools/registry/ci_gate.py" 2>/dev/null; then pass "ci_gate.py exists at FINAL"; else fail "ci_gate.py does not exist at FINAL"; n=$((n + 1)); fi
     local files bad
     files="$(G diff --name-only "$BASE" "$final")"
     bad="$(printf '%s\n' "$files" | grep -v -E "$SCOPE")"
     [ -n "$files" ] && [ -z "$bad" ] && pass "git diff --name-only BASE FINAL is inside the file scope" || { fail "BASE..FINAL touches out-of-scope or no files: ${bad:-<empty diff>}"; n=$((n + 1)); }
-    bad="$(G diff --name-only "$BASE" HEAD | grep -v -E "$SCOPE")"
-    [ -z "$bad" ] && pass "BASE..HEAD touches only the declared file scope" || { fail "out-of-scope files in BASE..HEAD: $bad"; n=$((n + 1)); }
+    bad="$(G diff --name-only "$BASE" "$TIP" | grep -v -E "$SCOPE")"
+    [ -z "$bad" ] && pass "BASE..TIP touches only the declared file scope" || { fail "out-of-scope files in BASE..TIP: $bad"; n=$((n + 1)); }
+    G diff --quiet "$final" "$TIP" -- tools/registry config tests/registry contracts 2>/dev/null \
+        && pass "no code, config, test or contract byte differs between FINAL and TIP (merged bytes = verified bytes)" || { fail "code files differ between FINAL and TIP"; n=$((n + 1)); }
     bad="$(G diff --name-only "$BASE" "$final" -- tools/registry contracts | grep -v -x 'tools/registry/ci_gate.py')"
     [ -z "$bad" ] && pass "no checker or contract file other than ci_gate.py changed" || { fail "checker/contract files changed: $bad"; n=$((n + 1)); }
     bad="$(G diff --name-only "$BASE" "$RED" | grep -v -E '^(tests/registry/test_ci_gate\.py|tests/registry/fixtures/ci/.+|docs/tasks/039-registry-ci-workflow\.md)$')"
