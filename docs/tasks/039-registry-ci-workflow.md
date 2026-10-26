@@ -402,3 +402,21 @@ permission scope) — its README at the pinned SHA.
   own-change checks on fixed BASE/RED/FINAL/TIP, AC12 live guards); platform repo `task/039b-runbook`: runbook M9, M10, M11, R11 note.
   Red-first: `tests/registry/test_ci_workflow.py` (11 tests; 34 AC7 mutations; zero-match cases) committed before the workflow exists;
   all 11 error at that commit (no workflow file).
+- 2026-10-26 implementer (039b): RED `6b94a31` (11 tests, all error: no workflow), workflow `d7f8ea7` (11/11 green), docs `2a98fa1` = FINAL.
+  Pins (anonymous `git ls-remote https://github.com/<repo>`, 2026-10-26): `actions/checkout` v6.0.2 `de0fac2e4500dabe0009e67214ff5f5447ce83dd`;
+  `actions/create-github-app-token` v2.2.2 `fee1f7d63c2ff003460e3d139729b119787bc349` (inputs read from its `action.yml` at that SHA:
+  `app-id`, `private-key`, `owner`, `permission-members`; closes U14. v3.x deprecates `app-id` for `client-id`: a later bump must
+  change the secret M10 asks for); `actions/upload-artifact` v6.0.0 `b7c566a772e6b6bfb58ed0dc250532a479d7789f`;
+  `actions/download-artifact` v7.0.0 `37930b1c2abaa49bbe596cd826c3c89aef350131`. Docs read (docs.github.com, unauthenticated):
+  **U13 resolved** (a step `if:` sees `steps` but not `secrets`; `with:`/`env:` see both). `gh api --help`: `-F body=@file` reads the file
+  (**U8 resolved**). U1: the docs page for fork events says first-time-contributor approval may apply to `pull_request_target`; the page
+  text read was ambiguous, so U1 stays open (safety rests on "PR content is data only", not on that setting; L1 will show it).
+  Workflow: 136 lines (limit ~200). Design notes: secrets are `REGISTRY_MEMBERSHIP_APP_ID` and `REGISTRY_MEMBERSHIP_APP_PRIVATE_KEY`
+  (M10 names them); the pre-pass writes to `$RUNNER_TEMP/ci/pre`, the gate to `ci/out`, both uploaded as artifact `registry-ci-gate`;
+  the comment job uses `ci/out/comment.md`, else `ci/pre/comment.md` only when the pre-pass verdict says `undecided`, else a fixed
+  "could not decide" text; the run-log link is appended by the workflow (039a booking 3); bot logins fail the composer's login regex
+  and exit 2 (booking 1, accepted); M9 keeps "Require branches to be up to date" (booking 2). The `ci_gate.py` step uses `|| rc=$?` then
+  `exit "$rc"` to append `OUT/outputs` to the step output before failing; AC7 rejects `|| true`, `set +e`, pipes and an `if:` there.
+  Not decided by the spec, chosen: `comment` job's artifact download has `continue-on-error: true` (no artifact must still yield the fixed
+  comment); AC7 checks that only for the gate job. Booked for the manager: `039a-verify.sh` runs every `*-verify.sh` including
+  `039b-verify.sh`, which skips `039a-verify.sh` (else infinite recursion): running 039a after 039b merges re-runs the whole suite twice.
