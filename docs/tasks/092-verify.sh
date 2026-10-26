@@ -685,6 +685,20 @@ post_tip_check "$TIP" "$(G rev-parse HEAD)"
     && pass "AC9 control: BASE..FINAL as the post-TIP range is red (touches contracts, not only 092-* files)" || fail "AC9 control: the post-TIP check did not fail on BASE..FINAL"
 ( post_tip_check "$BASE" "0000000000000000000000000000000000000000" ) > "$TMP/ac9q.out"; rc=$?
 [ "$rc" != 0 ] && pass "AC9 control: an unreachable HEAD pin makes the post-TIP check red, never skipped" || fail "AC9 control: an unreachable pin did not fail the post-TIP check"
+( post_tip_check "$FINAL" "$BASE" ) > "$TMP/ac9r.out"; rc=$?
+[ "$rc" != 0 ] && grep -q '^FAIL  post-TIP' "$TMP/ac9r.out" \
+    && pass "AC9 control: a TIP that is not an ancestor of HEAD (rewritten away) makes the post-TIP check red" || fail "AC9 control: a non-ancestor TIP did not fail the post-TIP check"
+# merged case: a synthetic main (BASE) that merged the branch (TIP) with --no-ff; TIP is then an ancestor of HEAD but off the first-parent chain.
+MC="$TMP/mergedclone"
+if git clone -q --no-hardlinks "$ROOT" "$MC" 2>/dev/null && git -C "$MC" checkout -q --detach "$BASE" 2>/dev/null \
+    && git -C "$MC" -c user.name=selftest -c user.email=selftest@invalid merge -q --no-ff -m "synthetic merge of the branch into main" "$TIP" >/dev/null 2>&1; then
+    MH="$(git -C "$MC" rev-parse HEAD)"
+    ( ROOT="$MC"; post_tip_check "$TIP" "$MH" ) > "$TMP/ac9m.out"; rc=$?
+    [ "$rc" = 0 ] && grep -q '^NA    post-TIP NOT-APPLICABLE (merged)' "$TMP/ac9m.out" && ! grep -q '^PASS' "$TMP/ac9m.out" \
+        && pass "AC9 control: the merged case prints NOT-APPLICABLE (merged), not a PASS" || fail "AC9 control: the merged case did not print NOT-APPLICABLE (merged) alone (rc $rc: $(head -c 200 "$TMP/ac9m.out"))"
+else
+    fail "AC9 control: could not build the synthetic merged clone"
+fi
 for p in tools/pipeline/naming.py contracts/entry.schema.json docs/tasks/057-verify.sh README.md; do
     printf '%s\n' "$p" | grep -q -E "$SCOPE" && fail "AC9 control: the scope pattern wrongly admits $p" || pass "AC9 control: the scope pattern rejects $p"
 done
