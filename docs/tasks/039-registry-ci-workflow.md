@@ -396,3 +396,9 @@ permission scope) — its README at the pinned SHA.
   own-change check. Shown in a temp clone of GitHub with the branch merged onto origin/main (`208c6d1`): the AC11 block alone (script cut before
   the AC1 section, no skip added to the real path) -> "0 failed", control FINAL=BASE fails 4 checks; widening TIP to the merge HEAD -> red
   ("out-of-scope files in BASE..TIP: contracts/append-only.rules.md", "code files differ between FINAL and TIP"). Full script not run.
+- 2026-10-26 implementer (039b, C23 second half), start: worktree `~/wt/registry-task-039b`, branch `task/039b-registry-ci-workflow`,
+  **BASE(039b) = `4268735`** (registry `origin/main`, 039a merged as PR #21). Scope: `.github/workflows/registry-ci.yml`,
+  `tests/registry/test_ci_workflow.py` (AC7), `CONTRIBUTING.md` + README paragraph (AC10), `docs/tasks/039b-verify.sh` (AC7, AC10,
+  own-change checks on fixed BASE/RED/FINAL/TIP, AC12 live guards); platform repo `task/039b-runbook`: runbook M9, M10, M11, R11 note.
+  Red-first: `tests/registry/test_ci_workflow.py` (11 tests; 34 AC7 mutations; zero-match cases) committed before the workflow exists;
+  all 11 error at that commit (no workflow file).
