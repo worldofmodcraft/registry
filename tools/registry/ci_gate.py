@@ -377,15 +377,21 @@ def run_gate(repo, event_path, pr_path, out, membership_status, *, classify_only
         body = {"result": {0: "accepted", 1: "rejected", 2: "undecided"}[code], "merge_signal": False, "reason": reason}
         if res:
             body.update(route=res["route"], checkers=res["checkers"], **{"class": res["class"]}, **res["info"])
-        Path(out, "verdict.json").write_text(json.dumps(body, indent=2, sort_keys=True) + "\n")
         shown = res["checkers"] if res else {}
         Path(out, "comment.md").write_text(render(code, res["route"] if res else "", res["class"] if res else "", shown,
                                                   res["notes"] if res else [], reason, res["paths"] if res else []))
         if res:
             Path(out, "class").write_text(res["class"] + "\n")
         Path(out, "outputs").write_text("".join(f"{k}={v}\n" for k, v in outputs))
+        Path(out, "verdict.json").write_text(json.dumps(body, indent=2, sort_keys=True) + "\n")  # last: it vouches for the rest
     except (OSError, Undecided) as exc:
         sys.stderr.write(f"ERROR (could not write the result, not a rejection): {exc}\n")
+        try:  # nothing may claim a result we failed to publish: clear the files, then say "undecided" if we can
+            for name in ("verdict.json", "comment.md", "class", "outputs"):
+                shutil.rmtree(Path(out, name)) if Path(out, name).is_dir() else Path(out, name).unlink(missing_ok=True)
+            Path(out, "verdict.json").write_text(json.dumps({"result": "undecided", "merge_signal": False, "reason": str(exc)}) + "\n")
+        except OSError as exc2:  # the exit code 2 is the answer; no verdict file is also never "accepted"
+            sys.stderr.write(f"ERROR (could not clear {out}): {exc2}\n")
         return 2
     sys.stderr.write(f"ci_gate: exit {code}" + (f" ({reason})" if reason else "") + "\n")
     return code
