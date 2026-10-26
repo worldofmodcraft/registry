@@ -12,6 +12,10 @@
 #                                            after Ludwig reports runbook step M12 done; the output is pasted into the task log. This
 #                                            gates the merge (decision Q7). Without --live the default run prints the "not run" line
 #                                            and does NOT count it as a failure.
+#   docs/tasks/092-verify.sh --live-selftest
+#                                            OFFLINE: the AC11 verdict functions (the same ones --live uses) against a throwaway fake front on
+#                                            127.0.0.1 (python3 stdlib): http -> the https GitHub target must PASS; http -> the archive host, a
+#                                            wrong target, a query, a non-hop status, a Location that differs only in raw form must FAIL.
 #   docs/tasks/092-verify.sh --closed [--nm DIR]
 #                                            AC12: every OTHER docs/tasks/*-verify.sh, one at a time on a quiet machine (ps logged),
 #                                            on the committed HEAD in a temp clone. Needs node + a node_modules directory with ajv
@@ -32,10 +36,11 @@ set -u
 set -o pipefail
 
 BASE=426873502a150ef746063c1b55c2cfbfeed31566   # registry origin/main the branch was cut from (phase 1 log)
-FINAL=41776d74c3200f8a9eded5a3444fcd4703d998ef  # the content commit: artifact-naming.md, 14 example files, one README row
-TIP=3348f0a52b95887c034c1835b604433c19237f6c    # last commit before this script: BASE..TIP is the scope-checked range, so a later merge
-                                                # with registry main cannot redden it. Commits after TIP change only the task log and
-                                                # this script (both in scope), which no check can pin without a cycle.
+FINAL=ab31a88e6e828db689b64e73d4310320938570de  # the content commit (fix round: F1/F2 in artifact-naming.md; the 14 example files and the README row came earlier)
+TIP=ab31a88e6e828db689b64e73d4310320938570de    # last contract-changing commit (fix round): BASE..TIP is the scope-checked range, so a later merge
+                                                # with registry main cannot redden it. Commits after TIP change only docs/tasks/092-* files
+                                                # (the task log and this script), which no check can pin without a cycle; the AC9 post-TIP
+                                                # check proves it by name.
 
 MODE_MUTATE=0; MODE_LIVE=0; MODE_SELFTEST=0; MODE_CLOSED=0; SITE=""; NMARG=""
 while [ $# -gt 0 ]; do
@@ -418,19 +423,23 @@ FAIL_INTRO = "**Fail closed (normative).** There are two lists."
 FAIL_A = "- **(a) Hop 1, checked by the producer (before T1) and the manager (live), not by consumers.** The hop-1 check fails when the response from `archive.worldofmodcraft.com` is anything other than a 301, 302, 307 or 308 whose `Location` equals the redirect target byte for byte: a 200 with any body (for example a meta-refresh HTML page, task 058's option A), any 4xx or 5xx, any other `Location`."
 FAIL_B = "- **(b) Everywhere, consumers and producer.** Each of these makes the artefact **unverified**: DNS failure (for example runbook step M12 not done yet, so the name does not resolve), TLS failure, any hop that is not https (no downgrade), any 4xx or 5xx on a later hop, a final response that is not 2xx, more than 5 hops, a body over the size cap, a hash mismatch, a signature rejection. Consumers then do not install, extract or render the artefact, and never fall back to another URL, in particular never to a self-built `github.com` URL (decision Q4). The producer does not write T1 and the version stays `pending`."
 UNVERIFIED = [
-    "- **[unverified]** Whether the Cloudflare rule preserves the case of the captured path, which matters for uppercase prerelease identifiers.",
     "- **[unverified]** Whether GitHub resolves a tag containing `+` in `releases/download`.",
     "- **[unverified]** Whether GitHub keeps an uploaded asset filename containing `+` unchanged.",
-    "- **[unverified]** How long certificate issuance for the proxied name takes.",
 ]
-UNVERIFIED_INTRO = "**Unverified in this environment** (each is a fact about Cloudflare or GitHub behaviour not yet observed; none is a trust dependency, because \"Fail closed\" catches each):"
+OBSERVED_INTRO = "**Observed 2026-10-26** (by unauthenticated curl against the live front, recorded in the task 092 log; the front's behaviour, not GitHub's):"
+OBSERVED = [
+    "- The Cloudflare rule preserves the case of the captured path (`-RC.1` came through unchanged).",
+    "- The Cloudflare rule keeps a literal `+` in the path.",
+    "- The proxied name served a valid certificate (a plain curl, no `-k`, completed); how long issuance took was not recorded and is not a dependency.",
+]
+UNVERIFIED_INTRO = "**Unverified in this environment** (each is a fact about GitHub behaviour not yet observed; none is a trust dependency, because \"Fail closed\" catches each):"
 LOOSE = [
     ("hop", "A **hop** is one redirect response (301, 302, 307 or 308); the response that ends the chain is not a hop."),
     ("hop1", "Hop 1 is the response from `archive.worldofmodcraft.com`, and its target is the `worldofmodcraft/archive` Release asset above"),
     ("hop2", "Hop 2 is GitHub's own redirect to a signed, expiring asset host (`release-assets.githubusercontent.com`, observed in task 058) and is never stored anywhere."),
     ("integrity", "Integrity comes from the hash and the signature (ADR-0041), never from the address;"),
     ("3xx", "nobody may depend on which of the four 3xx statuses it sends."),
-    ("case", "Cloudflare's wildcard matching is case-insensitive and GitHub tags are case-sensitive, so the redirect must preserve the case of the captured path (uppercase prerelease identifiers such as `-RC.1` are legal in semver); the manager's live checks record whether it does."),
+    ("case", "Cloudflare's wildcard matching is case-insensitive (source: platform runbook step M12 in `docs/runbooks/site-v1-manual-steps.md`, task 091, which cites Cloudflare's documentation as read on 2026-10-26; this document has not re-read that documentation) and GitHub tags are case-sensitive, so the redirect must preserve the case of the captured path (uppercase prerelease identifiers such as `-RC.1` are legal in semver); observed 2026-10-26 by unauthenticated curl, recorded in the task 092 log: the live front does preserve it."),
     ("attempt3", "**Attempt 3 — a hostile or compromised redirect.** A Cloudflare account takeover (or a bad repoint) points `archive.worldofmodcraft.com` at attacker bytes, or at another genuine signed artefact. **Outcome: the hash does not match `source_sha256`, or `signature-format.md` rule 11 rejects the artefact because the trusted comment's `id` and `version` are not the entry's own; at worst this is a denial of service, never a substituted install.** The producer's and the manager's hop-1 check detects the repoint itself; consumers, which do not check hop 1, still hold because of the hash and signature rules."),
     ("attempt4", "**Attempt 4 — a plausible variant URL accepted by a lenient consumer.** A consumer that parses `source_archive` and accepts `HTTPS://ARCHIVE.WORLDOFMODCRAFT.COM/...`, `%2B` for `+`, a trailing `/`, `?x=` or `/../` would fetch something other than the derived string. **Outcome: exact string equality (consumer rule 1) rejects every one of these.** The redirect forwards any path to `github.com/worldofmodcraft/archive/releases/download/`, so a consumer that fetched non-derived paths could be steered to another file there; consumers fetch only the derived string, and verification still applies."),
 ]
@@ -466,8 +475,8 @@ def ac5():
     fb = norm(block(SEC, "**Fail closed (normative).**", "**Unverified in this environment**"))
     chk("AC5.7", fb == norm(FAIL_INTRO + " " + FAIL_A + " " + FAIL_B), "fail closed: intro, list (a) and list (b) are byte-equal to the typed text")
     ub = norm(block(SEC, "**Unverified in this environment**", None))
-    chk("AC5.8", ub == norm(UNVERIFIED_INTRO + " " + " ".join(UNVERIFIED)), "the four [unverified] markers with the intro are byte-equal to the typed text")
-    chk("AC5.9", SECN.count("**[unverified]**") == 4, f"exactly four **[unverified]** markers in the section (found {SECN.count('**[unverified]**')})")
+    chk("AC5.8", ub == norm(UNVERIFIED_INTRO + " " + " ".join(UNVERIFIED) + " " + OBSERVED_INTRO + " " + " ".join(OBSERVED)), "the two [unverified] markers and the three observed facts, with their intros, are byte-equal to the typed text")
+    chk("AC5.9", SECN.count("**[unverified]**") == 2, f"exactly two **[unverified]** markers in the section (found {SECN.count('**[unverified]**')})")
     # each normative statement exactly once in the whole file (the writer states it once and refers to it elsewhere)
     texts = list(CONSUMER) + PRODUCER[:1] + PRODUCER[2:] + [FAIL_A[2:], FAIL_B[2:]] + [t for _, t in LOOSE]
     for t in texts:
@@ -640,9 +649,24 @@ own_change_checks() {  # own_change_checks FINALREV
     else
         fail "contracts, README, tools or tests differ between FINAL and TIP (or a pin is unreachable)"; n=$((n + 1))
     fi
-    bad="$(G diff --name-only "$BASE" "$final" 2>/dev/null | grep -E '^(tools|tests)/|^docs/tasks/[0-9a-z]+-verify\.sh$|057-' )"
+    bad="$(G diff --name-only "$BASE" "$final" 2>/dev/null | grep -E '^(tools|tests)/|^docs/tasks/[0-9a-z]+-verify\.sh$|057-' | grep -v -E '^docs/tasks/092-verify\.sh$' )"
     [ -z "$bad" ] && pass "BASE..FINAL touches no tool, test, closed verify script or 057 pin file" || { fail "BASE..FINAL touches protected files: $bad"; n=$((n + 1)); }
     return "$n"
+}
+
+# AC9 post-TIP: the commits after TIP (first-parent chain, name-only) touch only docs/tasks/092-* files. A merge of registry main into the
+# branch adds a merge commit, which lists no files without -m. If TIP is not on HEAD's first-parent chain (the branch was merged into main),
+# the check says so and passes: the pinned BASE..TIP checks above still hold.
+post_tip_check() {  # post_tip_check TIPREV HEADREV -> PASS/FAIL line; returns 0/1
+    local t="$1" h="$2" files bad
+    G cat-file -e "$t^{commit}" 2>/dev/null && G cat-file -e "$h^{commit}" 2>/dev/null || { fail "post-TIP check: pin $t or $h does not exist"; return 1; }
+    if ! G rev-list --first-parent "$h" 2>/dev/null | grep -x -F "$t" >/dev/null; then
+        pass "post-TIP check skipped on purpose: $t is not on the first-parent chain of $h (branch merged into main; BASE..TIP pins above still apply)"; return 0
+    fi
+    files="$(G log --first-parent --name-only --format= "$t..$h" 2>/dev/null | sort -u | sed '/^$/d')"
+    bad="$(printf '%s\n' "$files" | sed '/^$/d' | grep -v -E '^docs/tasks/092-[^/]+$')"
+    if [ -z "$bad" ]; then pass "post-TIP: commits after TIP touch only docs/tasks/092-* files ($(printf '%s\n' "$files" | sed '/^$/d' | wc -l) file name(s))"; return 0
+    else fail "post-TIP: commits after TIP touch files outside docs/tasks/092-*: $(echo "$bad" | tr '\n' ' ')"; return 1; fi
 }
 
 section "AC9 -- pinned own-change checks (BASE $BASE, FINAL $FINAL, TIP $TIP)"
@@ -655,6 +679,12 @@ FAILURES=$((FAILURES + $(grep -c '^FAIL ' "$TMP/ac9.out")))
 ( own_change_checks "0000000000000000000000000000000000000000" ) > "$TMP/ac9u.out"; rc=$?
 [ "$rc" -gt 0 ] && grep -q '^FAIL  pin 0000000000000000000000000000000000000000 does not exist' "$TMP/ac9u.out" \
     && pass "AC9 control: an unreachable FINAL pin is red, never skipped ($rc failure(s))" || fail "AC9 control: an unreachable pin did not fail"
+post_tip_check "$TIP" "$(G rev-parse HEAD)"
+( post_tip_check "$BASE" "$FINAL" ) > "$TMP/ac9p.out"; rc=$?
+[ "$rc" != 0 ] && grep -q '^FAIL  post-TIP: commits after TIP touch files outside docs/tasks/092-' "$TMP/ac9p.out" \
+    && pass "AC9 control: BASE..FINAL as the post-TIP range is red (touches contracts, not only 092-* files)" || fail "AC9 control: the post-TIP check did not fail on BASE..FINAL"
+( post_tip_check "$BASE" "0000000000000000000000000000000000000000" ) > "$TMP/ac9q.out"; rc=$?
+[ "$rc" != 0 ] && pass "AC9 control: an unreachable HEAD pin makes the post-TIP check red, never skipped" || fail "AC9 control: an unreachable pin did not fail the post-TIP check"
 for p in tools/pipeline/naming.py contracts/entry.schema.json docs/tasks/057-verify.sh README.md; do
     printf '%s\n' "$p" | grep -q -E "$SCOPE" && fail "AC9 control: the scope pattern wrongly admits $p" || pass "AC9 control: the scope pattern rejects $p"
 done
@@ -744,6 +774,8 @@ PY
     mutate "hash-and-signature-before-use sentence deleted" AC5 "$A" resub '5\. A consumer uses the received bytes only after.*?render them\.\n' ''
     mutate "permissive tail: may fall back to the github.com URL" AC5 "$A" replace1 "(a contract amendment), not consumers." "(a contract amendment), not consumers. A consumer may fall back to the github.com URL."
     mutate "tail: consumers enforce hop 1's target (Q9)" AC5 "$A" replace1 "(a contract amendment), not consumers." "(a contract amendment), not consumers. A consumer also requires hop 1's Location to equal the redirect target."
+    mutate "observed-case sentence loses its basis" AC5 "$A" replace1 "observed 2026-10-26 by unauthenticated curl, recorded in the task 092 log: the live front does preserve it." "the manager's live checks record whether it does."
+    mutate "case-insensitivity claim loses its source" AC5 "$A" replace1 "(source: platform runbook step M12 in \`docs/runbooks/site-v1-manual-steps.md\`, task 091, which cites Cloudflare's documentation as read on 2026-10-26; this document has not re-read that documentation)" ""
     mutate "5 hops -> bounded" AC5 "$A" replaceall "5 hops" "bounded"
     mutate "an [unverified] marker dropped" AC5 "$A" replace1 "- **[unverified]** Whether GitHub keeps an uploaded asset filename containing" "- Whether GitHub keeps an uploaded asset filename containing"
     mutate "one byte of entry.schema.json's description changed" AC7.2 contracts/entry.schema.json replace1 "Mutability rules for this document are NOT" "Mutability rules for this document are Not"
@@ -772,8 +804,8 @@ live_check() {  # live_check LABEL URL EXPECTED_LOCATION
     else fail "$1: expected 301/302/307/308 with Location $3, got '$code' redirect_url '$ru' raw '$raw'"; fi
 }
 ac11_exact_ok() { is3xx "$1" && [ "$2" = "$4" ] && [ "$3" = "$4" ]; }   # AC11a/b: status class + redirect_url AND raw Location byte-equal
-ac11c_ok() { is3xx "$1" && [ "$2" = "$EX1_T" ]; }                      # AC11c: no query forwarded
-ac11f_ok() { is3xx "$1" && case "$2" in https://archive.worldofmodcraft.com/*) true ;; *) false ;; esac; }   # AC11f
+ac11c_ok() { ac11_exact_ok "$1" "$2" "$3" "$EX1_T"; }                  # AC11c: no query forwarded (redirect_url AND raw Location byte-equal)
+ac11f_ok() { ac11_exact_ok "$1" "$2" "$3" "$EX1_T"; }                  # AC11f: http:// -> 301/302/307/308 to the derived https target (runbook M12, third check)
 
 # ---------------------------------------------------------------------------------------------------------------------
 section "AC11 -- LIVE (hop 1 of the real front)"
@@ -786,9 +818,9 @@ else
     live_check "AC11b '+' build URL keeps the literal +" "$EX2_URL" "$EX2_T"
     live_check "AC11b uppercase prerelease keeps its case" "$RC_URL" "$RC_T"
     r="$(hop1 "$EX1_URL?x=1")"; code="${r%%|*}"; ru="$(echo "$r" | cut -d'|' -f2)"; raw="$(echo "$r" | cut -d'|' -f3-)"
-    printf '  $ curl ... %s?x=1\n    -> %s %s\n' "$EX1_URL" "$code" "$ru"
-    if ac11c_ok "$code" "$ru" "$raw"; then pass "AC11c a request with ?x=1 gets a Location without any query"
-    else fail "AC11c STOP: the front must send no query (M12 is path-only); got '$code' '$ru' -- record this and change the contract text, do not patch the check"; fi
+    printf '  $ curl ... %s?x=1\n    -> %s %s\n    raw Location: %s\n' "$EX1_URL" "$code" "$ru" "$raw"
+    if ac11c_ok "$code" "$ru" "$raw"; then pass "AC11c a request with ?x=1 gets a Location without any query (redirect_url and raw Location byte-equal)"
+    else fail "AC11c STOP: the front must send no query (M12 is path-only); got '$code' redirect_url '$ru' raw '$raw' -- record this and change the contract text, do not patch the check"; fi
     printf '  $ curl -sI https://archive.worldofmodcraft.com/\n'
     curl -sI --max-time 30 https://archive.worldofmodcraft.com/ > "$TMP/root.hdr" 2> "$TMP/root.err"; rc=$?
     sed 's/^/    /' "$TMP/root.hdr"
@@ -802,9 +834,9 @@ else
         *) fail "AC11e plain curl failed (exit $rc: $(head -c 200 "$TMP/tls.err"))" ;;
     esac
     r="$(hop1 "http://archive.worldofmodcraft.com/mc.hello-world-1.0.0/mc.hello-world-1.0.0.tar.gz")"; code="${r%%|*}"; ru="$(echo "$r" | cut -d'|' -f2)"; raw="$(echo "$r" | cut -d'|' -f3-)"
-    printf '  $ curl ... http://archive.worldofmodcraft.com/mc.hello-world-1.0.0/mc.hello-world-1.0.0.tar.gz\n    -> %s %s\n' "$code" "$ru"
-    if ac11f_ok "$code" "$ru" "$raw"; then pass "AC11f http:// is redirected ($code) to an https Location"
-    else fail "AC11f http:// did not redirect to https://archive.worldofmodcraft.com/... (got '$code' '$ru')"; fi
+    printf '  $ curl ... http://archive.worldofmodcraft.com/mc.hello-world-1.0.0/mc.hello-world-1.0.0.tar.gz\n    -> %s %s\n    raw Location: %s\n' "$code" "$ru" "$raw"
+    if ac11f_ok "$code" "$ru" "$raw"; then pass "AC11f http:// is redirected ($code) to the https target, Location byte-equal"
+    else fail "AC11f http:// must answer 301/302/307/308 with redirect_url AND raw Location byte-equal to $EX1_T; got '$code' redirect_url '$ru' raw '$raw'"; fi
     echo "  not proven by AC11: that GitHub resolves a '+' tag or keeps a '+' asset filename (Q10 covers it; 008b criterion 6 / task 010 carry the end-to-end bytes check)."
 fi
 
