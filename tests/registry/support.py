@@ -31,7 +31,7 @@ PIPELINE = {
     "source_archive": "https://cdn.worldofmodcraft.org/archives/example-mod-1.0.0.tar.gz",
     "source_sha256": B64,
     "signature": "c" * 62,
-    "key_id": "platform-2026-01",
+    "key_id": "E7A1B2C3D4E5F607",
     "published_at": "2026-10-15T09:00:00Z",
 }
 
@@ -90,7 +90,7 @@ def attacker_entry(indices=(0, 1, 2, 3)):
             "source_archive": "https://cdn.worldofmodcraft.org/archives/attacker-mod-%s.tar.gz" % label,
             "source_sha256": sha256(label),
             "signature": "c" * 62,
-            "key_id": "platform-2026-01",
+            "key_id": "E7A1B2C3D4E5F607",
             "published_at": "2026-09-03T00:00:00Z",
             "status": status,
         }

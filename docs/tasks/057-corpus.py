@@ -51,6 +51,13 @@ corpus.append(("pattern064:fullwidth:published_at", _with(_pub, "published_at", 
 # Amendment 1: `\S` excludes Unicode WhiteSpace (U+00A0, U+2028) in ECMA-262.
 corpus.append(("pattern064:nbsp:source_url", _with(_pub, "source_url", lambda v: v + "\u00a0x")))
 corpus.append(("pattern064:u2028:source_archive", _with(_pub, "source_archive", lambda v: v + "\u2028x")))
+# Task 065: `key_id` is exactly 16 uppercase hex characters (signature-format.md "Deriving `key_id`"). The five
+# non-conforming values are cases for a published and a removed version; the conforming value is the positive control.
+_rem = json.loads((REPO / "contracts/examples/entry/valid/removed-version-with-reason.json").read_text())["example"]
+for _state, _base in (("published", _pub), ("removed", _rem)):
+    for _label, _val in (("ok", "E7A1B2C3D4E5F607"), ("label", "platform-2026-01"), ("lowercase", "e7a1b2c3d4e5f607"),
+                         ("len15", "E7A1B2C3D4E5F60"), ("len17", "E7A1B2C3D4E5F6071"), ("newline", "E7A1B2C3D4E5F607\n")):
+        corpus.append((f"pattern065:key_id:{_state}:{_label}", _with(_base, "key_id", lambda v, _val=_val: _val)))
 out = []
 for name, inst in corpus:
     try:

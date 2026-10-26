@@ -357,7 +357,7 @@ rewriting (T1 happens once); the remedy is a new version or a takedown.
   "source_archive": "https://cdn.worldofmodcraft.org/archives/example-mod-1.0.0.tar.gz",
   "source_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "signature": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-  "key_id": "platform-2026-01",
+  "key_id": "E7A1B2C3D4E5F607",
   "published_at": "2026-10-15T09:00:00Z",
   "status": "published"
 }
@@ -478,7 +478,7 @@ becomes an unguarded hole rather than a doctrine-gated one.
   "source_archive": "https://cdn.worldofmodcraft.org/archives/example-mod-1.4.0.tar.gz",
   "source_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "signature": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-  "key_id": "platform-2026-01",
+  "key_id": "E7A1B2C3D4E5F607",
   "published_at": "2026-06-01T00:00:00Z",
   "status": "published"
 }
@@ -495,7 +495,7 @@ becomes an unguarded hole rather than a doctrine-gated one.
   "source_archive": "https://cdn.worldofmodcraft.org/archives/example-mod-1.4.0.tar.gz",
   "source_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "signature": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-  "key_id": "platform-2026-01",
+  "key_id": "E7A1B2C3D4E5F607",
   "published_at": "2026-06-01T00:00:00Z",
   "status": "removed",
   "reason": "Contained a Blizzard-derived asset reported after publish; artefacts pulled per ADR-0041."
@@ -519,7 +519,7 @@ Same `old.versions[2]` as above. `new.versions[2]`:
   "source_archive": "https://cdn.worldofmodcraft.org/archives/example-mod-1.4.0.tar.gz",
   "source_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
   "signature": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-  "key_id": "platform-2026-01",
+  "key_id": "E7A1B2C3D4E5F607",
   "published_at": "2026-06-01T00:00:00Z",
   "status": "removed",
   "reason": "Contained a Blizzard-derived asset reported after publish; artefacts pulled per ADR-0041."

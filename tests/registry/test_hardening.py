@@ -45,13 +45,24 @@ class F1TrailingNewlineAppendOnly(unittest.TestCase):
                 self.assertEqual(v["elements"][0]["rules"], ["rule 1"])
                 self.assertEqual(v["elements"][0]["attempted"], "T1")
 
-    def test_f1_signature_and_key_id_carry_no_pattern_so_a_trailing_newline_is_contract_valid(self):
-        """entry.schema.json gives these two minLength only, and signature-format.md says `signature` holds
-        multi-line text. Rejecting them would invent a rule; reported to the manager (task log, Questions)."""
-        for k, val in (("signature", "c" * 62 + "\n"), ("key_id", "platform-2026-01\n")):
+    def test_f1_signature_carries_no_pattern_so_a_trailing_newline_is_contract_valid(self):
+        """entry.schema.json gives `signature` minLength only, and signature-format.md says it holds multi-line
+        text. Rejecting it would invent a rule; reported to the manager (task log, Questions). Task 065 split the
+        `key_id` half of this test out: that field now has a rule (see the next test)."""
+        for k, val in (("signature", "c" * 62 + "\n"),):
             with self.subTest(field=k):
                 self.assertEqual(t1_with(**{k: val})["verdict"], "accepted")
                 self.assertEqual(schema.check({ENTRY: entry(dict(published(), **{k: val}))})["verdict"], "accepted")
+
+    def test_f1_key_id_with_trailing_newline_is_rejected_task_065(self):
+        """Task 065 (the one deliberate assertion reversal, objective item 2b): contracts/signature-format.md
+        "Deriving `key_id`" says `key_id` is exactly 16 uppercase hex characters, so entry.schema.json now carries
+        `^[0-9A-F]{16}$` and a trailing newline is rejected. Before 065 there was no such rule and this value was
+        accepted (the signature half of the old test keeps that assertion unchanged)."""
+        for value in ("platform-2026-01\n", "E7A1B2C3D4E5F607\n"):
+            with self.subTest(key_id=value):
+                self.assertEqual(t1_with(key_id=value)["verdict"], "rejected")
+                self.assertEqual(schema.check({ENTRY: entry(dict(published(), key_id=value))})["verdict"], "rejected")
 
     def test_f1_t3_build_log_url_with_trailing_newline_is_rejected(self):
         v = append_only.check_entry(entry(pending()), entry(rejected(url="https://x.org/log\n")))

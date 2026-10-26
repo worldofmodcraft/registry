@@ -334,7 +334,7 @@ class OneOfKeywordTests(unittest.TestCase):
             "source_archive": "https://archive.example.org/x.tar.gz",
             "source_sha256": "0" * 64,
             "signature": "sig",
-            "key_id": "k",
+            "key_id": "E7A1B2C3D4E5F607",
             "published_at": "2026-10-15T09:00:00Z",
         }
         published = {**pending, **five, "status": "published"}
