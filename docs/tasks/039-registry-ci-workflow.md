@@ -458,3 +458,6 @@ permission scope) — its README at the pinned SHA.
   Control (065 on a clean clone of base `4268735`) was started and then died silently after its 064 step (no `EXIT` line; killed by
   something other than me) so it proves nothing. **OPEN: rerun 065 (and 070) on a quiet machine, on HEAD and on base**, before this
   PR is called green. Not hidden, not weakened: no closed script was edited.
+- 2026-10-26 implementer (039b), note on ordering: the verify run above is of `8f44c9d`, BEFORE the manager's security fix round (`3bbd6eb`..`b735046`, S1-S6)
+  landed on this branch; it is not a run of the final HEAD. After that round `python3 -m unittest discover -s tests/registry -p 'test_ci_*.py'` on HEAD `a76f85a`
+  is green (workflow + composer tests); the full `039b-verify.sh` on the final HEAD, and 065/070 on a quiet machine, are still to be run.
