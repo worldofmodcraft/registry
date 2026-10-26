@@ -350,3 +350,32 @@ the 008 umbrella; the Q2 follow-up.
   Merge-order condition: platform #82 (091, runbook M12) merges before 092 (the contract cites M12). Before merge: `--mutate`, a fresh-clone default
   run at the new head, `--live`, and the AC12 `--closed` sweep, all pasted here.
   Fix round dispatched after the session-12 quiet-machine queue ends (its runs would overlap the queue).
+- 2026-10-26 implementer (fix round for the review F1-F3, base head a687da7):
+  **F1** `contracts/artifact-naming.md` (path-safety paragraph): the case-insensitivity claim now cites platform runbook step M12
+  (`docs/runbooks/site-v1-manual-steps.md`, task 091, commit 46f3a20, which cites Cloudflare's documentation as read 2026-10-26) and says this
+  document has not re-read that documentation; the rule itself is unchanged. **F2** same paragraph: "the manager's live checks record whether it
+  does" -> "observed 2026-10-26 by unauthenticated curl, recorded in the task 092 log: the live front does preserve it". The "Unverified"
+  list now holds only the two GitHub `+` items (still `[unverified]`, decision Q10, not observed); a new **Observed 2026-10-26** list records
+  case preserved, literal `+` kept in the path, valid certificate (issuance time not recorded, not a dependency). The old bullet
+  "How long certificate issuance ... takes" is therefore gone, and AC5.8/AC5.9 now pin two markers plus three observed facts.
+  **F3** `docs/tasks/092-verify.sh`: AC11f requires 301/302/307/308 with redirect_url AND raw Location byte-equal to EX1_T (no host-prefix match;
+  new failure text); AC11c also compares the raw Location (shared `ac11_exact_ok`); AC9 gains `post_tip_check` (commits after TIP, first-parent,
+  name-only, touch only `docs/tasks/092-*`) with two red controls (BASE..FINAL as range; unreachable pin); new offline `--live-selftest`
+  (python3 stdlib fake front on 127.0.0.1, 17 cases; the real host is never contacted); two new `--mutate` cases for the F1/F2 text.
+  **Red before the fix** (commit 7ca6ca2: selftest fixture, old AC11f/AC11c functions; `--live-selftest`, SUMMARY failed=5):
+  `FAIL selftest AC11f http -> https GitHub target (302|301|308): verdict FAIL, required PASS` (3 lines),
+  `FAIL selftest AC11f http -> https://archive.worldofmodcraft.com: verdict PASS, required FAIL`,
+  `FAIL selftest AC11c raw Location has a dot segment (redirect_url is normalised and looks right): verdict PASS, required FAIL`
+  (curl normalises `../` in redirect_url, so only the raw header differs). **Green after the fix**: same command, every selftest line PASS,
+  `SUMMARY failed=0`. Pins: BASE unchanged; FINAL = TIP = ab31a88e6e828db689b64e73d4310320938570de (the F1/F2 contract commit); the AC9
+  "no closed verify script touched" regex now exempts `092-verify.sh` itself (BASE..FINAL contains it). Post-TIP check design note: it walks
+  the first-parent chain, so a merge of registry main into the branch adds no files; if TIP is not on HEAD's first-parent chain (after the
+  branch is merged into main) it prints an explicit "skipped on purpose" PASS line instead of reddening 039a's post-merge sweep (see Questions).
+  **Results** (all `PYTHONDONTWRITEBYTECODE=1`, head 129aadf): default and `--live-selftest`: exit 0, SUMMARY failed=0 (204 PASS with selftest);
+  `--mutate`: exit 0, SUMMARY failed=0, 52 PASS, the two new mutations red on AC5 and restored byte-identically (sha256 e8f3149cadbe1d08);
+  `--live` (2026-10-26T21:00:27Z, unauthenticated curl 8.18.0): AC11a, AC11b (x2), AC11c (redirect_url and raw Location both the clean target),
+  AC11d `server: cloudflare`, AC11e, AC11f (`302`, redirect_url and raw Location = the https GitHub target) all PASS, SUMMARY failed=0.
+  Fresh-clone default run: see the next line. `--closed` (AC12) not run, as instructed; the manager runs it.
+  **Questions (booked, conservative option assumed):** Q11. The AC9 post-TIP check skips (with an explicit PASS line) when TIP is not on
+  HEAD's first-parent chain, which is the post-merge state. Option A (assumed, ★): skip with a message. Option B: always red after merge
+  (039a's sweep would fail). Option C: pin a second TIP after merge in a follow-up task.
