@@ -108,3 +108,18 @@ Loosening any check beyond moving an own-change check to its pinned FINAL; pinni
   070 commit (pinned `PIN087_070`) is exactly that.
   Booked for a sweep task (NOT touched): 007a-verify.sh:117-118, 007b-verify.sh:100-101, 008a-verify.sh:74, 057-textchecks.py:180,
   tests/registry/test_hardening.py:153 (README-at-HEAD reads; all green on the merge with 082 today).
+- 2026-10-26 qa-engineer (round 2, after the manager's scope extension):
+  - 070 AC4.m1 mechanism demonstrated in isolation (the same steps as the new 070 block, on a clone of `7c648c3`): replacement commit X
+    (067's FINAL tree with the sentence reworded, parent 06c721c) merged `-s ours` into the clone's HEAD, 067's `FINAL` pointed at X;
+    `067-verify.sh` then prints `FAIL  AC2.5 the README at 067's pinned FINAL 2060450c... lacks the sentence` (plus AC2.4 and AC5.1
+    red, as expected for a changed README at the pin; AC2.6, AC3.1, AC3.2 stay PASS).
+  - 087-verify.sh at the PR head in a fresh clone: ALL CHECKS PASSED (exit 0), including AC4.11-AC4.13 (the 070 commit `5da249b` is
+    a single hunk replacing the single AC4.m1 line; its parent `489bd26` is pinned as `PIN087_PIN`). One earlier run of the same script
+    reported `FAIL AC1.5` because 062 inside the new 067 exited 1 on the merge; that did not reproduce (062 alone on the merge: exit 0;
+    the whole script again: exit 0). Cause unknown: its output was not captured; it coincided with ~10 other verify processes
+    running at once on the machine (another agent's 039b chain). Not attributed to anything; if it recurs on a quiet machine it is a
+    finding against 062.
+  - **PENDING, not run:** `070-verify.sh --mutate` (and the 070 default run) with the new AC4.m1, and criterion 3 (every closed
+    script on HEAD and on the merge with 082, one at a time). The machine was never quiet during the 2 h of polling every 10 min:
+    a 039b-verify.sh parent (pid 3672584, up for 3 h 55 min at the last check) keeps spawning children (064, 065, 066, 057 ...). I did not
+    kill it. These two runs must be done on a quiet machine before merge.
