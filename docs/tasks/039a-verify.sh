@@ -21,7 +21,7 @@ set -o pipefail
 
 BASE=4356583        # registry origin/main (task 075 merged) the branch was cut from
 RED=88c97ac         # tests + fixtures only; ci_gate.py does not exist yet
-FINAL=09145b4       # last commit that changes the composer, config or tests (later commits: log and this script only)
+FINAL=ceb0458       # last commit that changes the composer, config or tests (later commits: log and this script only)
 
 ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)" || exit 99
 NM="${1:-${WOM_NODE_MODULES:-$ROOT/tools/dev/node_modules}}"
@@ -124,7 +124,7 @@ named test_infra_pr_touching_only_readme "AC2 infra PR touching README.md"
 class_check AC2aHostileStrings 8 "AC2a hostile strings"
 named test_infra_pr_names_stay_inside_the_fence "AC2a @org/team, backtick and newline names stay inside the fence"
 named test_hostile_login_exits_2_and_writes_no_free_text_output "AC2a hostile login: exit 2, strict outputs"
-class_check AC3FailClosed 25 "AC3 fail-closed matrix"
+class_check AC3FailClosed 26 "AC3 fail-closed matrix"
 named test_precedence_exit_2_beats_a_rejection "AC3 precedence: a checker exit 2 beats another's rejection"
 named test_a_checker_over_its_timeout "AC3 checker timeout"
 named test_any_exception_in_main_exits_2 "AC3 any exception in main exits 2"

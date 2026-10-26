@@ -381,3 +381,11 @@ permission scope) — its README at the pinned SHA.
   Not done: the fresh-clone-from-GitHub run of the whole script (another agent's verify scripts kept the machine busy for hours;
   the one real failure above would repeat). Queue: re-pin 075 first, then the fresh-clone run, then Ludwig's merge approval.
   Session-2 notes (039b) as above: `comment.md` line 1 is the marker; `OUT/outputs` keys; `--paginate`; assert no `--tools-dir` in the workflow.
+- 2026-10-26 implementer (039a, security review LOW fix): `run_gate` wrote verdict.json before comment.md/outputs, so a later write
+  failure (ENOSPC) exited 2 while an "accepted" verdict sat on disk. Red `3ef53be` (new test: a directory where comment.md/outputs/class
+  should go), fix `ceb0458` = new FINAL (verdict.json now written last; any write failure clears OUT/* and leaves only an "undecided"
+  verdict, exit 2). Composer now 423 lines; test_ci_gate.py 78 tests, full registry suite 351 green (foreground, no closed scripts run).
+  Booked for 039b: (1) bot logins such as `dependabot[bot]` fail the login regex, so the composer exits 2 (fail-closed, accepted);
+  (2) runbook M9 must keep "Require branches to be up to date before merging"; (3) the comment's "see the run log" has no link, the
+  composer must not read the environment, so 039b's workflow may add the link outside the composer. **Merge gate:** do not merge until
+  task 084 has re-pinned 075-verify.sh and the full 039a-verify.sh has passed in a fresh clone.
