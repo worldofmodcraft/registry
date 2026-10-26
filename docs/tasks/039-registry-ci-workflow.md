@@ -432,7 +432,7 @@ permission scope) — its README at the pinned SHA.
   pull request before merging" / not allowing bypass is Ludwig's -> "For Ludwig" (morning). S6 (LOW) infra-route PRs (workflow/tools edits) are
   green without mods checks: ★ M9 states that such PRs need a careful human read (fix round).
 - 2026-10-26 implementer (039b, fix round for the session-12 security review): registry commits RED `791270a`, fix `b829636` (new FINAL);
-  platform `PLATFORM_HEAD`. **S3:** new AC7 test `test_missing_artifact_comment_is_worded_by_the_gate_result` committed first and run red:
+  platform `8b27351`. **S3:** new AC7 test `test_missing_artifact_comment_is_worded_by_the_gate_result` committed first and run red:
   `AssertionError: Regex didn't match: '\[ "\$GATE_RESULT" = failure \]' not found in 'set -eu ... "registry CI could not decide (gate job:
   ${GATE_RESULT:-unknown}); this is not a rejection. See the run log." ...'` (11 other tests ok, 1 FAIL). Fix: the comment job's fixed text is
   chosen by `[ "$GATE_RESULT" = failure ]` -> "registry CI: the gate failed; see the run log." else the old undecided wording; `GATE_RESULT` still
