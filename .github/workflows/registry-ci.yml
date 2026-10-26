@@ -133,8 +133,10 @@ jobs:
           if [ -f ci/out/comment.md ]; then src=ci/out/comment.md
           elif [ -f ci/pre/comment.md ] && grep -q '"result": "undecided"' ci/pre/verdict.json; then src=ci/pre/comment.md
           else src=""; fi
+          if [ "$GATE_RESULT" = failure ]; then msg="registry CI: the gate failed; see the run log."
+          else msg="registry CI could not decide (gate job: ${GATE_RESULT:-unknown}); this is not a rejection. See the run log."; fi
           {
-            if [ -n "$src" ]; then cat "$src"; else printf '%s\n\n%s\n' '<!-- registry-ci-gate -->' "registry CI could not decide (gate job: ${GATE_RESULT:-unknown}); this is not a rejection. See the run log."; fi
+            if [ -n "$src" ]; then cat "$src"; else printf '%s\n\n%s\n' '<!-- registry-ci-gate -->' "$msg"; fi
             printf '\n[Run log](%s/%s/actions/runs/%s)\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
           } > "$body"
           ids="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- registry-ci-gate -->"))) | .id')"
