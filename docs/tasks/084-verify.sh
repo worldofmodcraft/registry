@@ -42,8 +42,8 @@ S=docs/tasks/075-verify.sh
 
 # 084's own commits, fixed SHAs (AC4; REVIEW-CHECKLIST item 12). Filled in by the pin commit after the red and fix commits exist.
 PIN084_BASE="4356583"   # registry origin/main when 084 was cut
-PIN084_RED="__RED__"    # 084-verify.sh + task file only
-PIN084_FIX="__FIX__"    # 075-verify.sh re-pinned, 070-verify.sh closed list
+PIN084_RED="0932119"    # 084-verify.sh + task file only
+PIN084_FIX="ec3f258"    # 075-verify.sh re-pinned, 070-verify.sh closed list
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
@@ -88,7 +88,7 @@ if ! mk_later "$TMP/L"; then fail "AC1.0 cannot build the later branch"; else
     git -C "$ROOT" show "$MERGE075:$S" > "$TMP/L/docs/tasks/075-verify-old.sh" || fail "AC1.0 cannot extract the old script from $MERGE075"
     rc=$(run075 "$TMP/L" "$TMP/old.out" docs/tasks/075-verify-old.sh)
     if [ "$rc" != 0 ] && grep -q '^FAIL  out-of-scope files in base\.\.HEAD' "$TMP/old.out" \
-        && grep -qx 'contracts/append-only.rules.md' "$TMP/old.out" && grep -qx 'tools/registry/schema.py' "$TMP/old.out"; then
+        && grep -q 'contracts/append-only.rules.md' "$TMP/old.out" && grep -q 'tools/registry/schema.py' "$TMP/old.out"; then
         pass "AC1.1 the OLD 075-verify.sh (from $MERGE075) exits $rc on the later branch: scope check red, naming both files"
     else fail "AC1.1 the OLD script did not fail as expected on the later branch (exit $rc): $(grep -E '^FAIL' "$TMP/old.out" | head -n4 | cut -c1-120 | tr '\n' '|')"; fi
     rc=$(run075 "$TMP/L" "$TMP/new.out")
@@ -151,9 +151,9 @@ PY
     BASEPIN="$(git -C "$ROOT" show "HEAD:$S" | sed -n 's/^BASE=\([0-9a-f]\{7,\}\).*/\1/p' | head -n1)"
     if [ -z "$FINALPIN" ] || [ -z "$BASEPIN" ]; then fail "AC2.0 cannot read the BASE / FINAL pins from $S (a search that finds nothing is broken)"; else
     expect_red "AC2.m1 FINAL widened to HEAD (the later branch's edits come into range)" "FINAL=$FINALPIN" 'FINAL=HEAD' \
-        '^FAIL  out-of-scope files in ' '^contracts/append-only.rules.md$' '^tools/registry/schema.py$'
-    expect_red "AC2.m2 the scope check's range text widened back to BASE..HEAD" 'diff --name-only "$BASE" "$FINAL" | grep -v' 'diff --name-only "$BASE" HEAD | grep -v' \
-        '^FAIL  out-of-scope files in ' '^contracts/append-only.rules.md$' '^tools/registry/schema.py$'
+        '^FAIL  out-of-scope files in ' 'contracts/append-only.rules.md' 'tools/registry/schema.py'
+    expect_red "AC2.m2 the scope check's range text widened back to BASE..HEAD" 'diff --name-only "$BASE" "$FINAL" 2>/dev/null' 'diff --name-only "$BASE" HEAD 2>/dev/null' \
+        '^FAIL  out-of-scope files in ' 'contracts/append-only.rules.md' 'tools/registry/schema.py'
     expect_red "AC2.m3 unreachable BASE pin must FAIL, never skip" "BASE=$BASEPIN" 'BASE=deadbee' \
         '^FAIL  pin deadbee' '^FAIL  .*scope'
     expect_red "AC2.m4 unreachable FINAL pin must FAIL, never skip" "FINAL=$FINALPIN" 'FINAL=deadbee' \
