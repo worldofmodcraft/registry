@@ -389,3 +389,10 @@ permission scope) — its README at the pinned SHA.
   (2) runbook M9 must keep "Require branches to be up to date before merging"; (3) the comment's "see the run log" has no link, the
   composer must not read the environment, so 039b's workflow may add the link outside the composer. **Merge gate:** do not merge until
   task 084 has re-pinned 075-verify.sh and the full 039a-verify.sh has passed in a fresh clone.
+- 2026-10-26 implementer (039a, REVIEW-CHECKLIST item 12 fix): `039a-verify.sh` own-change checks read BASE..HEAD, which a merge with
+  registry main reddens (`contracts/append-only.rules.md` from other tasks). Now pinned: `TIP=999b2b7` (last branch commit before the
+  pin commit `d4d726d`, which changes only the script); checks are BASE..TIP inside scope, FINAL ancestor of TIP, and an empty
+  `git diff FINAL TIP -- tools/registry config tests/registry contracts` (merged bytes = verified bytes); no HEAD/origin/main in any
+  own-change check. Shown in a temp clone of GitHub with the branch merged onto origin/main (`208c6d1`): the AC11 block alone (script cut before
+  the AC1 section, no skip added to the real path) -> "0 failed", control FINAL=BASE fails 4 checks; widening TIP to the merge HEAD -> red
+  ("out-of-scope files in BASE..TIP: contracts/append-only.rules.md", "code files differ between FINAL and TIP"). Full script not run.
