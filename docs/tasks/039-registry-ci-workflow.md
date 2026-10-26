@@ -366,3 +366,18 @@ permission scope) — its README at the pinned SHA.
   = the workflow YAML, AC7, AC10, CONTRIBUTING/README, the platform runbook M9/M10/M11 note, `039b-verify.sh`. Rule for the
   failing path-component test: any git failure on a crafted tree (e.g. `ls-tree` exit 128) maps to composer exit 2; the test
   asserts exit 2 and nothing written outside the temp root, not which guard fired.
+- 2026-10-26 implementer (039a, C23): **fixed.** BASE `4356583`, RED `88c97ac` (77 tests, all failing), FINAL `09145b4` (composer green:
+  77/77), verify script `docs/tasks/039a-verify.sh` (`1754439`, waits for other verify scripts, up to six hours). Fixes since the
+  WIP: the pre-pass `other`-for-`entry` bug was the checkers writing `__pycache__` into the test repo (python `-I` ignores
+  `PYTHONDONTWRITEBYTECODE`; now `-B`), the 3 `res.cls` failures were a test-side trailing newline, the path-component test now
+  asserts exit 2 only (git refuses `''`/`.`-named trees itself, `..` and `.git` hit the composer guard). Composer source:
+  417 lines (`tools/registry/ci_gate.py`) + 1 line config; accepted over the 300 soft cap by C23.
+  `039a-verify.sh` run on HEAD (`1754439`) with ajv from another worktree: AC11 all PASS incl. control (FINAL=BASE makes 3 checks
+  fail); AC1 3/3, AC2 7/7, AC2a 8/8, AC3 25/25, AC4 2/2, AC5 6/6, AC6 17/17, pre-pass 4/4, AC8 4/4 + independent scan, AC9 1/1 + config;
+  AC12: full `tests/registry` suite 350 tests green; 006 007a 007b 008a 032 034 057 062 064 066 067 069 070 071 exit 0; **075-verify.sh
+  exits 1**: its check "base..HEAD touches only the task's declared file scope" fails for ANY later branch
+  (`out-of-scope files in base..HEAD: config/r11-identity.json`), the same HEAD-relative own-change defect that task 070 re-pinned for
+  the older scripts. Not mine to edit (closed script): needs a 071-pattern re-pin task for 075 (it will also redden task 065's branch).
+  Not done: the fresh-clone-from-GitHub run of the whole script (another agent's verify scripts kept the machine busy for hours;
+  the one real failure above would repeat). Queue: re-pin 075 first, then the fresh-clone run, then Ludwig's merge approval.
+  Session-2 notes (039b) as above: `comment.md` line 1 is the marker; `OUT/outputs` keys; `--paginate`; assert no `--tools-dir` in the workflow.
