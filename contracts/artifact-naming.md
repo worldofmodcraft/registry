@@ -110,9 +110,11 @@ the first `.` ends the namespace and the next `.` is inside the version; the ver
 digit run ending at that `.`, so the name ends at the last `-` before it. Injectivity is over byte
 strings. The reserved-device-name rule in "Rejected namespaces" applies unchanged to the namespace
 in this URL, which is built from the same tag. Cloudflare's wildcard matching is case-insensitive
+(source: platform runbook step M12 in `docs/runbooks/site-v1-manual-steps.md`, task 091, which cites
+Cloudflare's documentation as read on 2026-10-26; this document has not re-read that documentation)
 and GitHub tags are case-sensitive, so the redirect must preserve the case of the captured path
-(uppercase prerelease identifiers such as `-RC.1` are legal in semver); the manager's live checks
-record whether it does.
+(uppercase prerelease identifiers such as `-RC.1` are legal in semver); observed 2026-10-26 by
+unauthenticated curl, recorded in the task 092 log: the live front does preserve it.
 
 **How the address works: a pointer, not configuration.** `archive.worldofmodcraft.com` is a real
 HTTP redirect configured at Cloudflare, per the platform runbook step M12 (`docs/runbooks/
@@ -185,14 +187,19 @@ requires of consumers is in "Consumer rules".
   URL, in particular never to a self-built `github.com` URL (decision Q4). The producer does not
   write T1 and the version stays `pending`.
 
-**Unverified in this environment** (each is a fact about Cloudflare or GitHub behaviour not yet
-observed; none is a trust dependency, because "Fail closed" catches each):
+**Unverified in this environment** (each is a fact about GitHub behaviour not yet observed; none is
+a trust dependency, because "Fail closed" catches each):
 
-- **[unverified]** Whether the Cloudflare rule preserves the case of the captured path, which
-  matters for uppercase prerelease identifiers.
 - **[unverified]** Whether GitHub resolves a tag containing `+` in `releases/download`.
 - **[unverified]** Whether GitHub keeps an uploaded asset filename containing `+` unchanged.
-- **[unverified]** How long certificate issuance for the proxied name takes.
+
+**Observed 2026-10-26** (by unauthenticated curl against the live front, recorded in the task 092
+log; the front's behaviour, not GitHub's):
+
+- The Cloudflare rule preserves the case of the captured path (`-RC.1` came through unchanged).
+- The Cloudflare rule keeps a literal `+` in the path.
+- The proxied name served a valid certificate (a plain curl, no `-k`, completed); how long issuance
+  took was not recorded and is not a dependency.
 
 ## Rejected namespaces: Windows reserved device names
 
