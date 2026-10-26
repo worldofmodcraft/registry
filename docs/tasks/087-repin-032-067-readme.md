@@ -29,7 +29,8 @@ book the rest).
 
 ## File scope
 `docs/tasks/032-verify.sh`, `docs/tasks/067-verify.sh` (README-pin checks only), `docs/tasks/087-repin-032-067-readme.md` (log),
-`docs/tasks/087-verify.sh` (new). Anything else = stop and report.
+`docs/tasks/087-verify.sh` (new), `docs/tasks/070-verify.sh` (the AC4.m1 mutation only; manager's scope extension, session 11, see log).
+Anything else = stop and report.
 
 ## Forbidden
 Loosening any check beyond moving an own-change check to its pinned FINAL; pinning a live property; skips.
@@ -123,3 +124,10 @@ Loosening any check beyond moving an own-change check to its pinned FINAL; pinni
     script on HEAD and on the merge with 082, one at a time). The machine was never quiet during the 2 h of polling every 10 min:
     a 039b-verify.sh parent (pid 3672584, up for 3 h 55 min at the last check) keeps spawning children (064, 065, 066, 057 ...). I did not
     kill it. These two runs must be done on a quiet machine before merge.
+- 2026-10-26 manager (session 12): quiet-machine runs at 30942ec: `087-verify.sh <nm>` ALL CHECKS PASSED (27 PASS, 0 FAIL); `087-verify.sh --mutate <nm>`
+  ALL CHECKS PASSED (8: controls c1 c2; m1-m6 each red, none skipped). **Independent review (read-only): PASS-WITH-AMENDMENTS.** (A) File scope now
+  lists 070-verify.sh (AC4.m1 only), matching the session-11 extension — done in this commit. (1, MED, blocks merge) 070 default and `--mutate`
+  not yet demonstrated end to end for the AC4.m1 rewrite: the manager runs both on the local merge main 4268735 + 087 + 082 (070 default is part
+  of the `082-verify.sh --full` sweep there; `--mutate` queued after it) and pastes results here before merge. (2, MED) AC3 all closed scripts on
+  the merge with 082: the same sweep. (3, LOW) the earlier one-off `FAIL AC1.5` (062 inside 067) stays an open observation; a finding against 062
+  if it recurs. (4, LOW) the latent README-at-HEAD reads (007a, 007b, 008a, 057, test_hardening) belong to sweep tasks 089/090 (inventory 088).
