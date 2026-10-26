@@ -13,7 +13,7 @@
 #                next to the normative block.
 #   --full       AC13: clones the committed HEAD into a temporary directory and runs every OTHER docs/tasks/*-verify.sh
 #                there, one at a time, with no argument. Without --full, AC13 is reported as NOT RUN, never as green.
-# Own-change checks use the EXPLICIT SHAs below, never HEAD or origin/main, so later tasks cannot redden them.
+# Own-change checks use the EXPLICIT SHAs below (BASE, FINAL, TIP), never HEAD or origin/main, so later tasks cannot redden them.
 # The caller's worktree is never modified. Network: none (the --full clone is of the local repository).
 # Exit code: the number of failed checks. Requires: git, python3 (standard library only).
 # Before --full, check that no other verify script is running:
@@ -23,7 +23,8 @@ set -u
 set -o pipefail
 
 BASE="4356583fb2360592a680f40bee396f9f23df35a4"    # registry origin/main at the cut (merge of PR #18, task 075)
-FINAL="afa48f20756c2fca793a0732cf7834e924663c3b"                                   # the commit carrying the contract and the README row
+FINAL="afa48f20756c2fca793a0732cf7834e924663c3b"   # the commit carrying the contract and the README row
+TIP="002a59ac15917c7a92e9a2d03e8d9ce8e457a62c"      # the last content commit of the branch (own-change checks never use HEAD)
 
 ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)" || exit 99
 FULL=0
@@ -49,7 +50,7 @@ import re
 import subprocess
 import sys
 
-ROOT, BASE, FINAL, TMP = sys.argv[1:5]
+ROOT, BASE, FINAL, TMP, TIP = sys.argv[1:6]
 CONTRACT = "contracts/pipeline-trigger.md"
 README = "docs/contracts/README.md"
 FAILURES = 0
@@ -62,8 +63,8 @@ def out(kind, cid, msg):
         FAILURES += 1
 
 
-def git(*args, check=True):
-    r = subprocess.run(["git", "-C", ROOT] + list(args), capture_output=True)
+def git(*args, check=True, repo=None):
+    r = subprocess.run(["git", "-C", repo or ROOT] + list(args), capture_output=True)
     if check and r.returncode != 0:
         raise RuntimeError("git %s: %s" % (" ".join(args), r.stderr.decode(errors="replace")))
     return r
@@ -269,7 +270,16 @@ def contract_checks(text):
     starts = re.findall(r"(?m)^\*\*(PT\d+)\b", text)
     if sorted(starts, key=lambda s: int(s[2:])) != ["PT%d" % n for n in range(1, 13)]:
         bad.append("paragraph-start ids are %s" % starts)
-    put("AC2", not bad, "PT1-PT12 each start exactly one paragraph, each ends in one Source: line, no other PT<n>"
+    msec = re.search(r"(?m)^## Rules\s*$", text)
+    if not msec:
+        bad.append("no '## Rules' section")
+    else:
+        rest = text[msec.end():]
+        nx = re.search(r"(?m)^## ", rest)
+        for pp in paragraphs(rest if not nx else rest[: nx.start()]):
+            if pp.strip() and not re.match(r"\*\*PT\d+ ", pp.lstrip()):
+                bad.append("unnumbered paragraph in Rules: %r" % norm(pp)[:80])
+    put("AC2", not bad, "PT1-PT12 each start exactly one paragraph, each ends in one Source: line, no other PT<n>, no unnumbered paragraph in Rules"
         if not bad else "; ".join(bad))
 
     # AC3 normative block
@@ -383,21 +393,22 @@ def report(res, only=None):
 
 # ---------------------------------------------------------------------------------------------------
 print("\n== AC10 -- pins: explicit SHAs, scope, control ==")
-for name, sha in (("BASE", BASE), ("FINAL", FINAL)):
+for name, sha in (("BASE", BASE), ("FINAL", FINAL), ("TIP", TIP)):
     ok = git("cat-file", "-e", sha + "^{commit}", check=False).returncode == 0
     out("PASS" if ok else "FAIL", "AC10.pin", "%s %s exists" % (name, sha[:12]) if ok else "%s %s does not exist" % (name, sha))
-if git("merge-base", "--is-ancestor", BASE, FINAL, check=False).returncode == 0:
-    out("PASS", "AC10.order", "BASE is an ancestor of FINAL")
+if (git("merge-base", "--is-ancestor", BASE, FINAL, check=False).returncode == 0
+        and git("merge-base", "--is-ancestor", FINAL, TIP, check=False).returncode == 0):
+    out("PASS", "AC10.order", "BASE is an ancestor of FINAL, and FINAL of TIP")
 else:
-    out("FAIL", "AC10.order", "BASE is not an ancestor of FINAL")
+    out("FAIL", "AC10.order", "BASE, FINAL, TIP are not in ancestor order")
 SCOPE_FINAL = {CONTRACT, README, "docs/tasks/082-pipeline-trigger-contract.md"}
 SCOPE_HEAD = SCOPE_FINAL | {"docs/tasks/082-verify.sh"}
 
 
-def own_change(base, final):
+def own_change(base, final, repo=None):
     """Return a list of failure strings for the own-change checks on base..final."""
     bad = []
-    names = set(git("diff", "--name-only", base, final).stdout.decode().split())
+    names = set(git("diff", "--name-only", base, final, repo=repo).stdout.decode().split())
     if not names:
         bad.append("empty diff")
     extra = sorted(names - SCOPE_FINAL)
@@ -405,7 +416,7 @@ def own_change(base, final):
         bad.append("files outside the declared scope: %s" % extra)
     if CONTRACT not in names:
         bad.append("%s not in the diff" % CONTRACT)
-    c = git("diff", "--name-only", base, final, "--", "contracts/").stdout.decode().split()
+    c = git("diff", "--name-only", base, final, "--", "contracts/", repo=repo).stdout.decode().split()
     if c != [CONTRACT]:
         bad.append("contracts/ diff lists %s, want only [%s]" % (c, CONTRACT))
     return bad
@@ -416,10 +427,58 @@ out("PASS" if not bad else "FAIL", "AC9/AC10.scope",
     "BASE..FINAL touches only the declared scope, and under contracts/ only the new file" if not bad else "; ".join(bad))
 bad = own_change(BASE, BASE)
 out("PASS" if bad else "FAIL", "AC10.control", "control FINAL=BASE is red (%s)" % "; ".join(bad) if bad else "control FINAL=BASE was NOT red")
-names = set(git("diff", "--name-only", BASE, "HEAD").stdout.decode().split())
-extra = sorted(names - SCOPE_HEAD)
-out("PASS" if not extra else "FAIL", "AC10.head", "BASE..HEAD touches only the declared scope (log and script included)" if not extra
-    else "BASE..HEAD touches files outside the scope: %s" % extra)
+
+
+def tip_checks(base, final, tip, repo=None):
+    """Own-change checks on the pinned TIP (never HEAD): scope on base..tip, and the merged bytes equal the verified bytes."""
+    bad = []
+    names = set(git("diff", "--name-only", base, tip, repo=repo).stdout.decode().split())
+    extra = sorted(names - SCOPE_HEAD)
+    if extra:
+        bad.append("BASE..TIP touches files outside the scope: %s" % extra)
+    d = git("diff", "--name-only", final, tip, "--", CONTRACT, README, repo=repo).stdout.decode().split()
+    if d:
+        bad.append("FINAL..TIP changes %s (the merged bytes differ from the verified bytes)" % d)
+    return bad
+
+
+bad = tip_checks(BASE, FINAL, TIP)
+out("PASS" if not bad else "FAIL", "AC10.tip", "BASE..TIP touches only the declared scope (log and script included)" if not bad else "; ".join(bad))
+out("PASS" if not [b for b in bad if "FINAL..TIP" in b] else "FAIL", "AC10.bytes",
+    "git diff FINAL TIP -- contracts/pipeline-trigger.md docs/contracts/README.md is empty: merged bytes equal verified bytes"
+    if not [b for b in bad if "FINAL..TIP" in b] else "FINAL..TIP differs in the contract or README")
+
+# Mutation proofs for the TIP checks: commits on top of TIP in a throw-away clone (the real repository is never written).
+mc = os.path.join(TMP, "tipclone")
+subprocess.run(["git", "clone", "-q", "--no-hardlinks", ROOT, mc], check=True, capture_output=True)
+GC = ["-c", "user.name=verify", "-c", "user.email=verify@example.invalid", "-c", "commit.gpgsign=false"]
+
+
+def mk_commit(msg, path, content, append=False):
+    git("checkout", "-q", "--detach", TIP, repo=mc)
+    fp = os.path.join(mc, path)
+    os.makedirs(os.path.dirname(fp), exist_ok=True)
+    with open(fp, "a" if append else "w") as fh:
+        fh.write(content)
+    git("add", path, repo=mc)
+    git(*GC, "commit", "-q", "-m", msg, repo=mc)
+    return git("rev-parse", "HEAD", repo=mc).stdout.decode().strip()
+
+
+m1 = mk_commit("mutant: out-of-scope file on top of TIP", "tools/mutant.txt", "x\n")
+b1 = tip_checks(BASE, FINAL, m1, repo=mc)
+out("PASS" if any("outside the scope" in b for b in b1) else "FAIL", "MUT.tip-scope",
+    "AC10.tip mutation: a commit on top adding tools/mutant.txt is red (%s)" % ("; ".join(b1) or "NOT RED"))
+m2 = mk_commit("mutant: post-FINAL edit of the contract", CONTRACT, "\nExtra permissive line.\n", append=True)
+b2 = tip_checks(BASE, FINAL, m2, repo=mc)
+out("PASS" if any("FINAL..TIP" in b for b in b2) else "FAIL", "MUT.tip-bytes",
+    "AC10.bytes mutation: a post-FINAL edit of the contract is red (%s)" % ("; ".join(b2) or "NOT RED"))
+m3 = mk_commit("mutant: post-FINAL edit of the README", README, "\nExtra line.\n", append=True)
+b3 = tip_checks(BASE, FINAL, m3, repo=mc)
+out("PASS" if any("FINAL..TIP" in b for b in b3) else "FAIL", "MUT.tip-bytes",
+    "AC10.bytes mutation: a post-FINAL edit of the README is red (%s)" % ("; ".join(b3) or "NOT RED"))
+b4 = tip_checks(BASE, FINAL, TIP, repo=mc)
+out("PASS" if not b4 else "FAIL", "MUT.tip-restored", "restored: the real TIP is green again in the clone" if not b4 else "TIP red after restore: %s" % b4)
 
 print("\n== AC1 -- the file exists at FINAL, absent at BASE ==")
 final_bytes = blob(FINAL, CONTRACT)
@@ -524,6 +583,8 @@ MUTATIONS = [
     ("AC7 PT6: cancel-in-progress sentence edited to true", mut_text("cancel-in-progress: false }", "cancel-in-progress: true }"), ["AC7:PT6"]),
     ("AC11 PT7: drop the [unverified] marker on the App-merge statement",
      mut_text("fires a `push` run is `[unverified]`", "fires a `push` run is certain"), ["AC11", "AC7:PT7"]),
+    ("AC2 Rules: unnumbered 'Exception:' paragraph inserted after PT3",
+     lambda t: t.replace("\n\n**PT4 Input snapshot.**", "\n\n**Exception:** a dispatch from any ref may reach the key.\n\n**PT4 Input snapshot.**", 1), ["AC2"]),
     ("AC2 PT13 id added", lambda t: t.replace("**PT12 Dry run.**", "**PT13 Extra rule.** Anything goes.\nSource: none.\n\n**PT12 Dry run.**", 1), ["AC2"]),
 ]
 for label, fn, want in MUTATIONS:
@@ -571,7 +632,7 @@ print("ALL CHECKS PASSED" if FAILURES == 0 else "%d CHECK(S) FAILED" % FAILURES)
 sys.exit(FAILURES)
 PY
 
-python3 -I -B "$TMP/check.py" "$ROOT" "$BASE" "$FINAL" "$TMP"
+python3 -I -B "$TMP/check.py" "$ROOT" "$BASE" "$FINAL" "$TMP" "$TIP"
 RC=$?
 FAILURES=$RC
 
