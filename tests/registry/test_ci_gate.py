@@ -557,6 +557,18 @@ class AC3FailClosed(Base):
             self.assertEqual(ci_gate.main(argv), 2)
         self.assertEqual(json.loads((out / "verdict.json").read_text())["result"], "undecided")
 
+    def test_a_failed_write_never_leaves_an_accepted_or_rejected_verdict_on_disk(self):
+        w = self.world()
+        head = w.pr(add_version_changes())
+        for blocked in ("comment.md", "outputs", "class"):
+            out = w.ws / f"out{w.runs + 1}"
+            (out / blocked).mkdir(parents=True)  # a directory where the file should go: the write fails
+            res = run_cli(w, head)
+            self.assertEqual(res.code, 2, blocked)
+            if (out / "verdict.json").exists():
+                self.assertEqual(json.loads((out / "verdict.json").read_text())["result"], "undecided", blocked)
+            self.assertNotIn("accepted", (out / "outputs").read_text() if (out / "outputs").is_file() else "")
+
     def test_bad_membership_status_argument_exits_2(self):
         w = self.world()
         h = self.head(w)
