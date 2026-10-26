@@ -366,6 +366,14 @@ class AC7Structure(WorkflowTestCase):
         comment = "".join(run_of(s) for s in yaml.safe_load(self.text)["jobs"]["comment"]["steps"])
         self.assertIn("GITHUB_RUN_ID", comment)
 
+    def test_missing_artifact_comment_is_worded_by_the_gate_result(self):  # security review S3
+        comment = joined("".join(run_of(s) for s in yaml.safe_load(self.text)["jobs"]["comment"]["steps"]))
+        self.assertRegex(comment, r'\[ "\$GATE_RESULT" = failure \]', "the fixed text must branch on needs.gate.result == failure")
+        self.assertIn("the gate failed", comment)
+        failed_branch = comment.split('"$GATE_RESULT" = failure', 1)[1].split("else", 1)[0]
+        self.assertNotIn("not a rejection", failed_branch, "a failed gate must never be called 'not a rejection'")
+        self.assertNotIn("${{", comment, "no expression inside run:")
+
 
 class AC7ZeroMatches(WorkflowTestCase):
     """A rule that matches nothing proves nothing: deleting the thing it looks for must make the checker complain."""
