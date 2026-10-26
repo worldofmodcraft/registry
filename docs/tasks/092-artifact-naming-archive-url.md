@@ -270,3 +270,55 @@ the 008 umbrella; the Q2 follow-up.
   14 files under contracts/examples/entry/, docs/contracts/README.md row). Platform branch task/092-depgraph carries the
   depgraph.md N6 cell. Suites on FINAL, PYTHONDONTWRITEBYTECODE=1: tests/contracts 32 tests OK; tests/registry 362 tests OK.
   Left for phase 2: 092-verify.sh, the PR(s), the AC11 live capture, pasting verify output here.
+- 2026-10-26 implementer (phase 2 of 2): `docs/tasks/092-verify.sh` written (script commit 001058e on top of TIP `3348f0a`; TIP stays the
+  last commit before the script, as in 039a). Modes: default = AC1-AC9 offline (git + stdlib python3, ~25 s); `--mutate` = AC10;
+  `--live` = AC11 (NOT run: M12 is not configured); `--closed [--nm DIR]` = AC12; `--site DIR` = the AC7 ADVISORY node check.
+  Pins typed in the script: BASE `426873502a150ef746063c1b55c2cfbfeed31566`, FINAL `41776d74c3200f8a9eded5a3444fcd4703d998ef`, TIP
+  `3348f0a52b95887c034c1835b604433c19237f6c`. Every expected literal (host, URL form, redirect-target form, the examples' URLs and
+  targets, each normative sentence, the 24 reserved device names, the scope pattern) is typed in the script; the contract text is only
+  searched. The script's own `derive()` (typed from the Objective's formula) is cross-checked against its typed literals (AC2.1/2.2).
+  Phase-1 rulings applied: "hop" = one redirect response, the final 2xx not counted (pinned by the sentence "A **hop** is one redirect
+  response (301, 302, 307 or 308); the response that ends the chain is not a hop." exactly once); the contract may cite runbook M12 by
+  name before 091 merges; `depgraph.md`'s "Last reviewed" stamp is untouched.
+  **Design notes for the reviewer.**
+  (1) AC12 is its own flag (`--closed`), not part of the default run: closed script 039a sweeps every `docs/tasks/*-verify.sh`, so a
+  default 092 that also swept them would recurse (039a -> 092 -> 039a). The default run is what 039a's sweep will call after merge
+  (it needs no node and no network). (2) The spec says "the three worked examples"; the contract spells out two triples, and the
+  signature's redirect target is defined by the rule "the tarball's redirect target plus `.minisig`", not by a literal. AC2 therefore
+  pins six literals in the contract (tarball URL, signature URL, tarball target of example 1, example 2's URL and target, plus the
+  target form) and AC2.9 pins the signature-target rule (typed `EX1_TS == EX1_T + ".minisig"`, rule sentence present); AC3.1 checks
+  `naming.release_asset_url` returns the typed signature target. (3) AC5 pins each normative block whole: the 7 consumer rules, 3
+  producer obligations, both fail-closed lists and the 4 `[unverified]` bullets are compared byte-for-byte (whitespace-normalised) with
+  the typed text, and each is counted exactly once over the whole file; a tail sentence appended to a rule, a deleted rule or a
+  weakened number therefore reddens. (4) AC7's parsed-JSON diff covers all 20 example files (14 changed, 6 untouched pending/rejected
+  shapes), and a raw line diff proves only `"source_archive":` lines changed (no reformatting). (5) The `--live` helpers were exercised
+  against a throwaway local fake front on 127.0.0.1 (302 + Location, with `+` and a query) to prove the parsing; the real host was NOT
+  contacted. AC11c is written to fail with "STOP: ... change the contract text" if the front ever forwards a query.
+  **Run, default, PYTHONDONTWRITEBYTECODE=1, foreground, worktree at 001058e: exit 0, 184 PASS, 0 FAIL** (AC9 own-change block 9 PASS +
+  3 controls + 4 scope controls; content checks 159 PASS: AC1 6, AC2 14, AC3 18, AC4 11, AC5 55, AC6 18, AC7 29, AC8 8). Key lines:
+  - AC9: `PASS  git diff --name-only BASE FINAL is non-empty and inside the file scope (16 files)`; `PASS  AC9 control: FINAL=BASE makes 2
+    own-change check(s) fail (red as required)`; `PASS  AC9 control: an unreachable FINAL pin is red, never skipped (5 failure(s))`.
+  - AC4: `PASS  AC4.4 24178 distinct valid triples generated (floor 2000); 24 reserved-namespace triples excluded, 0 invalid skipped`;
+    `PASS  AC4.6 injectivity: 24178 URLs from 24178 triples, collisions: []`; `PASS  AC4.7 every URL matches
+    ^https://archive\.worldofmodcraft\.com/[0-9A-Za-z._+-]+/[0-9A-Za-z._+-]+\.tar\.gz$ with no %, .., //, ? or # (bad: [])`; the
+    reserved-device-name rule is quoted from the unchanged section (AC4.3) and `naming.check_namespace` rejects all 26 spellings (AC4.2).
+  - AC7: sha256 equal at BASE and FINAL for `entry.schema.json` (`109e172e0d56a58f...`), `append-only.rules.md` (`c555d2f87ca14e98...`),
+    `signature-format.md` (`fdda671956214292...`), `archive-layout.md` (`c8a5466ba13f18cf...`), `page.schema.json`, `manifest.schema.json`
+    (the site needs no schema re-sync); `AC7.6 the 14 example files with a parsed-JSON diff are exactly the 14 files git reports changed`.
+  - AC3: `naming.release_asset_url` at BASE and at FINAL (imported from the clones) and `tests/pipeline/test_cli.py::ComputedValues::
+    test_ac12_release_asset_url_pinned_over_artifact_naming_examples` (run in both clones) agree with the typed targets; `naming.py`
+    and `test_cli.py` are byte-identical BASE/FINAL; both published and removed version documents for both example URLs validate under
+    `tests/contracts/schema_check.py` and the strict `tools/registry/schema.py`; two negative controls (http://, a space) are rejected by both.
+  **`--mutate` (foreground): exit 0, 45 PASS, 0 FAIL.** Positive control green (159 checks) before and after; every mutation red on the
+  named check and restored byte-identically (sha256 equal, `git status` clean):
+  host -> .org (AC2, 12 failing); URL join -> `<tag>-<asset>` (AC2, 1); redirect target repo -> `worldofmodcraft/registry` (AC2, 5);
+  example tag -> `mc:hello-world-1.0.0` (AC2, 4); hash-and-signature-before-use sentence deleted (AC5, 5); permissive tail "may fall back
+  to the github.com URL" (AC5, 4); tail making consumers enforce hop 1's target (AC5, 2); "5 hops" -> "bounded" (AC5, 6); an `[unverified]`
+  marker dropped (AC5, 2); one byte of `entry.schema.json`'s description (AC7.2, 2); `signature-format.md` touched (AC7.2, 2); the README
+  phrase "None of the three tasks implements checking logic" deleted (AC8.4, 7).
+  **Fresh clone** (`git clone -b task/092-artifact-naming-archive-url https://github.com/worldofmodcraft/registry.git`, at 001058e, default
+  mode): exit 0, 184 PASS, 0 FAIL.
+  **AC7 ADVISORY (`--site /home/ludwig/wt/site-task-065`, the site branch task/065-resync-entry-schema at a5c88d6, which carries `scripts/check-schemas.mjs`; site main
+  does not have the script yet)**: `compared=3 differ=0` against the FINAL clone.
+  **AC11 (live): NOT RUN.** Pending: Ludwig finishes runbook step M12; then the manager runs
+  `docs/tasks/092-verify.sh --live` (unauthenticated `curl`, no credentials) and pastes the capture here; it gates the merge (Q7).
