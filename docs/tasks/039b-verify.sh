@@ -24,7 +24,7 @@ set -o pipefail
 BASE=4268735        # registry origin/main (039a merged, PR #21) the branch was cut from
 RED=6b94a31         # tests + spec log only; .github/workflows/registry-ci.yml does not exist yet
 FINAL=2a98fa1       # last commit that changes the workflow, the tests, CONTRIBUTING.md or README.md (later commits: log and this script)
-TIP=__TIP__         # last branch commit before the one that pinned TIP: BASE..TIP is the scope-checked range, so a later merge with
+TIP=a3901e5         # last branch commit before the one that pinned TIP: BASE..TIP is the scope-checked range, so a later merge with
                     # registry main cannot redden it. The one commit after TIP changes only this script (in scope).
 
 ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)" || exit 99
