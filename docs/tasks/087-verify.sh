@@ -91,10 +91,15 @@ first_fail() { grep -E '^FAIL' "$1" | head -n"${2:-4}" | cut -c1-130 | tr '\n' '
 # ==================================================================================================
 if [ "$MUTATE" = 0 ]; then
 
+# 032 and 067 as of 087's pinned TIP (never the working tree / HEAD: a later branch may touch them; item 12). An unreadable TIP FAILS.
+S032T="$TMP/tip-032-verify.sh"; S067T="$TMP/tip-067-verify.sh"; : > "$S032T"; : > "$S067T"
+git -C "$ROOT" show "$PIN087_TIP:$S032" > "$S032T" 2>/dev/null && git -C "$ROOT" show "$PIN087_TIP:$S067" > "$S067T" 2>/dev/null \
+    || fail "AC0.0 cannot read $S032 / $S067 at the pinned TIP $PIN087_TIP"
+
 if [ "$OWN" = 0 ]; then
 section "AC0 -- the README checks read the task's pinned FINAL, and the pins are the tasks' own PR ranges"
-pin_of() { sed -n "s/^$2=\"\{0,1\}\([0-9a-f]\{7,\}\)\"\{0,1\}\([[:space:]].*\)\{0,1\}$/\1/p" "$ROOT/$1" | head -n1; }
-p032=$(pin_of $S032 README_PIN_FINAL); s032=$(pin_of $S032 SCOPE_FINAL); f067=$(pin_of $S067 FINAL); b067=$(pin_of $S067 BASE)
+pin_of() { sed -n "s/^$2=\"\{0,1\}\([0-9a-f]\{7,\}\)\"\{0,1\}\([[:space:]].*\)\{0,1\}$/\1/p" "$1" | head -n1; }
+p032=$(pin_of "$S032T" README_PIN_FINAL); s032=$(pin_of "$S032T" SCOPE_FINAL); f067=$(pin_of "$S067T" FINAL); b067=$(pin_of "$S067T" BASE)
 if [ -z "$p032" ] || [ -z "$s032" ] || [ -z "$f067" ] || [ -z "$b067" ]; then
     fail "AC0.1 cannot read README_PIN_FINAL / SCOPE_FINAL from $S032 or FINAL / BASE from $S067 (a search that finds nothing is broken)"
 else
@@ -107,13 +112,13 @@ else
     [ "$(git -C "$ROOT" rev-parse "$b067^{commit}" 2>/dev/null)" = "$(git -C "$ROOT" merge-base "$M067^1" "$M067^2" 2>/dev/null)" ] \
         && pass "AC0.4 067's BASE=$b067 is PR #11's fork point (git merge-base $M067^1 $M067^2)" || fail "AC0.4 067's BASE=$b067 is not PR #11's fork point"
 fi
-if grep -qE '^[^#]*git show "\$README_PIN_FINAL:\$CONTRACTS_README_PATH"' "$ROOT/$S032"; then
+if grep -qE '^[^#]*git show "\$README_PIN_FINAL:\$CONTRACTS_README_PATH"' "$S032T"; then
     pass "AC0.5 $S032 materialises the README with git show \"\$README_PIN_FINAL:...\""
 else fail "AC0.5 $S032 does not read the README with git show \"\$README_PIN_FINAL:...\""; fi
-if grep -E '^(expect_hits|expect_hits_flow) "N5b? ' -A1 "$ROOT/$S032" | grep -E 'CONTRACTS_README_PATH|HEAD:' >/dev/null; then
+if grep -E '^(expect_hits|expect_hits_flow) "N5b? ' -A1 "$S032T" | grep -E 'CONTRACTS_README_PATH|HEAD:' >/dev/null; then
     fail "AC0.6 an N5/N5b call reads the README path (HEAD) instead of the pinned copy"
 else pass "AC0.6 neither N5 nor N5b call reads the README path (HEAD) directly"; fi
-a25=$(grep -E '^if .*AC2\.5|AC2\.5 the' "$ROOT/$S067" | head -n3)
+a25=$(grep -E '^if .*AC2\.5|AC2\.5 the' "$S067T" | head -n3)
 if printf '%s\n' "$a25" | grep -qF 'show "$FINAL:docs/contracts/README.md"' && ! printf '%s\n' "$a25" | grep -qF '$TMP/head/docs/contracts/README.md'; then
     pass "AC0.7 $S067 AC2.5 reads the README at \"\$FINAL\" and not from the HEAD clone"
 else fail "AC0.7 $S067 AC2.5 does not read the README at \"\$FINAL\" (or still reads the HEAD clone): $(printf '%s' "$a25" | cut -c1-160)"; fi
@@ -154,23 +159,27 @@ section "AC4 -- 087's own change, measured on fixed SHAs (never HEAD)"
 if [ "$PIN087_RED" = "__RED__" ] || [ "$PIN087_FIX" = "__FIX__" ]; then
     fail "AC4.0 the 087 red/fix SHAs are not pinned yet"
 else
-    for s in "$PIN087_BASE" "$PIN087_RED" "$PIN087_FIX"; do
+    for s in "$PIN087_BASE" "$PIN087_RED" "$PIN087_FIX" "$PIN087_FINAL" "$PIN087_TIP"; do
         git -C "$ROOT" cat-file -e "$s^{commit}" 2>/dev/null && pass "AC4.1 pin $s exists" || fail "AC4.1 pin $s does not exist"
     done
     [ "$(git -C "$ROOT" rev-parse "$PIN087_RED^" 2>/dev/null)" = "$(git -C "$ROOT" rev-parse "$PIN087_BASE^{commit}" 2>/dev/null)" ] \
         && pass "AC4.2 the red commit's parent is the base" || fail "AC4.2 the red commit's parent is not the base"
     [ "$(git -C "$ROOT" rev-parse "$PIN087_FIX^" 2>/dev/null)" = "$(git -C "$ROOT" rev-parse "$PIN087_RED^{commit}" 2>/dev/null)" ] \
         && pass "AC4.3 the fix commit follows the red commit directly" || fail "AC4.3 the fix commit does not follow the red commit"
-    git -C "$ROOT" merge-base --is-ancestor "$PIN087_FIX" HEAD && pass "AC4.4 the fix commit is an ancestor of HEAD" || fail "AC4.4 the fix commit is not an ancestor of HEAD"
+    git -C "$ROOT" merge-base --is-ancestor "$PIN087_FIX" "$PIN087_TIP" && pass "AC4.4 the fix commit is an ancestor of the pinned TIP" || fail "AC4.4 the fix commit is not an ancestor of the pinned TIP"
     red_files="$(git -C "$ROOT" diff --name-only "$PIN087_BASE" "$PIN087_RED" 2>/dev/null | sort | tr '\n' ' ')"
     [ "$red_files" = "docs/tasks/087-repin-032-067-readme.md docs/tasks/087-verify.sh " ] \
         && pass "AC4.5 the red commit touches only 087-verify.sh and the task file" || fail "AC4.5 the red commit touches: $red_files"
     fix_files="$(git -C "$ROOT" diff --name-only "$PIN087_RED" "$PIN087_FIX" 2>/dev/null | sort | tr '\n' ' ')"
     [ "$fix_files" = "docs/tasks/032-verify.sh docs/tasks/067-verify.sh " ] \
         && pass "AC4.6 the fix commit touches only 032-verify.sh and 067-verify.sh" || fail "AC4.6 the fix commit touches: $fix_files"
-    # the whole PR range stays inside the declared file scope
-    extra="$(git -C "$ROOT" diff --name-only "$PIN087_BASE" HEAD 2>/dev/null | grep -vxE 'docs/tasks/032-verify\.sh|docs/tasks/067-verify\.sh|docs/tasks/070-verify\.sh|docs/tasks/087-repin-032-067-readme\.md|docs/tasks/087-verify\.sh' | tr '\n' ' ')"
-    [ -z "$extra" ] && pass "AC4.7 base..HEAD stays inside the declared file scope" || fail "AC4.7 out-of-scope files changed in base..HEAD: $extra"
+    # the whole PR range (BASE..TIP, never HEAD) stays inside the declared file scope. A diff that cannot be computed FAILS (never an empty list).
+    if ! scope_files="$(git -C "$ROOT" diff --name-only "$PIN087_BASE" "$PIN087_TIP" 2>&1)"; then
+        fail "AC4.7 cannot compute $PIN087_BASE..$PIN087_TIP: $(printf '%s' "$scope_files" | head -n1 | cut -c1-100)"
+    else
+        extra="$(printf '%s\n' "$scope_files" | grep -vxE 'docs/tasks/032-verify\.sh|docs/tasks/067-verify\.sh|docs/tasks/070-verify\.sh|docs/tasks/087-repin-032-067-readme\.md|docs/tasks/087-verify\.sh' | tr '\n' ' ')"
+        [ -n "$scope_files" ] && [ -z "$extra" ] && pass "AC4.7 base..TIP stays inside the declared file scope" || fail "AC4.7 out-of-scope files changed in base..TIP (or the range is empty): $extra"
+    fi
     # the fix commit changes README-pin checks only: in 067 only the AC2.5 line, in 032 only the pin block, N5/N5b and the variable
     d067="$(git -C "$ROOT" diff -U0 "$PIN087_RED" "$PIN087_FIX" -- $S067 | grep -E '^[+-][^+-]' | grep -vE 'AC2\.5|Task 087|^[+-]#' | wc -l)"
     [ "$d067" = 0 ] && pass "AC4.8 in 067-verify.sh only the AC2.5 check (and comments) changed" || fail "AC4.8 067-verify.sh changed outside AC2.5 and comments ($d067 lines)"
@@ -180,7 +189,7 @@ else
     if [ "$PIN087_070" = "__070__" ]; then fail "AC4.11 the 070 SHA is not pinned yet"; else
         [ "$(git -C "$ROOT" rev-parse "$PIN087_070^" 2>/dev/null)" = "$(git -C "$ROOT" rev-parse "$PIN087_PIN^{commit}" 2>/dev/null)" ] \
             && pass "AC4.11 the 070 commit follows the pin commit directly" || fail "AC4.11 the 070 commit does not follow the pin commit"
-        git -C "$ROOT" merge-base --is-ancestor "$PIN087_070" HEAD && pass "AC4.12 the 070 commit is an ancestor of HEAD" || fail "AC4.12 the 070 commit is not an ancestor of HEAD"
+        git -C "$ROOT" merge-base --is-ancestor "$PIN087_070" "$PIN087_TIP" && pass "AC4.12 the 070 commit is an ancestor of the pinned TIP" || fail "AC4.12 the 070 commit is not an ancestor of the pinned TIP"
         files070="$(git -C "$ROOT" diff --name-only "$PIN087_PIN" "$PIN087_070" 2>/dev/null | tr '\n' ' ')"
         d070="$(git -C "$ROOT" diff -U0 "$PIN087_PIN" "$PIN087_070" -- $S070 2>/dev/null)"
         if [ "$files070" = "$S070 " ] && [ "$(printf '%s\n' "$d070" | grep -c '^@@')" = 1 ] \
@@ -188,8 +197,16 @@ else
             pass "AC4.13 the 070 commit touches only 070-verify.sh, one hunk, replacing the one AC4.m1 line"
         else fail "AC4.13 the 070 commit is not a single-hunk AC4.m1 replacement (files: $files070)"; fi
     fi
+    # FINAL is the last commit that touched a script of the range, and FINAL..TIP touches only 087's own task files (the 084 / 039a pattern)
+    last_script="$(git -C "$ROOT" log -1 --format=%H "$PIN087_BASE..$PIN087_TIP" -- $S032 $S067 $S070 docs/tasks/087-verify.sh 2>/dev/null)"
+    [ -n "$last_script" ] && [ "$last_script" = "$(git -C "$ROOT" rev-parse "$PIN087_FINAL^{commit}" 2>/dev/null)" ] \
+        && pass "AC4.14a FINAL is the last commit in BASE..TIP that touched a script" || fail "AC4.14 FINAL ${PIN087_FINAL:0:12} is not the last script-touching commit in BASE..TIP (that is ${last_script:0:12})"
+    if ! tail_files="$(git -C "$ROOT" diff --name-only "$PIN087_FINAL" "$PIN087_TIP" 2>&1)"; then fail "AC4.14 cannot compute FINAL..TIP: $(printf '%s' "$tail_files" | head -n1 | cut -c1-100)"
+    elif [ -z "$(printf '%s\n' "$tail_files" | grep -vE '^docs/tasks/087-' )" ]; then pass "AC4.14b FINAL..TIP touches only docs/tasks/087-* files ($(printf '%s' "$tail_files" | tr '\n' ' '))"
+    else fail "AC4.14 FINAL..TIP touches files other than docs/tasks/087-*: $(printf '%s' "$tail_files" | grep -vE '^docs/tasks/087-' | tr '\n' ' ')"; fi
+    git -C "$ROOT" merge-base --is-ancestor "$PIN087_TIP" HEAD && pass "AC4.15 the pinned TIP is reachable from HEAD" || fail "AC4.15 the pinned TIP is not reachable from HEAD"
     # the patterns of N5 and N5b are not loosened: still the exact old strings
-    grep -qF "'eight prose' \"\$CONTRACTS_README\"" "$ROOT/$S032" && grep -qF "'None of the three tasks implements checking logic' \"\$CONTRACTS_README\"" "$ROOT/$S032" \
+    grep -qF "'eight prose' \"\$CONTRACTS_README\"" "$S032T" && grep -qF "'None of the three tasks implements checking logic' \"\$CONTRACTS_README\"" "$S032T" \
         && pass "AC4.10 N5 and N5b keep their exact patterns ('eight prose', 'None of the three tasks implements checking logic')" || fail "AC4.10 N5 / N5b patterns changed"
 fi
 
@@ -283,7 +300,7 @@ PY
     own_case "AC2.o1 control: --own-only on HEAD" green 0 "" "" '^PASS  AC4\.7 ' '!^FAIL'
     own_case "AC2.o2 a later branch's out-of-scope commit leaves AC4.7 green (item 12: the merge with 082 / 039a)" green 1 "" "" '^PASS  AC4\.7 ' '!^FAIL'
     own_case "AC2.o3 the range widened back to BASE..HEAD is red on a later branch's commit" red 1 \
-        'diff --name-only "$PIN087_BASE" "$PIN087_TIP"' 'diff --name-only "$PIN087_BASE" HEAD' '^FAIL  AC4\.7 '
+        'diff --name-only "$PIN087_BASE" "$PIN087_'"TIP"'"' 'diff --name-only "$PIN087_BASE" HEAD' '^FAIL  AC4\.7 '
     own_case "AC2.o4 FINAL=BASE makes the own-change check red" red 0 \
         "PIN087_FINAL=\"$PIN087_FINAL\"" "PIN087_FINAL=\"$PIN087_BASE\"" '^FAIL  AC4\.14 '
     own_case "AC2.o5 an unreachable TIP pin is red, not skipped" red 0 \
