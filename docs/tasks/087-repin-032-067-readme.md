@@ -147,3 +147,9 @@ Loosening any check beyond moving an own-change check to its pinned FINAL; pinni
     (AC4 still on HEAD, so o2 fails there, o3-o6 fail because their patterns/checks do not exist yet: reasoning only), then the fix `a6e89683d8b2fea656a01aa46938e6291e9cace1`.
   - NOT RUN by me (a verification queue was running; only `bash -n` and git were allowed). **The manager runs**: `bash docs/tasks/087-verify.sh <nm>` and `bash docs/tasks/087-verify.sh --mutate <nm>`
     on the merge main 4268735 + 087 + 082 (also `--own-only` alone is quick). Unproven until then.
+- 2026-10-27 manager (session 12): fix round verified. Red/green `--own-only`: merge main+087@7291120+082 exit 1 (AC4.7 FAIL), merge
+  main+087@fd7c6bb+082 exit 0 (20 PASS). Delta review PASS. On the local merge main 4268735 + 087 fd7c6bb + 082 (`ebc22ce`), quiet machine:
+  `070-verify.sh --mutate <nm>` ALL CHECKS PASSED (11) (review finding 1); standalone `039a-verify.sh <nm>` ALL CHECKS PASSED (70; every
+  closed script exit 0 incl. 087 and 082 default) = AC3 on the merge with 082 (review finding 2). `082-verify.sh --full` earlier on the same
+  merge (with 087's pre-fix head) was green for every script except 039a (stopped: nested-sweep deadlock, booked to 089) and 087 (the AC4.7
+  defect fixed here). Merged with Ludwig's approval, 2026-10-27 ("3. OK").
