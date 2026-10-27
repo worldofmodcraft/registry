@@ -461,3 +461,14 @@ permission scope) — its README at the pinned SHA.
 - 2026-10-26 implementer (039b), note on ordering: the verify run above is of `8f44c9d`, BEFORE the manager's security fix round (`3bbd6eb`..`b735046`, S1-S6)
   landed on this branch; it is not a run of the final HEAD. After that round `python3 -m unittest discover -s tests/registry -p 'test_ci_*.py'` on HEAD `a76f85a`
   is green (workflow + composer tests); the full `039b-verify.sh` on the final HEAD, and 065/070 on a quiet machine, are still to be run.
+- 2026-10-27 implementer (039b, verify-script fix round): finding from the manager's quiet-machine run of `039b-verify.sh` at 9d8dc4e (output
+  `/home/ludwig/.claude/jobs/8bf3d47c/tmp/q/039b.out`): 90 PASS, 1 FAIL, red evidence:
+  `FAIL AC7 structure (positive control, on->True, shape, pins, size, no --tools-dir, run-log link): expected 7 ok tests, ran 8, ok 8`.
+  Cause: the S3 test `test_missing_artifact_comment_is_worded_by_the_gate_result` made AC7Structure 8 tests; the script still expected 7.
+  Change (only `docs/tasks/039b-verify.sh`): AC7Structure expected count 7 -> 8 (still exact), label now names the new test; new opt-in flag
+  `--no-closed` skips only AC12 and prints `AC12 NOT RUN (--no-closed)` (counted neither as pass nor fail; a NOTE repeats it at the end), documented
+  in the header; default run unchanged. Pins (full SHAs): BASE `426873502a150ef746063c1b55c2cfbfeed31566`, RED `6b94a31cf64c95731b2fce3b8a974ba62d075db2`,
+  FINAL `b829636b8e5be9bf4f2ac29ebd92f4903ae5ae3b` (unchanged: no workflow/test/doc byte changed), TIP `9d8dc4e2fef7aa4189d16ad36bc2345c5f369402`
+  (last commit before the script change; only the script and this log follow it). Ran only `bash -n docs/tasks/039b-verify.sh` (ok) and
+  `python3 -m unittest tests.registry.test_ci_workflow` (12 tests OK). 039b-verify.sh NOT run (queue). Manager runs:
+  `bash docs/tasks/039b-verify.sh --no-closed <nm>` (AC12 was already green at 9d8dc4e: 373 tests, all closed scripts exit 0).

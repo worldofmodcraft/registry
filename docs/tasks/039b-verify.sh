@@ -7,7 +7,9 @@
 # checks) and AC12 (live guards) of docs/tasks/039-registry-ci-workflow.md. The composer (AC1-AC6, AC8, AC9) is 039a-verify.sh's.
 # The platform runbook steps M9/M10/M11 live in the platform repository (task/039b-runbook) and are reviewed there.
 #
-# Usage:  docs/tasks/039b-verify.sh [NODE_MODULES_DIR]      (any cwd inside the repository)
+# Usage:  docs/tasks/039b-verify.sh [--no-closed] [NODE_MODULES_DIR]      (any cwd inside the repository)
+#   --no-closed (opt-in): skips ONLY AC12 (full suite + closed-script sweep) and prints 'AC12 NOT RUN (--no-closed)'; it is not a pass.
+#   The default run (no flag) is unchanged and runs AC12.
 #   NODE_MODULES_DIR (or env WOM_NODE_MODULES, else <repo root>/tools/dev/node_modules; install with npm ci --prefix tools/dev)
 #   is only needed by the closed verify scripts of AC12 (they use ajv).
 # Own-change checks use the EXPLICIT SHAs below (BASE, RED, FINAL, TIP), never HEAD or origin/main. Behaviour checks run on the
@@ -21,13 +23,15 @@
 set -u
 set -o pipefail
 
-BASE=4268735        # registry origin/main (039a merged, PR #21) the branch was cut from
-RED=6b94a31         # tests + spec log only; .github/workflows/registry-ci.yml does not exist yet
-FINAL=b829636       # last commit that changes the workflow, the tests, CONTRIBUTING.md or README.md (later commits: log and this script)
-TIP=392e873         # last branch commit before the one that pinned TIP: BASE..TIP is the scope-checked range, so a later merge with
+BASE=426873502a150ef746063c1b55c2cfbfeed31566        # registry origin/main (039a merged, PR #21) the branch was cut from
+RED=6b94a31cf64c95731b2fce3b8a974ba62d075db2         # tests + spec log only; .github/workflows/registry-ci.yml does not exist yet
+FINAL=b829636b8e5be9bf4f2ac29ebd92f4903ae5ae3b       # last commit that changes the workflow, the tests, CONTRIBUTING.md or README.md (later commits: log and this script)
+TIP=9d8dc4e2fef7aa4189d16ad36bc2345c5f369402         # last branch commit before the one that pinned TIP: BASE..TIP is the scope-checked range, so a later merge with
                     # registry main cannot redden it. The one commit after TIP changes only this script (in scope).
 
 ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)" || exit 99
+NOCLOSED=0
+[ "${1:-}" = "--no-closed" ] && { NOCLOSED=1; shift; }
 NM="${1:-${WOM_NODE_MODULES:-$ROOT/tools/dev/node_modules}}"
 FAILURES=0
 pass() { printf 'PASS  %s\n' "$1"; }
@@ -115,7 +119,7 @@ class_check() {  # class_check CLASS EXPECTED_COUNT LABEL : the class ran exactl
     ok="$(grep -c -E "^ok $1 " "$TMP/wf.out")"
     [ "$ran" = "$2" ] && [ "$ok" = "$2" ] && pass "$3: $ok/$2 tests ok" || fail "$3: expected $2 ok tests, ran $ran, ok $ok"
 }
-class_check AC7Structure 7 "AC7 structure (positive control, on->True, shape, pins, size, no --tools-dir, run-log link)"
+class_check AC7Structure 8 "AC7 structure (positive control, on->True, shape, pins, size, no --tools-dir, run-log link, missing-artifact comment worded by the gate result)"
 class_check AC7ZeroMatches 2 "AC7 fails on zero matches"
 class_check AC7Mutations 2 "AC7 mutations"
 # every mutation, one line each, run by an independent driver on a COPY of the file; the real file is hashed before and after
@@ -184,6 +188,7 @@ printf 'CONTRIBUTING.md will document the flow\n' | grep -q -E 'CONTRIBUTING\.md
 
 # ---------------------------------------------------------------------------------------------------------------------
 section "AC12 -- live guards on HEAD: the whole registry suite, then every closed verify script, one at a time"
+if [ "$NOCLOSED" = 1 ]; then echo "AC12 NOT RUN (--no-closed)"; else
 others_running() { ps -eo args | grep -E 'docs/tasks/[^ ]*-verify\.sh' | grep -v grep | grep -v '039b-verify\.sh' | grep -q .; }
 wait_quiet() {
     local waited=0
@@ -207,7 +212,9 @@ if [ -d "$NM/ajv" ] && command -v node >/dev/null 2>&1; then
 else
     fail "AC12 prerequisite: node and a node_modules directory with ajv are needed for the closed scripts (npm ci --prefix tools/dev, or pass NODE_MODULES_DIR)"
 fi
+fi
 
 printf '\n== RESULT ==\n'
+[ "$NOCLOSED" = 1 ] && echo "NOTE: AC12 NOT RUN (--no-closed); this is not a full pass"
 if [ "$FAILURES" = 0 ]; then echo "ALL CHECKS PASSED"; else echo "$FAILURES CHECK(S) FAILED"; fi
 exit "$FAILURES"
