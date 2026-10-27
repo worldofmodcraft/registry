@@ -7,12 +7,12 @@ against each other's code. Task 006 defined the first four (the ones that block 
 025 wrote the remaining six that the dependency graph (`docs/architecture/depgraph.md` in the
 platform repository) already named but nobody had written yet; task 032 wrote the eleventh, for
 edge E16 — added to the graph by amendment after task 006's review found it had no contract at
-all. None of the three tasks implements checking logic —
+all; task 082 wrote the twelfth, for edge E15 (`contracts/pipeline-trigger.md`). None of the four tasks implements checking logic —
 task 007a (built) wrote the shape checkers in `tools/registry/` (see "The registry shape checkers"
 below), task 007b the ownership checker, task 008 the build pipeline, task 009 the site
 build, all reading these files. Task 008a's pipeline core is built: see `docs/pipeline/build-pipeline.md` (E7 naming,
 E9 signing, E11 archive interior) and `docs/validation/manifest-reader.md` (E1). See `docs/tasks/006-contracts.md`, `docs/tasks/
-025-boundary-contracts.md` and `docs/tasks/032-ownership-contract.md` for the full task logs.
+025-boundary-contracts.md`, `docs/tasks/032-ownership-contract.md` and `docs/tasks/082-pipeline-trigger-contract.md` for the full task logs.
 
 ## Files
 
@@ -27,6 +27,7 @@ E9 signing, E11 archive interior) and `docs/validation/manifest-reader.md` (E1).
 | `contracts/signature-format.md` | The exact minisign/Ed25519 detached-signature byte layout: the four-line file format, this project's trusted-comment grammar (`format=1;id=...;version=...;sha256=...`), what `entry.json`'s `signature` field actually stores, `key_id` derivation, and the full verifier rejection list. | ADR-0041 | E9 |
 | `contracts/archive-layout.md` | The archived source tarball's interior: the single-top-level-directory root convention, how a manifest/page screenshot path resolves to an archive entry, missing-file behaviour, and the `../`/absolute-path/symlink escape rule applied to every entry during extraction. | ADR-0059 Section 1, ADR-0030 | E11 |
 | `contracts/rebuild-trigger.md` | The exact `repository_dispatch` event type (`registry-updated`) and two-field payload (`commit`, `triggered_at`) a registry merge sends to the site repository, and the malformed/absent-payload degrade. | — | E12 |
+| `contracts/pipeline-trigger.md` | When the registry's own build pipeline runs, as twelve numbered rules (`PT1`-`PT12`): the closed trigger set (`push` to `main` filtered to `mods/*/entry.json`, and `workflow_dispatch`), which ref and which GitHub Actions environments (`signing`, `write-back`) bind the signing key and the App key to `main`, the input snapshot (`main`'s head at plan time) and which versions a run builds (`pending` only), the concurrency group, why the push, write-back, push chain ends, what the pipeline may assume about a merged entry, the outcome for each of 008a's exit codes, the one-at-a-time write-back PRs, and the dry-run key rule. Ends with one normative YAML trigger block that task 008b's verify script compares with `.github/workflows/pipeline.yml`. | ADR-0041, ADR-0117, ADR-0121 | E15 |
 | `contracts/site-output.md` | What a valid site build output is: the full `dist/` tree published verbatim, `CNAME`'s exact content, and the `.nojekyll` requirement (without it, GitHub Pages' Jekyll processing silently drops Astro's `_astro/` assets). | — | E13 |
 | `contracts/url-scheme.md` | The public URL scheme: `https://worldofmodcraft.com`, `/mods/<namespace>/<name>` with no trailing slash as canonical, and why escaping is unreachable under the current `id` pattern. | — | E14 |
 | `reserved-namespaces.json` (repo root) | The platform-owned namespace list (`mc`, `test`), each bound to the organisation's numeric account id. | ADR-0119 Section 1 | — (read by registry-ci, not itself a depgraph edge) |
@@ -38,9 +39,9 @@ E9 signing, E11 archive interior) and `docs/validation/manifest-reader.md` (E1).
 above (`entry.schema.json`, `page.schema.json`, `manifest.schema.json`,
 `validation-report.schema.json`) minus `reserved-namespaces.json` (its examples are the one real
 file plus the schema in `tests/contracts/`, not a separate examples directory). **None of the
-eight prose `.md` documents** — `append-only.rules.md`, task 025's six (`artifact-naming.md`,
+nine prose `.md` documents** — `append-only.rules.md`, task 025's six (`artifact-naming.md`,
 `signature-format.md`, `archive-layout.md`, `rebuild-trigger.md`, `site-output.md`,
-`url-scheme.md`), and task 032's `ownership.md` — **have a schema of their own to validate
+`url-scheme.md`), task 032's `ownership.md` and task 082's `pipeline-trigger.md` — **have a schema of their own to validate
 examples against**, so none has an
 examples directory; each states its own worked examples and counter-examples inline instead,
 where one is useful.
@@ -118,7 +119,3 @@ free-form string or a generic URL pattern, never an enum naming specific hosts �
 - **No real key material, token, or secret anywhere**, in `contracts/signature-format.md` or
   otherwise — every example value in that file is fabricated placeholder data, explicitly marked
   as such.
-- **`contracts/pipeline-trigger.md` (E15) is not part of either task** and does not exist yet —
-  it governs a different edge (registry merge to the registry's own build pipeline, a
-  same-repository `push` trigger, not a cross-repository `repository_dispatch`) and is named in
-  `contracts/rebuild-trigger.md` only to head off confusing the two.
