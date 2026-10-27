@@ -18,6 +18,7 @@
 #              032-verify.sh and 067-verify.sh).
 #   --mutate   AC2 (each re-pinned check widened back to HEAD, and unreachable pins: each red on the 082 merge, none skipped;
 #              each widened check turns only itself red).
+#   --own-only  AC4 only (087's own change, on the fixed SHAs); fast, runs no other suite. Used by the --mutate controls AC2.o*.
 #   NODE_MODULES_DIR  (or env WOM_NODE_MODULES, else <repo root>/tools/dev/node_modules; install with
 #                     npm ci --prefix tools/dev) a node_modules directory containing ajv 8, needed by 067-verify.sh -> 062.
 # Everything runs on the COMMITTED state (HEAD) in temporary clones; the caller's worktree is never modified.
@@ -29,10 +30,12 @@ set -u
 set -o pipefail
 
 MUTATE=0
+OWN=0
 NM="${WOM_NODE_MODULES:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)/tools/dev/node_modules}"
 for a in "$@"; do
     case "$a" in
         --mutate) MUTATE=1 ;;
+        --own-only) OWN=1 ;;
         *) NM="$a" ;;
     esac
 done
@@ -53,12 +56,16 @@ README=docs/contracts/README.md
 M032="4d4a204"          # registry PR #4, task 032's merge commit
 M067="ac22c8f"          # registry PR #11, task 067's merge commit
 T082="65f39793d30d468bb7afed08ef26c44f6cce9bfe"   # tip of origin/task/082-pipeline-trigger-contract (registry PR #20) when 087 was cut
-# 087's own commits (AC4). Filled in by the pin commit after the red and fix commits exist.
-PIN087_BASE="208c6d1"   # registry origin/main when 087 was cut (merge of PR #19)
-PIN087_RED="5e5b107"    # 087-verify.sh + task file only
-PIN087_FIX="bb10820"    # 032-verify.sh and 067-verify.sh re-pinned
-PIN087_PIN="489bd26"    # the log commit of the first round (the parent of the 070 commit)
-PIN087_070="5da249b"    # manager scope extension: 070-verify.sh AC4.m1 only
+# 087's own commits (AC4): explicit full 40-char SHAs of 087's own PR range, never HEAD (REVIEW-CHECKLIST item 12; the 084 / 039a pattern).
+# BASE = registry origin/main when 087 was cut; FINAL = the last commit that touched any script of the range (abede5d, 087-verify.sh);
+# TIP = the last commit of the branch before the item-12 fix round (the task-file-only log commit). FINAL..TIP touches only docs/tasks/087-* files.
+PIN087_BASE="208c6d1ae63ff56ccac85c6fc9a200ac77259fda"   # registry origin/main when 087 was cut (merge of PR #19)
+PIN087_RED="5e5b107a32a8223b9ea0b8a7fc49e207b64b663f"    # 087-verify.sh + task file only
+PIN087_FIX="bb1082039f3d59ce5d918035be863b5a41c6b238"    # 032-verify.sh and 067-verify.sh re-pinned
+PIN087_PIN="489bd264c90557fba0d3b7bd799423501aa11993"    # the log commit of the first round (the parent of the 070 commit)
+PIN087_070="5da249bc6e380d99ba65752a4da5a7820e8501c4"    # manager scope extension: 070-verify.sh AC4.m1 only
+PIN087_FINAL="abede5d2223a6271e3e2424ce4f5d9b581323039"  # last commit touching the scripts before the item-12 fix round
+PIN087_TIP="49988fd827d2e7ea85f4a24c5b73a137dc26663a"    # last branch commit before the item-12 fix round
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
@@ -84,6 +91,7 @@ first_fail() { grep -E '^FAIL' "$1" | head -n"${2:-4}" | cut -c1-130 | tr '\n' '
 # ==================================================================================================
 if [ "$MUTATE" = 0 ]; then
 
+if [ "$OWN" = 0 ]; then
 section "AC0 -- the README checks read the task's pinned FINAL, and the pins are the tasks' own PR ranges"
 pin_of() { sed -n "s/^$2=\"\{0,1\}\([0-9a-f]\{7,\}\)\"\{0,1\}\([[:space:]].*\)\{0,1\}$/\1/p" "$ROOT/$1" | head -n1; }
 p032=$(pin_of $S032 README_PIN_FINAL); s032=$(pin_of $S032 SCOPE_FINAL); f067=$(pin_of $S067 FINAL); b067=$(pin_of $S067 BASE)
@@ -139,6 +147,8 @@ if ! mk_merge "$TMP/NEW" "$HEADREV"; then fail "AC1.4 cannot build the merge of 
         pass "AC1.5 the NEW 067-verify.sh exits 0 on the merge with 082, AC2.5 and AC3.1 PASS"
     else fail "AC1.5 the NEW 067 on the merge (exit $rc): $(first_fail "$TMP/new067.out")"; fi
 fi
+
+fi   # OWN = 0
 
 section "AC4 -- 087's own change, measured on fixed SHAs (never HEAD)"
 if [ "$PIN087_RED" = "__RED__" ] || [ "$PIN087_FIX" = "__FIX__" ]; then
@@ -237,6 +247,49 @@ PY
     expect_red "AC2.m6 067 unreachable FINAL must FAIL AC2.5, never skip" $S067 $S067 \
         "FINAL=\"$P067\"" 'FINAL="deadbee"' '^FAIL  AC2\.5 ' '^FAIL  AC5\.1 pinned commit deadbee'
     fi
+fi
+
+# ---- AC2.o*: controls for the AC4 own-change frame (REVIEW-CHECKLIST item 12). Run on a clone of HEAD, --own-only (no other suite).
+#      Pins are replaced in the clone's copy of this script; "LATER" adds a synthetic commit that touches files outside the scope.
+if ! git clone -q --no-hardlinks "$ROOT" "$TMP/O" 2>/dev/null || ! git -C "$TMP/O" checkout -q --detach "$HEADREV"; then fail "AC2.o0 cannot clone HEAD for the own-change controls"; else
+    own_case() {   # own_case LABEL green|red LATER(0|1) OLD NEW REGEX... ; OLD empty = no replacement; a leading '!' on REGEX demands absence
+        local label="$1" want="$2" later="$3" old="$4" new="$5" rc re miss=""; shift 5
+        git -C "$TMP/O" reset -q --hard "$HEADREV"
+        if [ -n "$old" ]; then
+            if [ "$(grep -cF -- "$old" "$TMP/O/docs/tasks/087-verify.sh")" != 1 ]; then fail "$label: the mutation did not apply (pattern not found exactly once)"; return; fi
+            python3 -I - "$TMP/O/docs/tasks/087-verify.sh" "$old" "$new" <<'PY' || { fail "$label: the mutation did not apply"; return; }
+import sys
+p, old, new = sys.argv[1:4]
+s = open(p).read()
+assert s.count(old) == 1
+open(p, "w").write(s.replace(old, new, 1))
+PY
+            git -C "$TMP/O" "${GITID[@]}" commit -q -am "mutation" || { fail "$label: cannot commit the mutation"; return; }
+        fi
+        if [ "$later" = 1 ]; then   # a later branch's commit: out-of-scope files, as after 082 / 039a merge
+            mkdir -p "$TMP/O/tools/registry" && echo later > "$TMP/O/tools/registry/later_branch.py" && echo later >> "$TMP/O/docs/contracts/README.md"
+            git -C "$TMP/O" add -A && git -C "$TMP/O" "${GITID[@]}" commit -q -m "synthetic later-branch commit (outside 087's scope)" || { fail "$label: cannot commit the later-branch change"; return; }
+        fi
+        rc=$(run_in "$TMP/O" "$TMP/own.out" bash docs/tasks/087-verify.sh --own-only)
+        for re in "$@"; do
+            if [ "${re:0:1}" = "!" ]; then grep -Eq "${re:1}" "$TMP/own.out" && miss="$miss /$re/"
+            else grep -Eq "$re" "$TMP/own.out" || miss="$miss /$re/"; fi
+        done
+        if [ "$want" = green ] && [ "$rc" = 0 ] && [ -z "$miss" ]; then pass "$label stays green: exit 0"
+        elif [ "$want" = red ] && [ "$rc" != 0 ] && [ -z "$miss" ]; then pass "$label turns red: exit $rc, $(grep -E '^FAIL' "$TMP/own.out" | head -n1 | cut -c1-110)"
+        else fail "$label wanted $want, got exit $rc$miss: $(first_fail "$TMP/own.out")"; fi
+    }
+    NOSHA="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    own_case "AC2.o1 control: --own-only on HEAD" green 0 "" "" '^PASS  AC4\.7 ' '!^FAIL'
+    own_case "AC2.o2 a later branch's out-of-scope commit leaves AC4.7 green (item 12: the merge with 082 / 039a)" green 1 "" "" '^PASS  AC4\.7 ' '!^FAIL'
+    own_case "AC2.o3 the range widened back to BASE..HEAD is red on a later branch's commit" red 1 \
+        'diff --name-only "$PIN087_BASE" "$PIN087_TIP"' 'diff --name-only "$PIN087_BASE" HEAD' '^FAIL  AC4\.7 '
+    own_case "AC2.o4 FINAL=BASE makes the own-change check red" red 0 \
+        "PIN087_FINAL=\"$PIN087_FINAL\"" "PIN087_FINAL=\"$PIN087_BASE\"" '^FAIL  AC4\.14 '
+    own_case "AC2.o5 an unreachable TIP pin is red, not skipped" red 0 \
+        "PIN087_TIP=\"$PIN087_TIP\"" "PIN087_TIP=\"$NOSHA\"" '^FAIL  AC4\.1 pin '"$NOSHA" '^FAIL  AC4\.7 '
+    own_case "AC2.o6 an unreachable FINAL pin is red, not skipped" red 0 \
+        "PIN087_FINAL=\"$PIN087_FINAL\"" "PIN087_FINAL=\"$NOSHA\"" '^FAIL  AC4\.1 pin '"$NOSHA" '^FAIL  AC4\.14 '
 fi
 fi
 
