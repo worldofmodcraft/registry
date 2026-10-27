@@ -472,3 +472,11 @@ permission scope) — its README at the pinned SHA.
   (last commit before the script change; only the script and this log follow it). Ran only `bash -n docs/tasks/039b-verify.sh` (ok) and
   `python3 -m unittest tests.registry.test_ci_workflow` (12 tests OK). 039b-verify.sh NOT run (queue). Manager runs:
   `bash docs/tasks/039b-verify.sh --no-closed <nm>` (AC12 was already green at 9d8dc4e: 373 tests, all closed scripts exit 0).
+- 2026-10-27 manager (session 12): **039b verification on a quiet machine.** Full `039b-verify.sh <nm>` at 9d8dc4e (2026-10-27 03:13-08:09Z, 0 other
+  verify processes at start): 90 PASS, 1 FAIL — AC7 structure "expected 7 ok tests, ran 8, ok 8" (the S3 test added in the fix round; count not
+  updated). AC12 green: the registry suite and every closed script exit 0 one at a time, **including 065** — so the 065 failure the original 039b
+  agent saw was concurrency, not a defect (its Q1 answered). Fix 9318fc0 (count 8, label names the new test; opt-in `--no-closed`). Manager's
+  run of `039b-verify.sh --no-closed <nm>` at 9318fc0: exit 0, 72 PASS, "AC12 NOT RUN (--no-closed)" (overlapped a 070 --mutate run, CPU only).
+  AC12 evidence = the full run at 9d8dc4e (only the verify script's count changed since). Security review + delta review PASS-WITH-AMENDMENTS,
+  all folded in. Merged under Ludwig's overnight approval (mission log, session 12). Booked: S2 concurrency group; 039a nested-sweep deadlock
+  (039a's quiet-wait sees its parent sweep) -> task 089 with S4.
