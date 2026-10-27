@@ -13,7 +13,7 @@
         "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "source_url": "https://github.com/kelsi/housing",
         "status": "removed",
-        "source_archive": "https://archive.worldofmodcraft.com/kelsi/housing/1.0.0.tar.gz",
+        "source_archive": "https://archive.worldofmodcraft.com/kelsi.housing-1.0.0/kelsi.housing-1.0.0.tar.gz",
         "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         "signature": "untrusted comment: signature from minisign secret key\nRWQAAAAA_placeholder_signature_bytes_base64==",
         "key_id": "E7A1B2C3D4E5F607",
