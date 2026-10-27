@@ -398,3 +398,14 @@ the 008 umbrella; the Q2 follow-up.
   output in the session-12 queue (`$CLAUDE_JOB_DIR/tmp/q/039a-on-092.out`). Remaining before merge: that run green; merge registry main
   (039b, 087, 082 merged since) into this branch and re-run default + `--live-selftest`; gate green; then merge #25, then platform #84.
   Ludwig approved the merge 2026-10-27 ("3. OK").
+- 2026-10-27 manager (session 12): **AC12 done** — standalone `039a-verify.sh <nm>` at 4f1fcd4 (quiet machine, 13:56-19:05Z): ALL CHECKS PASSED
+  (69), every other verify script exit 0 one at a time. **Post-merge state proven** on a local merge registry main (fd35859) <- this branch
+  (main first parent, the shape GitHub's merge produces): `092-verify.sh` and `--live-selftest` SUMMARY failed=0 with
+  `post-TIP NOT-APPLICABLE (merged)`; `039b-verify.sh --no-closed`, `032-verify.sh`, `067-verify.sh <nm>`, `082-verify.sh`,
+  `087-verify.sh --own-only` all exit 0 (092 edits docs/contracts/README.md, which those pin).
+  **Defect found (booked, not fixed here):** merging main INTO this branch (what GitHub's "Update branch" does, required once M9's
+  "up to date" rule is on) makes the post-TIP check red: `git log --first-parent --name-only` diffs a merge commit against its first parent
+  (git >= 2.31 makes --first-parent imply --diff-merges=first-parent), so A2's comment ("lists no files for merge commits") is wrong and
+  main's files appear "after TIP". Observed at a local merge ec84588 (not pushed). Fix in a follow-up (exclude merge commits whose second
+  parent is on main, or diff only non-merge commits) — applies to every verify script using this pattern; booked with task 089.
+  Merged with Ludwig's approval (2026-10-27, "3. OK") as a merge INTO main, not by updating the branch.
