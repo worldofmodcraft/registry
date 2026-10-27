@@ -131,3 +131,19 @@ Loosening any check beyond moving an own-change check to its pinned FINAL; pinni
   of the `082-verify.sh --full` sweep there; `--mutate` queued after it) and pastes results here before merge. (2, MED) AC3 all closed scripts on
   the merge with 082: the same sweep. (3, LOW) the earlier one-off `FAIL AC1.5` (062 inside 067) stays an open observation; a finding against 062
   if it recurs. (4, LOW) the latent README-at-HEAD reads (007a, 007b, 008a, 057, test_hardening) belong to sweep tasks 089/090 (inventory 088).
+- 2026-10-27 implementer (item-12 fix round; defect found by the manager): **087's own verify script had the defect it fixes elsewhere.**
+  `087-verify.sh` AC4.7 measured "base..HEAD stays inside the declared file scope" with HEAD as the frame. Red-before-fix evidence
+  (`082-verify.sh --full` on the local merge main 4268735 + 087 + 082 at ed4588e, file `/home/ludwig/.claude/jobs/8bf3d47c/tmp/q/082-full-main-087-082.out`):
+  `FAIL  AC4.7 out-of-scope files changed in base..HEAD: config/r11-identity.json contracts/pipeline-trigger.md docs/contracts/README.md docs/tasks/039-registry-ci-workflow.md docs/tasks/039a-verify.sh docs/tasks/082-pipeline-trigger-contract.md docs/tasks/082-verify.sh tests/registry/fixtures/ci/README.md ... tests/registry/test_ci_gate.py tools/registry/ci_gate.py`
+  - Audit of every own-change check that read HEAD or the working tree: AC4.7 (range to HEAD) -> BASE..TIP, and a range that cannot be computed now FAILS
+    (before, an empty list passed); AC4.4 and AC4.12 (ancestor of HEAD) -> ancestor of TIP; AC0.1-AC0.7 and AC4.10 (read 032/067 from the working tree)
+    -> read from `git show TIP:<file>` snapshots (AC0.0 fails if unreadable). Already on fixed SHAs: AC4.2, AC4.3, AC4.5, AC4.6, AC4.8, AC4.9, AC4.11, AC4.13.
+    Deliberately still HEAD (live guards, not own-change): AC1.4/AC1.5 (new 032/067 pass on the merge of 082 onto HEAD), all of `--mutate` (mutates HEAD's scripts), new AC4.15 (TIP reachable from HEAD).
+  - Pins, all full 40-char SHAs: BASE `208c6d1ae63ff56ccac85c6fc9a200ac77259fda`; FINAL `abede5d2223a6271e3e2424ce4f5d9b581323039` (last commit touching 032/067/070/087-verify.sh in BASE..TIP);
+    TIP `49988fd827d2e7ea85f4a24c5b73a137dc26663a` (last branch commit before this round); RED `5e5b107a32a8223b9ea0b8a7fc49e207b64b663f`, FIX `bb1082039f3d59ce5d918035be863b5a41c6b238`,
+    PIN `489bd264c90557fba0d3b7bd799423501aa11993`, 070 `5da249bc6e380d99ba65752a4da5a7820e8501c4`. New AC4.14 (FINAL is the last script-touching commit; FINAL..TIP touches only docs/tasks/087-*; verified with git: only the task file) and AC4.15.
+  - Controls (new `--own-only` flag runs AC4 alone; `--mutate` AC2.o1-o6 on a clone of HEAD): o1 clean green; o2 a synthetic later-branch commit outside scope leaves AC4.7 green;
+    o3 range widened back to BASE..HEAD is red on that commit; o4 FINAL=BASE red (AC4.14); o5 unreachable TIP red; o6 unreachable FINAL red. Order: controls commit `72911206ef0239f02e2f50bf9cbb6377f3182cac`
+    (AC4 still on HEAD, so o2 fails there, o3-o6 fail because their patterns/checks do not exist yet: reasoning only), then the fix `a6e89683d8b2fea656a01aa46938e6291e9cace1`.
+  - NOT RUN by me (a verification queue was running; only `bash -n` and git were allowed). **The manager runs**: `bash docs/tasks/087-verify.sh <nm>` and `bash docs/tasks/087-verify.sh --mutate <nm>`
+    on the merge main 4268735 + 087 + 082 (also `--own-only` alone is quick). Unproven until then.
