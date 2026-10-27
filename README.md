@@ -11,9 +11,10 @@ It is data, not code you install. The platform's kernel and launcher read it; th
 - Namespace ownership is bound to a **numeric account id**, never a username string (ADR-0058 §2).
 - Publishing happens by pull request, validated automatically before merge.
 
-**Status: under construction.** The schemas, the CI gates and the publishing pipeline are being
-built now; `CONTRIBUTING.md` will document the publish flow for humans when they land. Until then
-this repository is not yet accepting submissions.
+**Status: under construction.** The schemas and the CI gate are built; the publishing pipeline is not live yet, so this
+repository is not yet accepting submissions. [`CONTRIBUTING.md`](CONTRIBUTING.md) documents the manual pull-request publish
+flow, including the permanent namespace notice. Every pull request gets one required check, `gate`, computed from the base
+branch only; green means "the checks pass", never "approved".
 
 The decisions behind all of the above are recorded in the project's decision log; the architecture
 is summarised at worldofmodcraft.com once the site is live.

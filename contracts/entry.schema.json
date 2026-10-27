@@ -84,8 +84,8 @@
           },
           "key_id": {
             "type": "string",
-            "minLength": 1,
-            "description": "Identifies which signing key produced `signature`, for rotation (ADR-0041: \"the format carries key_id for rotation\"). Exact encoding is defined by contracts/signature-format.md (depgraph edge E9), outside this task's declared scope; here it is only a non-empty string."
+            "pattern": "^[0-9A-F]{16}$",
+            "description": "Identifies which signing key produced `signature`, for rotation (ADR-0041: \"the format carries key_id for rotation\"). Exactly 16 uppercase hexadecimal characters: the 8 key-id bytes embedded in the minisign public key, reversed and hex-encoded, copied from the public key file's own comment line. Defined by contracts/signature-format.md (depgraph edge E9), section \"Deriving `key_id`\"; task 065 enforces it here."
           },
           "published_at": {
             "type": "string",

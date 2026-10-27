@@ -38,7 +38,7 @@ fail() { printf 'FAIL  %s\n' "$1"; FAILURES=$((FAILURES + 1)); }
 section() { printf '\n== %s ==\n' "$1"; }
 GITID=(-c user.name=verify070 -c user.email=verify070@invalid -c commit.gpgsign=false)
 HEADREV="$(git -C "$ROOT" rev-parse HEAD)"
-CLOSED="006 007a 007b 008a 032 034 057 062 066 067 069"
+CLOSED="006 007a 007b 008a 032 034 057 062 066 067 069 075"
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
@@ -202,7 +202,20 @@ PY
     expect_red "AC3.m6 069 ajv default removed" 069 docs/tasks/069-verify.sh 'NM="${WOM_NODE_MODULES:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)/tools/dev/node_modules}"' 'NM="${WOM_NODE_MODULES:-}"' '^FAIL  AC4\.0' '^FAIL  AC7\.0'
 
     # ---- AC4: live-property checks are not converted; breaking the live property still reddens them
-    expect_red "AC4.m1 README sentence deleted (committed) reddens 067's live AC2.5" 067 docs/contracts/README.md 'None of the three tasks implements checking logic' 'None of the tasks implement checking logic' '^FAIL  AC2\.5'
+    # Task 087 (manager scope extension): 067's AC2.5 reads the README at 067's pinned FINAL, no longer at HEAD, so AC4.m1 mutates THAT blob:
+    #  a replacement commit X (FINAL's tree with the sentence reworded, parent FINAL) is made ancestor of the clone's HEAD (merge -s ours), and
+    #  067's FINAL pin is pointed at X. AC2.5 must then read X's README, lack the sentence, and turn red (AC2.4 reddens too, as it must).
+    f067=$(sed -n 's/^FINAL="\([0-9a-f]\{7,\}\)".*/\1/p' "$TMP/M/docs/tasks/067-verify.sh" | head -n1)
+    pre067=$(git -C "$TMP/M" rev-parse HEAD)
+    if [ -z "$f067" ]; then fail "AC4.m1 cannot read FINAL from 067-verify.sh (a search that finds nothing is broken)"; else
+        b067=$(git -C "$TMP/M" show "$f067:docs/contracts/README.md" | sed 's/None of the three tasks implements checking logic/None of the tasks implement checking logic/' | git -C "$TMP/M" hash-object -w --stdin)
+        t067=$(GIT_INDEX_FILE="$TMP/idx067" bash -c 'git -C "$1" read-tree "$2" && git -C "$1" update-index --cacheinfo 100644,"$3",docs/contracts/README.md && git -C "$1" write-tree' _ "$TMP/M" "$f067" "$b067")
+        x067=$(git -C "$TMP/M" "${GITID[@]}" commit-tree "$t067" -p "$f067" -m "mutation: README at 067's FINAL without the sentence")
+        if [ -n "$t067" ] && [ -n "$x067" ] && git -C "$TMP/M" "${GITID[@]}" merge -s ours -q --no-edit "$x067" >/dev/null 2>&1; then
+            expect_red "AC4.m1 README at 067's pinned FINAL without the sentence (replacement commit $x067 pinned) reddens 067's AC2.5" 067 docs/tasks/067-verify.sh "FINAL=\"$f067\"" "FINAL=\"$x067\"" '^FAIL  AC2\.5 '
+        else fail "AC4.m1 cannot build the replacement commit for 067's pinned FINAL"; fi
+        git -C "$TMP/M" reset -q --hard "$pre067"
+    fi
     expect_red "AC4.m2 a 006 retirement successor renamed (committed) reddens 062's live AC5.1" 062 docs/tasks/006-verify.sh '#   successor:  057-textchecks.py old-gone/rule2-born-removed' '#   successor:  057-textchecks.py old-gone/rule2-born-removedX' '^FAIL  AC5\.1'
     # ---- live guards removed: the deleter branch must then go undetected (n = 6 unseen); proves AC5 can fail
     if mk_deleter "$TMP/D1"; then

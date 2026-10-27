@@ -65,6 +65,7 @@ VALID = {
     "entry.schema.json#/properties/versions/items/properties/source_url": "https://github.com/kelsi/housing",
     "entry.schema.json#/properties/versions/items/properties/source_archive": URL,
     "entry.schema.json#/properties/versions/items/properties/source_sha256": "b" * 64,
+    "entry.schema.json#/properties/versions/items/properties/key_id": "E7A1B2C3D4E5F607",
     "entry.schema.json#/properties/versions/items/properties/published_at": "2026-10-15T09:00:00Z",
     "entry.schema.json#/properties/versions/items/properties/build_log_url": URL,
     "manifest.schema.json#/properties/id": "kelsi:housing",
@@ -109,7 +110,7 @@ class Completeness(unittest.TestCase):
     def test_every_pattern_key_in_contracts_has_a_valid_sample(self):
         # Protects: a new `pattern` cannot be added to contracts/ without a trailing-newline case here.
         self.assertEqual(sorted(SUBS), sorted(VALID))
-        self.assertEqual(len(SUBS), 15)
+        self.assertEqual(len(SUBS), 16)
 
     def test_every_pattern_with_backslash_d_has_a_fullwidth_case(self):
         # Protects: a `\d` pattern without a fullwidth-digit case would silently keep the Unicode-digit gap.

@@ -9,6 +9,9 @@
 #
 # Usage:  docs/tasks/075-verify.sh      (any cwd inside the repository)
 # Own-change checks use the EXPLICIT SHAs below (AC6), never HEAD or origin/main, so later tasks cannot redden them.
+# Task 084: the declared-file-scope check measures 075's PR #18 range BASE..FINAL (BASE = git merge-base 4356583^1 4356583^2,
+# FINAL = 4356583^2), not BASE..HEAD, so a later task that legitimately edits contracts/append-only.rules.md or schema.py
+# cannot redden it. Every other check here is a live property of HEAD (the tests, the contract text, 032-verify.sh).
 # Behaviour checks (AC2-AC4) run on the COMMITTED HEAD in a temporary clone; the caller's worktree is not modified.
 # Network: none. Exit code: the number of failed checks. Requires: git, python3.
 
@@ -18,6 +21,7 @@ set -o pipefail
 BASE=79d5377   # registry origin/main containing task 064
 RED=45c5be9    # tests only
 FIX=067a45d    # the fix (contract + checker + mutation entries)
+FINAL=7d91a3d  # the last commit of PR #18 (git rev-parse 4356583^2); BASE above is its fork point (git merge-base 4356583^1 4356583^2)
 
 ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)" || exit 99
 FAILURES=0
@@ -29,12 +33,13 @@ trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
 G() { git -C "$ROOT" "$@"; }
 
 section "AC6 -- pins: explicit SHAs, ancestry"
-for s in "$BASE" "$RED" "$FIX"; do
+for s in "$BASE" "$RED" "$FIX" "$FINAL"; do
     G cat-file -e "$s^{commit}" 2>/dev/null && pass "pin $s exists" || fail "pin $s does not exist"
 done
 [ "$(G rev-parse "$RED^")" = "$(G rev-parse "$BASE")" ] && pass "red commit's parent is the base" || fail "red commit's parent is not the base"
 [ "$(G rev-parse "$FIX^")" = "$(G rev-parse "$RED")" ] && pass "fix commit follows the red commit directly" || fail "fix commit does not follow the red commit"
 G merge-base --is-ancestor "$FIX" HEAD && pass "fix commit is an ancestor of HEAD" || fail "fix commit is not an ancestor of HEAD"
+G merge-base --is-ancestor "$FIX" "$FINAL" && pass "fix commit is an ancestor of the PR's last commit" || fail "fix commit is not an ancestor of the PR's last commit"
 
 section "AC1 -- red first: the red commit is tests only"
 red_files="$(G diff --name-only "$BASE" "$RED")"
@@ -44,8 +49,12 @@ fix_files="$(G diff --name-only "$RED" "$FIX")"
 bad="$(echo "$fix_files" | grep -v -x -e contracts/ownership.md -e tools/registry/ownership.py -e tests/registry/test_ownership_mutations.py)"
 [ -z "$bad" ] && pass "fix commit stays in the file scope (ownership.md, ownership.py, test_ownership_mutations.py)" || fail "fix commit touches out-of-scope files: $bad"
 allowed='^(contracts/ownership.md|tools/registry/ownership.py|tests/registry/test_ownership.py|tests/registry/test_ownership_mutations.py|docs/tasks/075-takedown-only-removal.md|docs/tasks/075-verify.sh)$'
-bad="$(G diff --name-only "$BASE" HEAD | grep -v -E "$allowed")"
-[ -z "$bad" ] && pass "base..HEAD touches only the task's declared file scope" || fail "out-of-scope files in base..HEAD: $bad"
+if range_files="$(G diff --name-only "$BASE" "$FINAL" 2>/dev/null)" && [ -n "$range_files" ]; then
+    bad="$(echo "$range_files" | grep -v -E "$allowed")"
+    [ -z "$bad" ] && pass "pinned range $BASE..$FINAL touches only the task's declared file scope" || fail "out-of-scope files in pinned range $BASE..$FINAL: $bad"
+else
+    fail "pinned range $BASE..$FINAL cannot be diffed or is empty (pin unreachable): the file scope was not measured"
+fi
 
 run_ut() {  # run_ut DIR [unittest args...]
     local d="$1"; shift
