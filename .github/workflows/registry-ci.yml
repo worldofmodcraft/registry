@@ -1,0 +1,149 @@
+# Registry CI (task 039): the one required check `gate` on every pull request to main.
+#
+# Trust model: `pull_request_target` runs THIS file and the checkers from the BASE branch, so a pull request cannot change
+# what judges it. Nothing from the pull request head is ever executed, imported, installed or sourced: its files are data
+# that the base-branch composer (tools/registry/ci_gate.py) reads through git. No `run:` block contains an expression
+# interpolation; event, API and step values reach scripts only through `env:`. Tests: tests/registry/test_ci_workflow.py.
+# Green means "the checks pass", never "approved": merging stays a human action (MANAGER.md section 7).
+name: registry-ci
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      result: ${{ steps.gate.outputs.result }}
+      class: ${{ steps.gate.outputs.class }}
+    steps:
+      - name: Check out the base branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fetch the pull request head as objects only
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || { echo "bad pull request number"; exit 2; }
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "bad head sha"; exit 2; }
+          python3 --version
+          git --version
+          echo "pull request $PR_NUMBER, head $HEAD_SHA"
+          git fetch --no-tags origin "+refs/pull/${PR_NUMBER}/head:refs/wom/pr-head"
+          [ "$(git rev-parse refs/wom/pr-head)" = "$HEAD_SHA" ] || { echo "fetched head differs from the event head"; exit 2; }
+      - name: Read the pull request object
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/ci"
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" > "$RUNNER_TEMP/ci/pr.json"
+      - name: Pre-pass, classify only
+        id: pre
+        run: |
+          rc=0
+          python3 -I -B tools/registry/ci_gate.py --classify-only --repo . --event "$GITHUB_EVENT_PATH" --pr "$RUNNER_TEMP/ci/pr.json" --out "$RUNNER_TEMP/ci/pre" || rc=$?
+          if [ -f "$RUNNER_TEMP/ci/pre/outputs" ]; then cat "$RUNNER_TEMP/ci/pre/outputs" >> "$GITHUB_OUTPUT"; fi
+          exit "$rc"
+      - name: Is the membership App configured
+        id: present
+        if: steps.pre.outputs.class == 'reserved-namespace'
+        env:
+          APP_KEY: ${{ secrets.REGISTRY_MEMBERSHIP_APP_PRIVATE_KEY }}
+        run: |
+          if [ -n "$APP_KEY" ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Mint the membership-read token
+        id: mint
+        if: steps.pre.outputs.class == 'reserved-namespace' && steps.present.outputs.present == 'true'
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ secrets.REGISTRY_MEMBERSHIP_APP_ID }}
+          private-key: ${{ secrets.REGISTRY_MEMBERSHIP_APP_PRIVATE_KEY }}
+          owner: ${{ steps.pre.outputs.org }}
+          permission-members: read
+      - name: Ask the organisation whether the author is a member
+        id: member
+        if: steps.pre.outputs.class == 'reserved-namespace'
+        env:
+          MEMBER_TOKEN: ${{ steps.mint.outputs.token }}
+          ORG: ${{ steps.pre.outputs.org }}
+          LOGIN: ${{ steps.pre.outputs.login }}
+        run: |
+          status=none
+          name_re='^[A-Za-z0-9](-?[A-Za-z0-9]){0,38}$'
+          if [ -n "$MEMBER_TOKEN" ] && [[ "$ORG" =~ $name_re ]] && [[ "$LOGIN" =~ $name_re ]]; then
+            status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -H "Authorization: Bearer $MEMBER_TOKEN" -H 'Accept: application/vnd.github+json' "https://api.github.com/orgs/${ORG}/members/${LOGIN}")" || status=none
+          fi
+          [[ "$status" =~ ^[0-9]{3}$ ]] || status=none
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+      - name: Run the gate
+        id: gate
+        env:
+          MEMBERSHIP_STATUS: ${{ steps.member.outputs.status }}
+        run: |
+          rc=0
+          python3 -I -B tools/registry/ci_gate.py --repo . --event "$GITHUB_EVENT_PATH" --pr "$RUNNER_TEMP/ci/pr.json" --membership-status "${MEMBERSHIP_STATUS:-none}" --out "$RUNNER_TEMP/ci/out" || rc=$?
+          if [ -f "$RUNNER_TEMP/ci/out/outputs" ]; then cat "$RUNNER_TEMP/ci/out/outputs" >> "$GITHUB_OUTPUT"; fi
+          exit "$rc"
+      - name: Keep the verdict and the comment text
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: registry-ci-gate
+          path: ${{ runner.temp }}/ci
+          retention-days: 1
+          if-no-files-found: ignore
+
+  comment:
+    needs: gate
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Fetch the verdict and the comment text
+        continue-on-error: true
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: registry-ci-gate
+          path: ci
+      - name: Create or update the one comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GATE_RESULT: ${{ needs.gate.result }}
+        run: |
+          set -eu
+          [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || { echo "bad pull request number"; exit 1; }
+          body="$RUNNER_TEMP/body.md"
+          if [ -f ci/out/comment.md ]; then src=ci/out/comment.md
+          elif [ -f ci/pre/comment.md ] && grep -q '"result": "undecided"' ci/pre/verdict.json; then src=ci/pre/comment.md
+          else src=""; fi
+          if [ "$GATE_RESULT" = failure ]; then msg="registry CI: the gate failed; see the run log."
+          else msg="registry CI could not decide (gate job: ${GATE_RESULT:-unknown}); this is not a rejection. See the run log."; fi
+          {
+            if [ -n "$src" ]; then cat "$src"; else printf '%s\n\n%s\n' '<!-- registry-ci-gate -->' "$msg"; fi
+            printf '\n[Run log](%s/%s/actions/runs/%s)\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+          } > "$body"
+          ids="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- registry-ci-gate -->"))) | .id')"
+          id="${ids%%$'\n'*}"
+          if [ -z "$id" ]; then
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -F body=@"$body"
+          else
+            [[ "$id" =~ ^[0-9]+$ ]] || { echo "bad comment id"; exit 1; }
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${id}" -F body=@"$body"
+          fi

@@ -396,3 +396,87 @@ permission scope) — its README at the pinned SHA.
   own-change check. Shown in a temp clone of GitHub with the branch merged onto origin/main (`208c6d1`): the AC11 block alone (script cut before
   the AC1 section, no skip added to the real path) -> "0 failed", control FINAL=BASE fails 4 checks; widening TIP to the merge HEAD -> red
   ("out-of-scope files in BASE..TIP: contracts/append-only.rules.md", "code files differ between FINAL and TIP"). Full script not run.
+- 2026-10-26 implementer (039b, C23 second half), start: worktree `~/wt/registry-task-039b`, branch `task/039b-registry-ci-workflow`,
+  **BASE(039b) = `4268735`** (registry `origin/main`, 039a merged as PR #21). Scope: `.github/workflows/registry-ci.yml`,
+  `tests/registry/test_ci_workflow.py` (AC7), `CONTRIBUTING.md` + README paragraph (AC10), `docs/tasks/039b-verify.sh` (AC7, AC10,
+  own-change checks on fixed BASE/RED/FINAL/TIP, AC12 live guards); platform repo `task/039b-runbook`: runbook M9, M10, M11, R11 note.
+  Red-first: `tests/registry/test_ci_workflow.py` (11 tests; 34 AC7 mutations; zero-match cases) committed before the workflow exists;
+  all 11 error at that commit (no workflow file).
+- 2026-10-26 implementer (039b): RED `6b94a31` (11 tests, all error: no workflow), workflow `d7f8ea7` (11/11 green), docs `2a98fa1` = FINAL.
+  Pins (anonymous `git ls-remote https://github.com/<repo>`, 2026-10-26): `actions/checkout` v6.0.2 `de0fac2e4500dabe0009e67214ff5f5447ce83dd`;
+  `actions/create-github-app-token` v2.2.2 `fee1f7d63c2ff003460e3d139729b119787bc349` (inputs read from its `action.yml` at that SHA:
+  `app-id`, `private-key`, `owner`, `permission-members`; closes U14. v3.x deprecates `app-id` for `client-id`: a later bump must
+  change the secret M10 asks for); `actions/upload-artifact` v6.0.0 `b7c566a772e6b6bfb58ed0dc250532a479d7789f`;
+  `actions/download-artifact` v7.0.0 `37930b1c2abaa49bbe596cd826c3c89aef350131`. Docs read (docs.github.com, unauthenticated):
+  **U13 resolved** (a step `if:` sees `steps` but not `secrets`; `with:`/`env:` see both). `gh api --help`: `-F body=@file` reads the file
+  (**U8 resolved**). U1: the docs page for fork events says first-time-contributor approval may apply to `pull_request_target`; the page
+  text read was ambiguous, so U1 stays open (safety rests on "PR content is data only", not on that setting; L1 will show it).
+  Workflow: 136 lines (limit ~200). Design notes: secrets are `REGISTRY_MEMBERSHIP_APP_ID` and `REGISTRY_MEMBERSHIP_APP_PRIVATE_KEY`
+  (M10 names them); the pre-pass writes to `$RUNNER_TEMP/ci/pre`, the gate to `ci/out`, both uploaded as artifact `registry-ci-gate`;
+  the comment job uses `ci/out/comment.md`, else `ci/pre/comment.md` only when the pre-pass verdict says `undecided`, else a fixed
+  "could not decide" text; the run-log link is appended by the workflow (039a booking 3); bot logins fail the composer's login regex
+  and exit 2 (booking 1, accepted); M9 keeps "Require branches to be up to date" (booking 2). The `ci_gate.py` step uses `|| rc=$?` then
+  `exit "$rc"` to append `OUT/outputs` to the step output before failing; AC7 rejects `|| true`, `set +e`, pipes and an `if:` there.
+  Not decided by the spec, chosen: `comment` job's artifact download has `continue-on-error: true` (no artifact must still yield the fixed
+  comment); AC7 checks that only for the gate job. Booked for the manager: `039a-verify.sh` runs every `*-verify.sh` including
+  `039b-verify.sh`, which skips `039a-verify.sh` (else infinite recursion): running 039a after 039b merges re-runs the whole suite twice.
+- 2026-10-26 manager (session 12): **independent security review of 039b (read-only, registry 8f44c9d + platform 8f90393): PASS-WITH-AMENDMENTS,
+  no HIGH.** PR content data-only (base checkout, head as objects, no PR code executed); all four `uses:` SHAs verified against their tags by
+  anonymous ls-remote; permissions minimal (top `{}`; gate contents:read + pull-requests:read; comment pull-requests:write); no `${{ }}` in `run:`;
+  artifact from base code only; fail-closed. Findings and the manager's ★ dispositions (Ludwig's overnight instruction "Ta stjärna på alla beslut"):
+  S1 (MED) U1 open — whether a `pull_request_target` check run satisfies a required `gate` on the PR head: ★ runbook L1/M9 gain an explicit step
+  "confirm `gate` shows as Required in a real PR's merge box before M9 is done; if not, stop and report" (fix round). S2 (LOW) no `concurrency`
+  group: ★ booked, not added tonight (needs proof that cancelled runs leave the gate red). S3 (LOW) missing-artifact comment text says "not a
+  rejection" even when the gate failed: ★ word it by `needs.gate.result` (fix round). S4 (LOW) M10 key is repo-level: ★ add the one-line exposure
+  note to M10 (fix round). S5 (LOW) M9 ticks only the required check: ★ the runbook states the trade-off; the choice of also ticking "Require a
+  pull request before merging" / not allowing bypass is Ludwig's -> "For Ludwig" (morning). S6 (LOW) infra-route PRs (workflow/tools edits) are
+  green without mods checks: ★ M9 states that such PRs need a careful human read (fix round).
+- 2026-10-26 implementer (039b, fix round for the session-12 security review): registry commits RED `791270a`, fix `b829636` (new FINAL);
+  platform `8b27351`. **S3:** new AC7 test `test_missing_artifact_comment_is_worded_by_the_gate_result` committed first and run red:
+  `AssertionError: Regex didn't match: '\[ "\$GATE_RESULT" = failure \]' not found in 'set -eu ... "registry CI could not decide (gate job:
+  ${GATE_RESULT:-unknown}); this is not a rejection. See the run log." ...'` (11 other tests ok, 1 FAIL). Fix: the comment job's fixed text is
+  chosen by `[ "$GATE_RESULT" = failure ]` -> "registry CI: the gate failed; see the run log." else the old undecided wording; `GATE_RESULT` still
+  comes in through `env:` (no `${{ }}` in `run:`, asserted). Green: `python3 -m unittest tests.registry.test_ci_workflow` 12 tests OK
+  (pytest is not installed here; unittest is the file's documented runner). Workflow now 149 lines. **S1:** runbook M9 step 8 (confirm `gate`
+  shows "Required" in a real PR's merge box; otherwise stop, M9 not done; basis marked `[unverified]`, U1 stays open). **S4:** one-line
+  exposure note in M10 step 9. **S5:** M9 step 7 states the trade-off as an open choice for Ludwig, not decided ("until then the box stays
+  unticked as written"); belongs in `## For Ludwig`. **S6:** M9 paragraph on infra-route PRs needing a careful human read. **S2:** no
+  concurrency group (booked). `bash docs/tasks/068-verify.sh` in the platform worktree: ALL PASS. Verify-script pins updated (explicit SHAs):
+  FINAL `2a98fa1` -> `b829636`, RED `6b94a31` unchanged (workflow absent there; new RED `791270a` is an extra test-only commit inside the
+  FINAL range), TIP re-pinned to this log commit. No existing check changed. `039b-verify.sh` not run (forbidden this round); the manager runs it.
+  ## Questions: none blocking. (For Ludwig, S5: tick "Require a pull request before merging" and "Do not allow bypassing"? lean: yes for the
+  first, unticked-bypass kept off only if an emergency path matters.)
+- 2026-10-26 implementer (039b): `039b-verify.sh` pinned (BASE `4268735`, RED `6b94a31`, FINAL `2a98fa1`, TIP `a3901e5`; script commits `1eb15e4`
+  then `8f44c9d` which only adds a retry around the anonymous `git ls-remote`; the first run had one transient failure of that check).
+  Run on HEAD `8f44c9d` (ajv from another worktree, 2 h 50 min because other agents' verify scripts queue the machine): **AC11 all PASS**
+  incl. control (FINAL=BASE fails 4 checks), red commit: all 11 tests fail; **AC7**: 11/11 tests, 34 mutations all red (listed one per line in
+  the output), unmodified file passes, real workflow file byte-identical before/after, all 4 `uses:` pinned and present upstream
+  (`git ls-remote`), only trigger `pull_request_target`, no interpolation in any `run:`; **AC10** all PASS incl. control; **AC12** full
+  `tests/registry` suite 373 tests green; 006 007a 007b 008a 032 034 057 062 064 066 067 069 070 071 075 084 exit 0 one at a time;
+  **065-verify.sh exits 1 on HEAD**: its AC4.2 runs 070 (exit 2 = 2 failed checks: 067 and 069 "exit 1 on the later branch", with 062
+  AC3.2/AC4.3) at a time when other agents' verify scripts (087, 082, 039a) were running on the machine. None of my files is among theirs.
+  Control (065 on a clean clone of base `4268735`) was started and then died silently after its 064 step (no `EXIT` line; killed by
+  something other than me) so it proves nothing. **OPEN: rerun 065 (and 070) on a quiet machine, on HEAD and on base**, before this
+  PR is called green. Not hidden, not weakened: no closed script was edited.
+- 2026-10-26 implementer (039b), note on ordering: the verify run above is of `8f44c9d`, BEFORE the manager's security fix round (`3bbd6eb`..`b735046`, S1-S6)
+  landed on this branch; it is not a run of the final HEAD. After that round `python3 -m unittest discover -s tests/registry -p 'test_ci_*.py'` on HEAD `a76f85a`
+  is green (workflow + composer tests); the full `039b-verify.sh` on the final HEAD, and 065/070 on a quiet machine, are still to be run.
+- 2026-10-27 implementer (039b, verify-script fix round): finding from the manager's quiet-machine run of `039b-verify.sh` at 9d8dc4e (output
+  `/home/ludwig/.claude/jobs/8bf3d47c/tmp/q/039b.out`): 90 PASS, 1 FAIL, red evidence:
+  `FAIL AC7 structure (positive control, on->True, shape, pins, size, no --tools-dir, run-log link): expected 7 ok tests, ran 8, ok 8`.
+  Cause: the S3 test `test_missing_artifact_comment_is_worded_by_the_gate_result` made AC7Structure 8 tests; the script still expected 7.
+  Change (only `docs/tasks/039b-verify.sh`): AC7Structure expected count 7 -> 8 (still exact), label now names the new test; new opt-in flag
+  `--no-closed` skips only AC12 and prints `AC12 NOT RUN (--no-closed)` (counted neither as pass nor fail; a NOTE repeats it at the end), documented
+  in the header; default run unchanged. Pins (full SHAs): BASE `426873502a150ef746063c1b55c2cfbfeed31566`, RED `6b94a31cf64c95731b2fce3b8a974ba62d075db2`,
+  FINAL `b829636b8e5be9bf4f2ac29ebd92f4903ae5ae3b` (unchanged: no workflow/test/doc byte changed), TIP `9d8dc4e2fef7aa4189d16ad36bc2345c5f369402`
+  (last commit before the script change; only the script and this log follow it). Ran only `bash -n docs/tasks/039b-verify.sh` (ok) and
+  `python3 -m unittest tests.registry.test_ci_workflow` (12 tests OK). 039b-verify.sh NOT run (queue). Manager runs:
+  `bash docs/tasks/039b-verify.sh --no-closed <nm>` (AC12 was already green at 9d8dc4e: 373 tests, all closed scripts exit 0).
+- 2026-10-27 manager (session 12): **039b verification on a quiet machine.** Full `039b-verify.sh <nm>` at 9d8dc4e (2026-10-27 03:13-08:09Z, 0 other
+  verify processes at start): 90 PASS, 1 FAIL — AC7 structure "expected 7 ok tests, ran 8, ok 8" (the S3 test added in the fix round; count not
+  updated). AC12 green: the registry suite and every closed script exit 0 one at a time, **including 065** — so the 065 failure the original 039b
+  agent saw was concurrency, not a defect (its Q1 answered). Fix 9318fc0 (count 8, label names the new test; opt-in `--no-closed`). Manager's
+  run of `039b-verify.sh --no-closed <nm>` at 9318fc0: exit 0, 72 PASS, "AC12 NOT RUN (--no-closed)" (overlapped a 070 --mutate run, CPU only).
+  AC12 evidence = the full run at 9d8dc4e (only the verify script's count changed since). Security review + delta review PASS-WITH-AMENDMENTS,
+  all folded in. Merged under Ludwig's overnight approval (mission log, session 12). Booked: S2 concurrency group; 039a nested-sweep deadlock
+  (039a's quiet-wait sees its parent sweep) -> task 089 with S4.
