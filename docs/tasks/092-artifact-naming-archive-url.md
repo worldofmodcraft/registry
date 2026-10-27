@@ -390,3 +390,11 @@ the 008 umbrella; the Q2 follow-up.
   **Green after**: default, `--live-selftest` and `--mutate` each exit 0, `SUMMARY failed=0`, with `PASS  AC9 control: a TIP that is not an ancestor of
   HEAD (rewritten away) makes the post-TIP check red` and `PASS  AC9 control: the merged case prints NOT-APPLICABLE (merged), not a PASS`. Pins
   unchanged (contract untouched; FINAL = TIP = ab31a88). Q11 closed.
+- 2026-10-27 manager (session 12): manager's re-runs at 4f1fcd4 on a quiet machine (queue log: 0 other verify processes at each start):
+  default, `--live-selftest`, `--mutate`, `--live` (real front, unauthenticated curl) and a fresh GitHub clone (default) — each `SUMMARY failed=0`.
+  Delta review of the fix round PASS-WITH-AMENDMENTS; A1/A2 done (4f1fcd4). AC12: `--closed` cannot be used as written — it calls
+  039a-verify.sh, whose quiet-wait sees its parent sweep and deadlocks (booked to task 089). Manager's ★ equivalent: standalone
+  `039a-verify.sh <nm>` on this head (it runs every other verify script one at a time, 092's default included); started 2026-10-27T13:56Z,
+  output in the session-12 queue (`$CLAUDE_JOB_DIR/tmp/q/039a-on-092.out`). Remaining before merge: that run green; merge registry main
+  (039b, 087, 082 merged since) into this branch and re-run default + `--live-selftest`; gate green; then merge #25, then platform #84.
+  Ludwig approved the merge 2026-10-27 ("3. OK").
