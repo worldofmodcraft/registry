@@ -1,0 +1,71 @@
+# Task 008b-1: Pipeline planner — which versions to build, skip, refuse or fault
+
+- **Mission:** SITE-V1, deliverable **D2** (umbrella `docs/tasks/008b-pipeline-workflow.md`, which keeps the decisions, design and history; design numbers below refer to it) — **Status:** in-progress 2026-10-28 (session 13; spec-approved 2026-10-26) (manager, after independent spec review rounds 1-2 of the split; round-2 fixes mechanical)
+- **Agent / model:** implementer / sonnet
+- **Budget:** medium
+- **Branch / worktree:** `task/008b1-pipeline-plan` / `~/wt/registry-task-008b1` — **registry** repo
+- **Sequence:** 008c -> 008b-1 -> 008b-2 -> 008b-3b, and tasks 082 (registry PR #20, blocked on 087) and 092 (registry PR #25) merged first. This part has no workflow and no secret: it is a pure, offline-testable helper.
+
+## Objective
+`tools/pipeline/plan_pending.py` exists in the registry with offline tests. Given the registry state at `main`'s head (the SHA is logged), the list of existing `pipeline/*` branches, and the dispatch inputs, it prints one plan document that sorts every `pending` version into exactly one of four lists: **build**, **refuse** (a `+` version, 092 Q10), **skip** (an existing `pipeline/<namespace>.<name>-<version>` branch, C13) and **fault** (an entry failing the schema, C15; a malformed input). Published, removed and rejected versions appear nowhere. Zero pending versions give an empty plan and exit 0. **Exit codes (pinned; manager ★, session 12):** the planner exits **0 and writes the plan document whenever the inputs are well-formed, even when the plan contains `skip`, `refuse` or `fault` entries**; it exits **1 only for malformed or conflicting inputs, and then writes no document**. A non-zero planner exit is never how a skip or fault is reported; the workflow's final step (008b-2's `summary` job, which calls `summarize_outcomes()` below) makes the run non-green. **Plan document schema (pinned by this task's tests, documented in `docs/pipeline/build-pipeline.md`):** top level `head_sha` (the logged `main` head) and the four lists `build`, `refuse`, `skip`, `fault`; every entry is an object `{"version_id": "<namespace>.<name>@<semver>" or null, "entry_path": "mods/<namespace>.<name>/entry.json", "kind": "build"|"refuse"|"skip"|"fault", "reason": "<text>"}` (`reason` is empty for `build`; it is the exact 092 text for `refuse`; the branch name for `skip`; the schema or input error for `fault`, where `version_id` may be null), and a `refuse` entry adds `"log_exists": true|false`. It is the interface 008b-2 and 008b-3b consume; it is internal to node N5 and adds no edge to the dependency graph.
+
+## Context to load (exhaustive; 9 items)
+- ADR-0121 (the `pending` lifecycle; authority for design 2).
+- Contracts: `pipeline-trigger.md` (task 082: PT4, PT5, PT6, PT9, PT12); `entry.schema.json` and `append-only.rules.md` as amended by task 057 (the `pending` state); `artifact-naming.md` as amended by task 092 (the archived-source URL section and the `+` rule).
+- 008a `tools/pipeline/naming.py`; 008c `tools/pipeline/write_back.py` (`source_archive_url`), read from `origin/main` once 008c has merged.
+- The umbrella `008b-pipeline-workflow.md`: designs 1, 2, 3 (planner half), 9 (validation half), 7 (PT5 and `+` text).
+- Mission log decisions C11, C12, C13, C15 (`docs/tasks/MISSION-worldofmodcraft-site-v1-log.md`).
+
+## Size (5b)
+Within every cap. Source files: 1 (`plan_pending.py`). Changed lines: about 190 (with `summarize_outcomes()` and the refusal-log input) (estimate, nothing built). Reading list: 9. Tests, fixtures, `008b1-verify.sh` and docs are excluded from the counts.
+
+## Design (taken from the umbrella; decisions are recorded there)
+- **Input snapshot (design 2; C12, PT4):** the planner reads `mods/*/entry.json` at `main`'s head as fetched at plan time and logs the SHA; never the push's `github.sha` or range.
+- **What is listed (design 2; Q-B, C11, PT5):** every version object in state `pending`. A push run and a dispatch with an empty `version` list all of them; a dispatch with `version=<namespace>.<name>@<semver>` lists only that one, and only if it is `pending`; otherwise (malformed id, absent entry, not pending) exit 1, nothing written. Zero pending is success.
+- **Schema fault (C15; PT9):** an entry on `main` failing `entry.schema.json` is a pipeline fault: no build, no T3, the plan lists a fault naming the file.
+- **`+` versions (092 Q10; decided by Ludwig 2026-10-26):** a `pending` version whose `version` contains `+` goes on the **refuse** list, with the exact reason text "versions with build metadata (+) are not yet published — pending proof that GitHub resolves them (task 010)" (copied from 092's contract, producer obligation 3). The T3 that carries it is opened by 008b-3b. A prerelease without `+` (for example `1.0.0-rc.1`) is built as any other.
+- **Branch skip (C13; PT6):** a `pending` version whose `pipeline/<namespace>.<name>-<version>` branch exists is on the **skip** list, never built; the run ends non-green naming it (via `summarize_outcomes()` and 008b-2's `summary` job). Recovery is manual (close the PR, delete the branch, dispatch).
+- **Dry-run input set (PT12; Q-M decided by the manager, option A, 2026-10-26):** `workflow_dispatch` inputs `dry_run` (boolean, default `false`), `version` (string, default empty), and, only with `dry_run=true`, the pair `dry_run_source_url` (`https://` URL) and `dry_run_commit` (40 hex), accepted only together and only with `version` empty. The planner validates all of them (exit 1 on a malformed or conflicting set); the synthetic in-run entry is built by 008b-2's dry-run job. Names are 008b's to fix (PT12); 082's reviewer confirms them at 082's next touch.
+- **Per-version fault handling (PT5; manager ★, session 12):** a fault ends that version only; the other versions continue. `plan_pending.py` also exports a small pure function `summarize_outcomes(plan, outcomes)` — `outcomes` being per-version results (`version_id`, exit class 0/1/2) — that returns whether the run is green and a message naming every `skip` entry, every `fault` entry and every version whose outcome was exit 2. This task owns and tests it (criterion 17(c)); 008b-2's `summary` job calls it; the matrix mechanism (`fail-fast: false`) is 008b-2's.
+- **Refusal-log recovery (092 Q10 with Q-L; manager ★, session 12, Ludwig may overrule — the manager lists it For Ludwig):** the planner takes one more injected input, the list of existing paths under `logs/` in `worldofmodcraft/archive`. For a `+` version it sets `log_exists` on its `refuse` entry. If the refusal log was committed but the T3 PR was then closed or its `gate` stayed red, the version is still `pending`; the next run's plan carries `log_exists: true`, and 008b-3b re-opens **only the T3 PR** (it does not recommit the log and does not fault forever). If a `pipeline/` branch for it still exists, C13's skip applies first (manual recovery). This is deliberately narrower than the exit-1 rejection path, where an existing log fails that version (PT8), because the `+` log has a fixed, regenerable content.
+
+## File scope (declared; anything else = stop and report)
+In the **registry** repo: `tools/pipeline/plan_pending.py` (new) and its tests and fixtures in `tests/pipeline/`; `docs/pipeline/build-pipeline.md` (additions: the plan document and the planner rules only); `docs/tasks/008b1-pipeline-plan.md` (log); `docs/tasks/008b1-verify.sh` (new, executable). No workflow file, no `contracts/`, no 008a modules, no `tools/registry/`.
+
+## Acceptance criteria
+Criterion numbers are the umbrella's (`008b-pipeline-workflow.md`), kept so the mapping table there can be checked; a part's list therefore has gaps. [script] = checked by this part's verify script; [live] = a real run, recorded with run URLs, **not** script-verified.
+
+3. [script] **Naming:** a unit test feeds `(namespace, name, version)` triples through the
+   workflow's naming/URL helpers (008a's `release_asset_url`, 008c's `source_archive_url`) and asserts tag, both asset names and both URLs equal the `artifact-naming.md` examples (`mc.hello-world-1.0.0`,
+   `.tar.gz`, `.tar.gz.minisig`), The expected strings are 092's worked examples in `artifact-naming.md` ("The archived-source URL"), typed literally into the test, not derived by the code under test: example 1 (`mc`, `hello-world`, `1.0.0`) for tag, assets and URLs, and example 2 (`a`, `b`, `1.0.0-rc.1+build.5`, tag `a.b-1.0.0-rc.1+build.5`) as a pure helper unit test **labelled "derivation only, never published"** — a `+` version is refused by design 2 and 7 (Q10) and no run ever uploads it. The expectations come from the 092 contract, not from task 058's report. Mutation: change one character of a helper's output and show the test red.
+12. [script] **Idempotence of the no-op:** run the planning step against `main` after a write-back
+    merge: zero pending versions, no build, success.
+17. [script] **Retry path** (design 9): `plan_pending.py` with a `version` input builds only that version and refuses (exit 1) a version that is not `pending`, a malformed id, or one whose entry is absent; with no input (a push, or a dispatch with an empty `version`) it builds every `pending` version. The planner validates `version`, `dry_run_source_url` and `dry_run_commit` as design 1 states (a malformed or conflicting dry-run input exits 1). **Planner-level tests (no network, fixture repository state), each with a mutation:** (a) **C13 skip:** a pending version whose `pipeline/<ns>.<name>-<version>` branch exists is not in the build list, is reported as skipped with the version named, and the planner exits 0 with the document, where `summarize_outcomes` over that plan returns non-green naming the version; mutation: remove the branch check. (b) **C15:** a `mods/*/entry.json` failing the schema yields no build and no T3 for any of its versions, and a fault naming the file; mutation: treat the entry as valid. (c) **PT5, `summarize_outcomes()`:** for three versions with outcomes (ok, fault, ok) it returns non-green naming exactly the faulted one; for an all-ok plan it returns green; for a plan with one `skip` entry it returns non-green naming the version; for a plan with `refuse` entries only it returns green. (e) **Refusal-log recovery:** with the archive log list containing the refusal log of a `+` version, its `refuse` entry has `log_exists: true`; without, `false`; neither is a `fault`. (f) **Exit codes:** a plan containing skip, refuse and fault entries is written with exit 0; a malformed `version`, a conflicting dry-run input set, or an unreadable state exits 1 and writes no document. (g) **Schema:** every entry of a generated plan has exactly the fields pinned in the Objective. (d) **Q10 refusal:** a pending `1.0.0+build.5` is in the refusal list, not the build list, while `1.0.0-rc.1` is in the build list. Mutations: ignore the `version` input; accept a `published` version; drop the branch check of (a); treat the invalid entry of (b) as valid; return green for a skipped version in (c); exit 1 when the plan has a skip in (f); drop `log_exists` in (e); remove the `+` check of (d). Positive control: the unmodified planner passes all four.
+13. [script] **Verification script.** `docs/tasks/008b1-verify.sh` exists, is executable, covers criteria 3, 12 and 17 (a)-(g), is mutation-tested (criteria 3 and 17 with the mutations they name, and criterion 12 by planning against a state that still has a pending version; each mutation shown red then restored byte-identically), is run in a fresh clone, and its output is pasted in the log; the log separates [script] from [live] results. Every check fails on zero matches.
+18. **Docs move with code:** `docs/pipeline/build-pipeline.md` gains the plan document, the four lists and the manual recovery for a skipped (C13) version. (Umbrella criterion 18 is split by section: this part, 008b-2 and 008b-3b each own the sections named in their own criterion 18.)
+
+## Explicitly OUT of scope
+The workflow file and every job (008b-2, 008b-3b); signing; releases; PRs; the dry-run job's synthetic entry (008b-2); 008a's tool; `tools/registry/`.
+
+## Forbidden here (beyond MANAGER.md §3.7)
+- Any network access in the planner or its tests: the registry state, the branch list and the clock are injected.
+- Reading the author's mod from its live repository (the planner reads only registry entries).
+- Any use of `GITHUB_ACTOR`/`GITHUB_ACTOR_ID`.
+- Building, signing or opening anything for a `+` version; weakening a test to make a fixture pass.
+
+## Dependencies and sequencing
+Tasks 082 and 092 merged (the contract text and the `+` rule are cited from `main`); task 057 (version lifecycle) merged; 008c merged (provides `source_archive_url`, used by criterion 3). Blocks 008b-2, which wires this planner into the workflow. Graph: node N5; edge E15 (N2 -> N5, the registry state the planner reads) and E7 (N5 -> N6, the naming helpers of criterion 3). Parallel-safe with 041 and 056.
+
+## Verification artefact (MANAGER.md §2c)
+Declared: `docs/tasks/008b1-verify.sh` for every criterion above. There are no [live] criteria in this part.
+
+## Deliverables
+Planner + tests + fixtures + docs section + verify script + this file's log section current.
+
+## Questions  (agent-maintained; see MANAGER.md 8b)
+- **Q-M: decided** (manager, option A starred, 2026-10-26, on Ludwig's overnight instruction "Ta stjärna på alla beslut"): the dry-run source inputs are `dry_run_source_url` and `dry_run_commit`, with a synthetic in-run entry. Open follow-up, not blocking: 082's reviewer confirms the names.
+
+---
+# Task 008b-1 log  (append-only, updated continuously by the executing agent)
+- 2026-10-26 split from 008b at the spec gate (manager decision); nothing started.
+- 2026-10-28 manager (session 13): dispatched from registry main `32c641b` (008c, 082, 092 merged). Phase 1 only: implementation + unit tests; NO `*-verify.sh` run until the manager releases the machine (task 089b's long chain holds it). Task file copied from platform main `3562c8f`.
