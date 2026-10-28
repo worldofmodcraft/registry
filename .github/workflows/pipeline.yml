@@ -199,8 +199,8 @@ jobs:
         if: steps.guard.outputs.proceed == 'true'
         env:
           MINISIGN_URL: https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-linux.tar.gz
-          # sha256 of the tarball above; fails closed while empty (task 008b-2 question Q-S)
-          MINISIGN_TARBALL_SHA256: ""
+          # sha256 of the tarball above; pinned (task 008b-2 Q-S, verified by the manager against the minisign author signature); fails closed if emptied
+          MINISIGN_TARBALL_SHA256: "9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73"
         run: |
           [ -n "$MINISIGN_TARBALL_SHA256" ] || { echo "no pinned checksum for the minisign download is set in this workflow"; exit 1; }
           curl -fsSL -o "$RUNNER_TEMP/minisign.tar.gz" "$MINISIGN_URL"
@@ -271,8 +271,8 @@ jobs:
         if: steps.guard.outputs.proceed == 'true'
         env:
           MINISIGN_URL: https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-linux.tar.gz
-          # sha256 of the tarball above; fails closed while empty (task 008b-2 question Q-S)
-          MINISIGN_TARBALL_SHA256: ""
+          # sha256 of the tarball above; pinned (task 008b-2 Q-S, verified by the manager against the minisign author signature); fails closed if emptied
+          MINISIGN_TARBALL_SHA256: "9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73"
         run: |
           [ -n "$MINISIGN_TARBALL_SHA256" ] || { echo "no pinned checksum for the minisign download is set in this workflow"; exit 1; }
           curl -fsSL -o "$RUNNER_TEMP/minisign.tar.gz" "$MINISIGN_URL"

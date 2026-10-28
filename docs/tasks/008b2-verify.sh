@@ -7,7 +7,7 @@
 #                                           must turn red (the unmodified files are the positive control)
 # Exit code = number of failed checks. Missing tools FAIL (never skip). No network, no key, no credential: tests
 # generate throwaway minisign keys in temp directories. Needs PyYAML (the checks parse the workflow).
-# Criteria covered [script]: 1, 14, 15, 16, 17 (workflow clause), 25, 26, 13 (this script), 18 (docs).
+# Criteria covered [script]: 1, 7-pin, 14, 15, 16, 17 (workflow clause), 25, 26, 13 (this script), 18 (docs).
 # NOT covered here ([live], recorded with run URLs in the task log): 7, 8, 10, 11, and the 25 live clause.
 # `--mutate` needs the changes COMMITTED (it mutates `git archive HEAD`).
 set -u
@@ -229,6 +229,14 @@ def c26a():
     assert "outcome.json" in "".join(uploads(jobs["sign"]).get("signed-${{ matrix.tag }}", [])), "signed artifact lacks outcome.json"
 check("c26a artifact names and path lists, summary needs, build/sign conditions, per-version guard", c26a)
 
+# ---- criterion 7 support: the minisign download pin is the verified value, in BOTH jobs that install it
+def c7pin():
+    for jn in ("sign", "dry-run"):
+        pins = [s["env"]["MINISIGN_TARBALL_SHA256"] for s in jobs[jn]["steps"] if "MINISIGN_TARBALL_SHA256" in (s.get("env") or {})]
+        assert len(pins) == 1, f"job {jn}: {len(pins)} install steps carry MINISIGN_TARBALL_SHA256 (zero matches or duplicates)"
+        assert pins[0] == "9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73", f"job {jn}: pin is {pins[0]!r}, not the verified value"
+check("c7 minisign tarball pin is the verified SHA-256 in sign and dry-run", c7pin)
+
 bad = 0
 for name, why in results:
     if why is None:
@@ -279,6 +287,9 @@ mut("c26-fail-fast-true-build", [("    strategy:\n      fail-fast: false\n", "  
 mut("c26-fail-fast-true-sign", [("    strategy:\n      fail-fast: false\n", "    strategy:\n      fail-fast: true\n", 2)], "c17 ")
 mut("c26-drop-always-from-sign-if", [("    if: always() && github.event_name != 'push' && github.ref == 'refs/heads/main'", "    if: github.event_name != 'push' && github.ref == 'refs/heads/main'", 1)], "c26a")
 mut("c26-drop-per-version-guard", [("        if: steps.guard.outputs.proceed == 'true'\n        env:\n          MINISIGN_SECRET_KEY", "        env:\n          MINISIGN_SECRET_KEY", 1)], "c26a")
+
+mut("c7-blank-pin-in-dry-run", [('MINISIGN_TARBALL_SHA256: "9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73"\n', 'MINISIGN_TARBALL_SHA256: ""\n', 2)], "c7 ")
+mut("c7-blank-pin-in-sign", [('MINISIGN_TARBALL_SHA256: "9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73"\n', 'MINISIGN_TARBALL_SHA256: ""\n', "first")], "c7 ")
 
 
 def apply(text, edits):
