@@ -1,0 +1,16 @@
+{
+  "id": "test:m10-probe",
+  "owner": {
+    "provider": "github",
+    "id": 324218296,
+    "name_at_registration": "worldofmodcraft"
+  },
+  "versions": [
+    {
+      "version": "0.0.1",
+      "commit": "0000000000000000000000000000000000000000",
+      "source_url": "https://github.com/worldofmodcraft/m10-probe",
+      "status": "pending"
+    }
+  ]
+}
