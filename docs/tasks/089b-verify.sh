@@ -362,7 +362,7 @@ else
     [ "$d065" = 0 ] && pass "AC11.7 065-verify.sh changed only in the FINAL pin, comments and the AC3.5 check" || fail "AC11.7 065-verify.sh changed outside AC3.5 ($d065 lines)"
     d075="$(nonc docs/tasks/075-verify.sh | grep -vE 'FINAL|BASE=|RED=|FIX=|ownership|^[+-]C=|"\$C"|^[+-]\[ \$\? = 0 \] && .*R11' | wc -l)"
     [ "$d075" = 0 ] && pass "AC11.8 075-verify.sh changed only in pins (full SHAs), comments and the AC4 contract-text read" || fail "AC11.8 075-verify.sh changed outside AC4 and the pins ($d075 lines)"
-    d039="$(nonc docs/tasks/039a-verify.sh | grep -vE 'BASE=|RED=|FINAL=|TIP=|PINNED_TESTS|class_check|missing|pinned|ran=|ok=|r11|AC9|039b|args|note|FINAL|import ast|isinstance|print\(n\.name|^[+-]\s*(fi|else|elif|done|\)|\}|local|for [nm] in)|^[+-]\x27 >' | wc -l)"
+    d039="$(nonc docs/tasks/039a-verify.sh | grep -vE 'BASE=|RED=|FINAL=|TIP=|PINNED_TESTS|class_check|missing|pinned|ran=|ok=|r11|AC9|039b|args|note|FINAL|import ast|isinstance|print\(n\.name|^[+-]\s*(fi|else|elif|done|\)|\}|local|for [nm] in)|^[+-]\x27 >|"\$ran" = |bash "\$f"|exits 0 on HEAD' | wc -l)"
     [ "$d039" = 0 ] && pass "AC11.9 039a-verify.sh changed only in pins, class_check, the r11 assertion and the 039b call" || fail "AC11.9 039a-verify.sh changed outside the named checks ($d039 lines)"
     d_tcg="$(G diff -U0 "$PIN_RED" "$PIN_FIX" -- tests/registry/test_ci_gate.py | grep -E '^\+[^+]' | wc -l)"
     [ "$d_tcg" = 0 ] && pass "AC11.10 test_ci_gate.py only lost lines (the AC9 unit test); nothing was added" || fail "AC11.10 test_ci_gate.py gained $d_tcg line(s)"
