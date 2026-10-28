@@ -176,3 +176,50 @@ may reveal a status code) goes to `build.log`, and the clone is time- and size-b
 per test) and the structural checks; `docs/tasks/008a-verify.sh --mutate` breaks each guard in a
 scratch copy and requires the named check to turn red. All keys are throwaway, generated at test
 time in a temp directory (`wom008a-*`) and removed afterwards.
+
+## Write-back (task 008c)
+
+`tools/pipeline/write_back.py` turns a `build_version.py` `result.json` into the registry's
+`pending -> published` write-back (transition T1, ADR-0121; edge E8). It is pure: no network, no
+subprocess, no key material, no clock (the timestamp is the build's own `built_at`). It does not open,
+commit or merge anything; who may commit its output is task 008b plus the ownership carve-out.
+
+### What is computed
+
+- `write_back_values(result, source_archive)` returns exactly five keys: `source_archive` (the argument,
+  passed through), `source_sha256`, `signature` and `key_id` (from `result.artifact`) and `published_at`
+  (= `result.built_at`; it must match `entry.schema.json`'s `published_at` pattern, see the `bad-value` row below).
+- `source_archive_url(namespace, name, version)` returns
+  `https://archive.worldofmodcraft.com/<tag>/<tag>.tar.gz` with `tag` = `naming.release_tag(...)`. The
+  host is the single constant `ARCHIVE_HOST`, whose value comes from `contracts/artifact-naming.md`
+  ("The archived-source URL"). `+` is written literally. A version with build metadata still yields a
+  URL; holding such versions back is 008b's (092 decision Q10).
+- `apply_write_back(entry, result, source_archive)` returns a **new** entry in which the one version equal
+  to `result.version` has the five values added and `status` set to `published`. Nothing else changes;
+  `commit` and every other existing field are never taken from `result`. Inputs are never mutated.
+
+### What is refused
+
+Every refusal raises `WriteBackRefused` (a `PipelineError`: the pipeline is inconsistent, exit 2, never
+a PR rejection) with a `reason`:
+
+| reason | when |
+|---|---|
+| `id-mismatch` | `result.id` differs from the entry's `id` |
+| `version-absent` / `version-duplicate` | no version, or more than one, equals `result.version` |
+| `not-pending` | the version is `published`, `removed` or `rejected` |
+| `pending-shape` | the target `pending` version does not have exactly the four pending keys `version`, `commit`, `source_url`, `status` (`contracts/append-only.rules.md` key-set table; `entry.schema.json`'s `pending` branch): a stray key such as `reason`, or an already-present write-back key such as `source_archive`, is refused before anything is written |
+| `result-missing-field` | `result` lacks `artifact.source_sha256`, `artifact.signature`, `artifact.key_id` or `built_at` |
+| `key-set` | the computed values do not have exactly the five keys |
+| `bad-value` | a value fails its `entry.schema.json` pattern, or `signature` is empty. Patterns are matched as ECMA-262 does: full-match (a trailing newline fails) and ASCII-only digits (each unescaped `\d` in a schema pattern is translated to `[0-9]` when the pattern is loaded, so Arabic-Indic digits fail; `\s`/`\S` are left at Python's default, which is Unicode-aware like ECMA's, so U+00A0 and U+2028 fail `\S`; no global `re.ASCII` flag). `published_at` accepts what the schema pattern accepts: `YYYY-MM-DDThh:mm:ss`, an optional fraction (`.` and one or more digits), then `Z` or a `+hh:mm`/`-hh:mm` offset. The pattern checks shape only, not calendar validity (month 13 passes) |
+| `bad-id` / `bad-version` / `reserved-namespace` | `source_archive_url` input is not a valid id, a semver string, or a Windows reserved device name |
+| `entry-malformed` / `result-malformed` | the arguments are not objects of the expected shape |
+
+### Not verified
+
+- [unverified] Nothing here checks a hash against a tarball, nor that `source_archive` equals the derived
+  URL (092 decision Q2, a separate CI task). `source_archive` is checked for shape only. Hash and
+  signature verification before use is the E9 verifiers' job.
+
+Tests: `tests/pipeline/test_write_back.py`; verification: `docs/tasks/008c-verify.sh` (and
+`docs/tasks/008c-verify.sh --mutate`).
