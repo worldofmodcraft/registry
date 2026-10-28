@@ -195,11 +195,12 @@ PY
   run_mut c17f-half-dry-run-pair-accepted $MOD 'if given == 1:' 'if False:' test_c17f_conflicting_or_malformed_dry_run_sets
   run_mut c17f-pair-without-dry-run-accepted $MOD 'if pair and not dry:' 'if False:' test_c17f_conflicting_or_malformed_dry_run_sets
   run_mut c17f-bad-head-sha-accepted $MOD '    _check_head_sha(head_sha)' '    pass' test_c17f_unreadable_or_malformed_state_and_inputs
-  run_mut c17f-write-out-before-validation-error $MOD 'except (PlanInputError, NotImplementedError) as exc:
+  run_mut c17f-error-exit-code-changed $MOD 'except (PlanInputError, NotImplementedError) as exc:
         print(f"plan_pending: {exc}", file=sys.stderr)
         return 1' 'except (PlanInputError, NotImplementedError) as exc:
         print(f"plan_pending: {exc}", file=sys.stderr)
         return 2' test_c17f_ test_c17_version_input_refused_exit_1
+  run_mut c17b-recursion-error-unhandled $MOD '    except RecursionError:' '    except ZeroDivisionError:' test_c17b_deeply_nested_entry_is_a_per_entry_fault
   run_mut c17g-build-reason-nonempty $MOD 'out.append({**base, "kind": "build", "reason": ""})' 'out.append({**base, "kind": "build", "reason": "x"})' test_c17g_every_entry_has_exactly_the_pinned_fields test_c17_no_input_builds_every_pending_version
   run_mut forbidden-import $MOD 'import json
 ' 'import json

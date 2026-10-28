@@ -240,6 +240,8 @@ def _load_entry(registry: str, dirname: str, schema: dict):
         _validate(entry, schema, "$")
     except (SchemaFault, ValueError) as exc:  # json.JSONDecodeError and UnicodeDecodeError are ValueErrors
         return None, f"{_entry_path(dirname)} fails entry.schema.json: {exc}"
+    except RecursionError:  # a hostile, deeply nested file: a fault of this entry only (C15, PT5), never a crash
+        return None, f"{_entry_path(dirname)} fails entry.schema.json: nested too deeply to parse"
     ns, name = naming.split_id(entry["id"])
     if dirname != f"{ns}.{name}":
         return None, f"{_entry_path(dirname)} fails entry.schema.json: id {entry['id']!r} does not belong in directory {dirname!r}"
