@@ -84,4 +84,6 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   blobs: OLD 160 lines, NEW 163 lines, both parse); (3) `git clone` of the verifying clone carries HEAD's detached commit and the 034-verify.sh pattern
   `C4.1 TRAVERSAL_PATHS contains` occurs once at HEAD (checked with grep: 1); (4) 069's AC5 output contains no "skip" word (069 prints
   "never skip" only in --mutate labels, which the no-skip grep does not read).
+- 2026-10-28 qa-engineer: PIN commit `406e51f66b1948e0ba67c9236ab2fb4b32815e93` (089c-verify.sh only) wrote PIN_RED=`3b8db96...`, PIN_FIX=PIN_FINAL=`1564ad0731ea794bcd286f6dcd08ed5d7a77b509`,
+  PIN_TIP=`2f4495902b7c71a89c2fa5d97cab302689819006`; BASE=`32c641b5f56139a86c820f0b16d522c0f991d207`. Phase 1 complete; branch pushed, no PR. Awaiting phase 2.
 
