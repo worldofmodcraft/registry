@@ -66,10 +66,10 @@ TRUNC057=docs/tasks/057-trunc.sh
 OLDREF="32c641b5f56139a86c820f0b16d522c0f991d207"
 # 089a2's own commits (AC11). Filled in by the pin commit after the red and fix commits exist.
 PIN_BASE="32c641b5f56139a86c820f0b16d522c0f991d207"   # registry main when 089a2 was cut
-PIN_RED="__RED__"      # 089a2-verify.sh + task files only
-PIN_FIX="__FIX__"      # 057-verify.sh, 057-textchecks.py, 070-verify.sh
-PIN_FINAL="__FINAL__"  # last commit touching a source file or script of the part (the NEW blobs are read here)
-PIN_TIP="__TIP__"      # last commit of the branch before the pin commit (task-file only after FINAL)
+PIN_RED="42d7d46c9081c11f217e50c4be21f93f3b5e022e"      # 089a2-verify.sh + task files only
+PIN_FIX="672edcd971fdf74e0a827fa4255f87cfcbb02cbe"      # 057-verify.sh, 057-textchecks.py, 070-verify.sh
+PIN_FINAL="672edcd971fdf74e0a827fa4255f87cfcbb02cbe"  # last commit touching a source file or script of the part (the NEW blobs are read here)
+PIN_TIP="3d989b5b871032b44acf38eefe15a2d7f133dc41"      # last commit of the branch before the pin commit (task-file only after FINAL)
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
