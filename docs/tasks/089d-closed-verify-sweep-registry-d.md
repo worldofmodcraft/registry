@@ -95,3 +95,9 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   script): `git diff --name-only PIN_START PIN_TIP` = the three own files. Correction to the entry above: the muddled sentence about "commits after TIP
   touching more than 092 files" is moot; the open point is only whether the fresh-clone 092 default run prints NOT-APPLICABLE (merged) (expected) or a FAIL.
   Phase 1 ends here; everything is written-but-not-run; phase 2 awaits the quiet machine.
+- 2026-10-28 manager (session 14): phase 1 accepted for phase 2 (log check exit 0; head `8b12f72`). Triage (★, overnight ruling; §8b 3a):
+  Q1 ★ A (is the umbrella's Q6 ★ A wording: `refs/heads/main` only when there is no remote; a stale local main never vouches). Q2 ★ A
+  (`--no-renames`, consistent with the registry's existing rename handling; a rename into a 092 path must not hide its source). Q3 ★ A
+  (scenarios in 089d-verify.sh; 092's diff stays minimal, per (f)). Q4 ★ A (a real conflict cannot arise for a 092-only branch; the forced
+  resolution is the faithful form). Q5 ★ A. The phase-2 open point (092 default expected NOT-APPLICABLE (merged) on this branch) is a
+  prediction to check, not an adjustment; a FAIL there is a finding.
