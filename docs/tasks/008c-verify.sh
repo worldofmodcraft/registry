@@ -118,7 +118,7 @@ CHOST=$(grep -o 'source_archive = "https://[^/"]*/' contracts/artifact-naming.md
 MHOST=$(python3 -I -c "import sys; sys.path.insert(0,'tools/pipeline'); import write_back; print(write_back.ARCHIVE_HOST)")
 [ "$CHOST" = "$MHOST" ] && ok "constant ARCHIVE_HOST equals the contract's host" || fail "constant '$MHOST' != contract '$CHOST'"
 for ex in 'https://archive.worldofmodcraft.com/mc.hello-world-1.0.0/mc.hello-world-1.0.0.tar.gz' 'https://archive.worldofmodcraft.com/a.b-1.0.0-rc.1+build.5/a.b-1.0.0-rc.1+build.5.tar.gz'; do
-  grep -qF "$ex" contracts/artifact-naming.md && ok "contract contains worked example $ex" || fail "contract lacks $ex"
+  grep -qF "\`$ex\`" contracts/artifact-naming.md && ok "contract contains worked example $ex" || fail "contract lacks $ex"
   grep -qF "$ex" $TST && ok "test types worked example literally" || fail "test lacks $ex"
 done
 # host single-source grep with positive control

@@ -377,8 +377,9 @@ class Ac5SourceArchiveUrl(unittest.TestCase):
         self.assertEqual(wb.ARCHIVE_HOST, HOST_LITERAL)
         text = open(NAMING, encoding="utf-8").read()
         self.assertIn(f'"https://{HOST_LITERAL}/" + tag + "/" + tag + ".tar.gz"', text)
-        self.assertIn(EX1[3], text)
-        self.assertIn(EX2[3], text)
+        # backtick-delimited: the signature URL line has the tarball URL as a prefix
+        self.assertIn(f"`{EX1[3]}`", text)
+        self.assertIn(f"`{EX2[3]}`", text)
 
     def test_ac5_shape_and_forbidden_characters(self):
         vers = ["0.0.1", "1.0.0", "10.20.30", "1.0.0-rc.1", "1.0.0-RC.1", "1.0.0+b", "1.0.0-a.b-c+x.y-z", "1.2.3-0.3.7"]
