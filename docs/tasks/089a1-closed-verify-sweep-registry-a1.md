@@ -71,3 +71,9 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
 - 2026-10-28 qa-engineer: pin commit (changes only `089a1-verify.sh` PIN_RED/FIX/FINAL/TIP, plus this line): PIN_RED `55c00bc056a93bce8752db022da971ca558f410a`, PIN_FIX = PIN_FINAL `1cd84e70bbbfb43a1dfffed4614938fd8978c4d6`, PIN_TIP `b6e08bfb4ed7218c399e673aacf595de5b7e608d`
   (BASE `32c641b5f56139a86c820f0b16d522c0f991d207`). Read-only check of the AC11 relations with these pins: ancestry BASE<RED<FIX<=FINAL<=TIP holds; `git diff --name-only FINAL TIP` = the task file only; the last source/script-touching commit in BASE..TIP is FINAL.
   Phase 1 ends here: branch pushed, no PR. Nothing has been run (no `*-verify.sh`); all criteria are written-but-not-run. Resume at "PHASE-2 COMMANDS" above.
+- 2026-10-28 manager (session 14): phase 1 accepted for phase 2 (log check exit 0; head `69da39a`). Triage (★, overnight ruling; §8b 3a):
+  Q1 ★ A (unittest; pytest absent on this machine). Q2 ★ A (non-FAIL lines only; 007b's own FAIL text legitimately contains "skipped").
+  Q3 ★ A (blob read; umbrella table option). Q4 ★ A (moved, not duplicated; scope check unchanged — reviewer to confirm). Q5: **booked as a
+  new umbrella finding** (008a section-2 heading greps at HEAD, possible own-change; not in this part's scope; a later part F classifies and
+  fixes or records them live). Q6 ★ A: criterion 9 here covers A1's own scripts and tests; the whole-suite sweep is 039a's (part B runs and the
+  final integration run).
