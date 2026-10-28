@@ -223,7 +223,7 @@ cnt() { grep -cF -- "$2" "$1"; }
     || fail "AC0.6 057 T1 does not read the README at FINAL_COMMIT / pass --readme (or an un-flagged textchecks call remains)"
 [ "$(grep -v '^[[:space:]]*#' "$OLDD/057.sh" | grep -F 'textchecks.py' | grep -vc -e '--readme' -e '--old-present')" -ge 1 ] \
     && pass "AC0.6b positive control: the OLD 057-verify.sh has a textchecks call with neither --readme nor --old-present (the defect the grep finds)" || fail "AC0.6b the grep cannot find the OLD defect"
-[ "$(grep -v '^[[:space:]]*#' "$NEWD/057.sh" | grep -cE '/home/|PLATFORM_REPO|git -C ')" = 0 ] && [ "$(grep -v '^[[:space:]]*#' "$OLDD/057.sh" | grep -cE '/home/|PLATFORM_REPO')" -ge 1 ] \
+[ "$(grep -v '^[[:space:]]*#' "$NEWD/057.sh" | grep -cE '/ho[m]e/|PLATFORM_REPO|git -C ')" = 0 ] && [ "$(grep -v '^[[:space:]]*#' "$OLDD/057.sh" | grep -cE '/ho[m]e/|PLATFORM_REPO')" -ge 1 ] \
     && pass "AC0.7 S2: no working-copy path, PLATFORM_REPO or git -C read remains in the NEW 057-verify.sh (code lines); the OLD one has them (positive control)" || fail "AC0.7 S2: the NEW 057-verify.sh still names a working copy, or the OLD one does not (the grep is broken)"
 [ "$(cnt "$NEWD/057.sh" "Status:** Accepted (Ludwig, in session, 2026-10-15")" -ge 1 ] && [ "$(cnt "$NEWD/057.sh" 'ADR0121')" -ge 2 ] \
     && pass "AC0.8 S2: the NEW 057-verify.sh carries the ADR-0121 fixture blob (Status line and heredoc markers)" || fail "AC0.8 S2: no ADR-0121 fixture in the NEW 057-verify.sh"
@@ -353,7 +353,7 @@ PY
             *) [ "$m_old" = "$m_new" ] && [ -n "$m_new" ] && pass "AC11.11 $f keeps its mode ($m_new)" || fail "AC11.11 $f mode changed ($m_old -> $m_new)" ;; esac
     done
     # no hard-coded working-copy path in this script (S2 is about removing one)
-    [ "$(grep -v '^[[:space:]]*#' "$ROOT/docs/tasks/089a2-verify.sh" | grep -c '/home/')" = 0 ] && pass "AC11.12 089a2-verify.sh itself names no /home path in a code line" || fail "AC11.12 089a2-verify.sh names a /home path"
+    [ "$(grep -v '^[[:space:]]*#' "$0" | grep -c '/ho[m]e/')" = 0 ] && pass "AC11.12 089a2-verify.sh itself names no /home path in a code line" || fail "AC11.12 089a2-verify.sh names a /home path"
 fi
 
 # ==================================================================================================
