@@ -27,6 +27,10 @@ never passes it. Further flags (`--clone-timeout`, `--max-clone-bytes`, `--max-c
 `--max-uncompressed-bytes`, `--max-entries`, `--scanner`) are hidden test knobs whose defaults are the
 constants below; tests only ever lower them.
 
+`--no-sign` (task 008b-2) builds without a key: `--key` and `--pubkey` are then not accepted (argparse error,
+exit 2, before any clone), `--out` holds `<tag>.tar.gz`, `result.json` and `build.log` (no `.minisig`), and
+`result.json` has `"signed": false` and no `artifact.signature` or `artifact.key_id`. See "The pipeline workflow".
+
 ### Exit codes
 
 | Code | Meaning | Examples |
@@ -317,3 +321,77 @@ empty `version` to plan every pending version).
 
 Tests: `tests/pipeline/test_plan_pending.py`; verification: `docs/tasks/008b1-verify.sh` (and
 `docs/tasks/008b1-verify.sh --mutate`).
+
+## The pipeline workflow (task 008b-2)
+
+`.github/workflows/pipeline.yml` runs the planner, builds, signs and dry-runs; task 008b-3b adds the write-back
+job. Contract: `contracts/pipeline-trigger.md` (PT1-PT12); design: umbrella `008b-pipeline-workflow.md`, designs
+1, 6, 8, 9. Tests: `tests/pipeline/test_handoff.py`; verification: `docs/tasks/008b2-verify.sh` (and `--mutate`).
+
+**Push gate.** Until write-back exists every job has `github.event_name != 'push'` in its `if:`, so a push to
+`main` starts a run whose jobs are all skipped; only `workflow_dispatch` does anything. The trigger block itself
+is the contract's. 008b-3b removes the gate.
+
+| Job | Holds | Does |
+|---|---|---|
+| `plan` | nothing (`contents: read`) | checks out `main` (the SHA is logged, PT4), asserts the checkout is complete (below), collects the `pipeline/*` branches and the archive's `logs/` paths, runs `plan_pending.py`, uploads artifact `plan`, outputs `head_sha`, `has_build`, `has_writeback`, `matrix` (`handoff.plan_flags`, `handoff.plan_matrix`) |
+| `build` | **no secret**, `contents: read` | one matrix leg per `build` entry, `fail-fast: false` (PT5): `build_version.py --no-sign`, stderr captured, `handoff.finish_build`, artifact `build-<tag>` |
+| `sign` | `MINISIGN_SECRET_KEY` under `environment: signing`, only on `github.ref == 'refs/heads/main'` | per leg: downloads `build-<tag>`, guard (`outcome.json` `exit_code == 0`, else the leg does nothing), installs minisign, writes the key to a `0600` file in one step and removes it, runs `sign_built.py`, `handoff.finish_sign`, artifact `signed-<tag>`. Never clones, never runs the build tool |
+| `dry-run` | nothing, **no environment** | `dry_run=true` only: same legs, signs with an ephemeral key generated in the run and deleted, uploads `dryrun-<tag>` (with `build.log`) and fails unless the version built and signed |
+| `summary` | nothing | `always() && github.event_name != 'push'`; fails if `plan` failed, else `handoff.py summarize` calls `plan_pending.summarize_outcomes` with one outcome per built version |
+
+Inputs (`dry_run`, `version`, `dry_run_source_url`, `dry_run_commit`, and for the source pair also `dry_run_id`,
+`dry_run_version`) reach scripts only through `env:`. **The source pair needs the mod's id and version**: 008a
+cross-checks them against `mod.lua`, and the synthetic in-run entry (`handoff.synthetic_entry`, never written to
+`main`) cannot know them, so the two extra inputs carry them (assumption, question Q-D of the task file).
+
+### Handoff layout (read by 008b-3b through `handoff.read_outcomes` only)
+
+- `plan`: the planner's JSON. `refuse`, `skip` and `fault` entries get no build leg; the write-back job reads them here.
+- `build-<tag>`, uploaded by the leg whatever its exit code: `outcome.json`, `build.stderr`, and for exit 0
+  `<tag>.tar.gz`, `result.json` (`signed: false`), `build.log`; for exit 1 and 2 `build.log` only if the build had started.
+- `signed-<tag>`, only for exit-0 legs: `<tag>.tar.gz`, `<tag>.tar.gz.minisig`, `result.json` (`signed: true`,
+  `artifact.signature`, `artifact.key_id`), `outcome.json` unchanged. If signing fails the artifact holds
+  `outcome.json` alone with `exit_code` 2.
+- `outcome.json`: `version_id`, `tag`, `exit_code` (0 built, 1 rejected by 008a, 2 pipeline fault), `reason`.
+  For exit 1, `reason` is 008a's `REJECTED [rule]: message -- remedy: remedy` line without `REJECTED `, from
+  `build.stderr` else the last `result: exit 1 ` line of `build.log`, whitespace collapsed; empty after trimming means
+  exit 2. Empty for exit 0 and 2. Any other build exit code, or an exit 0 without tarball and `result.json`, is 2.
+- `read_outcomes(dir, require_signed=False)`: one entry per tag, `signed-<tag>` overriding `build-<tag>`; with
+  `require_signed=True` (the non-dry-run reading) a built version without `signed-<tag>` is exit 2.
+- A plan `build` entry with no artifact at all (a killed leg) is exit 2 for the summary (no outcome reported) and
+  must be treated so by 008b-3b.
+
+Job conditions: `build` runs only if `has_build` (so GitHub is never given an empty matrix); `sign` has
+`always()` so one failed leg does not skip it; the write-back job (008b-3b) uses `has_writeback`. Zero pending
+versions give both false and a green run that wrote nothing.
+
+### `sign_built.py`
+
+`python3 tools/pipeline/sign_built.py --tarball T --result R --key K --pubkey P --out DIR`. The build job cloned an
+author-controlled URL, so before signing the tarball is re-checked from its own bytes: compressed size, entry
+rules and sizes (`archive.inspect_archive`, 008a's limits), `sha256 == result.json artifact.source_sha256`, naming
+and the trusted-comment grammar; then it signs the checked copy and the signature must pass `reference_verify`.
+Exit 0 signed; 1 refused (`REFUSED [rule]: ...`); 2 pipeline error. The handoff maps both 1 and 2 to outcome
+`exit_code` 2: only 008a's own exit 1 is a rejection of the author's version.
+
+### Failure modes
+
+| What happens | Result |
+|---|---|
+| 008a rejects (exit 1) | `build-<tag>` with `exit_code` 1 and `reason`; no signing; summary stays green for it (008b-3b opens the T3) |
+| 008a pipeline fault (exit 2), clone failure, killed leg | `exit_code` 2 or no artifact; the leg fails; the summary is non-green naming it |
+| sign step refuses or errors | `signed-<tag>` with `exit_code` 2, no signature; the leg and the summary are red |
+| entry fails the schema, branch exists, plan skip | no leg; `plan` artifact; the summary is non-green (008b-1) |
+| plan job fails (bad inputs, broken checkout, archive clone fails) | everything else is skipped; the summary fails first |
+| minisign download pin empty | the install step fails closed (question Q-S) |
+
+**Broken or sparse checkout (008b-1 review F2).** The planner reads `mods/*/entry.json`; a checkout that lost them
+would look like an empty registry. `handoff.py check-checkout` fails the plan job if `mods/` is missing while git
+tracks files under it, or any tracked file under `mods/` is absent on disk.
+
+**Not verified (no workflow has run here):** the pinned `upload-artifact` and `download-artifact` SHAs match their
+tags (copied from other files on the dev machine); multi-path uploads land at the artifact root (least common
+ancestor); a `pattern:` download with no match does not fail; `matrix` from `fromJSON` with only `include`;
+`ubuntu-latest` can run the minisign 0.12 static binary; the `signing` environment mechanics (runbook M11);
+that the archive repository is public for the anonymous clone in `plan`.

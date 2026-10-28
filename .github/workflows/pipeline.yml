@@ -1,0 +1,361 @@
+# Registry build pipeline (task 008b-2: plan, build, sign, dry-run and summary jobs; 008b-3b adds write-back).
+#
+# Trigger and ref/key binding: contracts/pipeline-trigger.md (PT1-PT12). Job split and secrets: umbrella design 8.
+#   - plan:    reads main's head (PT4), runs tools/pipeline/plan_pending.py. No secret.
+#   - build:   clones the author's repository (author-controlled URL) with `build_version.py --no-sign`. No secret,
+#              contents: read only. One matrix leg per planned version, fail-fast false (PT5).
+#   - sign:    receives only the built artefact, re-verifies it, signs it; the only job that names MINISIGN_SECRET_KEY,
+#              under `environment: signing`. Never clones, never runs the build tool.
+#   - dry-run: signs with an ephemeral in-run key; workflow artifacts only; no environment, no secret (PT12).
+#   - summary: ends the run non-green when any version was skipped or faulted (plan_pending.summarize_outcomes).
+# Dispatch inputs reach scripts only through `env:`; no `run:` block contains an expression interpolation.
+# PUSH GATE: no write-back job exists yet, so every job is skipped on `push` (github.event_name != 'push'); task 008b-3b
+# removes the gate. Docs: docs/pipeline/build-pipeline.md ("The pipeline workflow"). Tests: tests/pipeline/test_handoff.py.
+name: pipeline
+
+on:
+  push:
+    branches: [main]
+    paths: ['mods/*/entry.json']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: sign with an ephemeral key, upload workflow artifacts only (needs version, or the source pair)"
+        type: boolean
+        default: false
+      version:
+        description: "Build only this pending version: <namespace>.<name>@<semver> (empty: every pending version)"
+        type: string
+        default: ""
+      dry_run_source_url:
+        description: "Dry run only: https:// URL of the source repository (with dry_run_commit, dry_run_id, dry_run_version)"
+        type: string
+        default: ""
+      dry_run_commit:
+        description: "Dry run only: 40 lowercase hex commit in dry_run_source_url"
+        type: string
+        default: ""
+      dry_run_id:
+        description: "Dry run only, with the source pair: the mod id that mod.lua at that commit declares"
+        type: string
+        default: ""
+      dry_run_version:
+        description: "Dry run only, with the source pair: the version that mod.lua at that commit declares"
+        type: string
+        default: ""
+
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  plan:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      head_sha: ${{ steps.out.outputs.head_sha }}
+      has_build: ${{ steps.out.outputs.has_build }}
+      has_writeback: ${{ steps.out.outputs.has_writeback }}
+      matrix: ${{ steps.out.outputs.matrix }}
+    steps:
+      - name: Check out main's head (the input snapshot, PT4)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Fail closed on a broken or sparse checkout
+        run: |
+          echo "plan reads main at $(git rev-parse HEAD)"
+          python3 -I tools/pipeline/handoff.py check-checkout --repo .
+      - name: Collect pipeline branches and archive logs
+        run: |
+          git ls-remote --heads origin 'refs/heads/pipeline/*' | sed -n 's|^[0-9a-f]\{40\}[[:space:]]*refs/heads/||p' > "$RUNNER_TEMP/branches.txt"
+          git clone --depth 1 --quiet https://github.com/worldofmodcraft/archive "$RUNNER_TEMP/archive"
+          ( cd "$RUNNER_TEMP/archive" && if [ -d logs ]; then find logs -type f | LC_ALL=C sort; fi ) > "$RUNNER_TEMP/archive-logs.txt"
+          echo "pipeline branches: $(wc -l < "$RUNNER_TEMP/branches.txt"); archive logs: $(wc -l < "$RUNNER_TEMP/archive-logs.txt")"
+      - name: Plan
+        id: out
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          VERSION: ${{ inputs.version }}
+          DRY_RUN_SOURCE_URL: ${{ inputs.dry_run_source_url }}
+          DRY_RUN_COMMIT: ${{ inputs.dry_run_commit }}
+          DRY_RUN_ID: ${{ inputs.dry_run_id }}
+          DRY_RUN_VERSION: ${{ inputs.dry_run_version }}
+        run: |
+          python3 -I tools/pipeline/plan_pending.py --registry . --head-sha "$(git rev-parse HEAD)" \
+            --branches "$RUNNER_TEMP/branches.txt" --archive-logs "$RUNNER_TEMP/archive-logs.txt" \
+            --dry-run="$DRY_RUN" --version="$VERSION" \
+            --dry-run-source-url="$DRY_RUN_SOURCE_URL" --dry-run-commit="$DRY_RUN_COMMIT" --out plan.json > /dev/null
+          PAIR=false
+          if [ -n "$DRY_RUN_SOURCE_URL" ]; then PAIR=true; fi
+          python3 -I tools/pipeline/handoff.py plan-outputs --plan plan.json --pair "$PAIR" \
+            --dry-run-id="$DRY_RUN_ID" --dry-run-version="$DRY_RUN_VERSION" >> "$GITHUB_OUTPUT"
+          cat plan.json
+      - name: Upload the plan document
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: plan
+          path: plan.json
+          retention-days: 7
+
+  build:
+    needs: [plan]
+    if: github.event_name != 'push' && needs.plan.result == 'success' && needs.plan.outputs.has_build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - name: Check out the registry at the planned head
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.plan.outputs.head_sha }}
+          persist-credentials: false
+      - name: Build without signing
+        env:
+          LEG_ENTRY_PATH: ${{ matrix.entry_path }}
+          LEG_SEMVER: ${{ matrix.semver }}
+          LEG_SYNTHETIC: ${{ matrix.synthetic }}
+          LEG_VERSION_ID: ${{ matrix.version_id }}
+          LEG_TAG: ${{ matrix.tag }}
+          DRY_RUN_SOURCE_URL: ${{ inputs.dry_run_source_url }}
+          DRY_RUN_COMMIT: ${{ inputs.dry_run_commit }}
+          DRY_RUN_ID: ${{ inputs.dry_run_id }}
+          DRY_RUN_VERSION: ${{ inputs.dry_run_version }}
+        run: |
+          ENTRY="$LEG_ENTRY_PATH"
+          if [ "$LEG_SYNTHETIC" = "true" ]; then
+            python3 -I tools/pipeline/handoff.py synth-entry --id="$DRY_RUN_ID" --version="$DRY_RUN_VERSION" \
+              --commit="$DRY_RUN_COMMIT" --url="$DRY_RUN_SOURCE_URL" --out "$RUNNER_TEMP/entry.json"
+            ENTRY="$RUNNER_TEMP/entry.json"
+          fi
+          mkdir "$RUNNER_TEMP/work"
+          rc=0
+          python3 -I tools/pipeline/build_version.py --entry "$ENTRY" --version "$LEG_SEMVER" \
+            --workdir "$RUNNER_TEMP/work" --out out --no-sign 2> "$RUNNER_TEMP/build.stderr" || rc=$?
+          cat "$RUNNER_TEMP/build.stderr" >&2
+          python3 -I tools/pipeline/handoff.py finish-build --out out --stderr "$RUNNER_TEMP/build.stderr" \
+            --version-id "$LEG_VERSION_ID" --tag "$LEG_TAG" --exit-code "$rc"
+      - name: Upload the build result
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: build-${{ matrix.tag }}
+          path: |
+            out/outcome.json
+            out/build.stderr
+            out/build.log
+            out/${{ matrix.tag }}.tar.gz
+            out/result.json
+          retention-days: 7
+      - name: Mark a pipeline fault on this leg
+        id: leg
+        run: python3 -I tools/pipeline/handoff.py guard --dir out >> "$GITHUB_OUTPUT"
+      - name: Fail the leg on exit 2
+        if: steps.leg.outputs.exit_code == '2'
+        run: |
+          echo "pipeline fault (exit 2) while building this version; see build.stderr"
+          exit 1
+
+  sign:
+    needs: [plan, build]
+    if: always() && github.event_name != 'push' && github.ref == 'refs/heads/main' && needs.plan.result == 'success' && needs.plan.outputs.has_build == 'true' && inputs.dry_run != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: signing
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - name: Check out this repository's tools at main's planned head
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.plan.outputs.head_sha }}
+          persist-credentials: false
+      - name: Download this version's build result
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: build-${{ matrix.tag }}
+          path: build
+      - name: Guard (sign only a version that built with exit 0)
+        id: guard
+        run: python3 -I tools/pipeline/handoff.py guard --dir build >> "$GITHUB_OUTPUT"
+      - name: Install minisign (pinned download)
+        if: steps.guard.outputs.proceed == 'true'
+        env:
+          MINISIGN_URL: https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-linux.tar.gz
+          # sha256 of the tarball above; fails closed while empty (task 008b-2 question Q-S)
+          MINISIGN_TARBALL_SHA256: ""
+        run: |
+          [ -n "$MINISIGN_TARBALL_SHA256" ] || { echo "no pinned checksum for the minisign download is set in this workflow"; exit 1; }
+          curl -fsSL -o "$RUNNER_TEMP/minisign.tar.gz" "$MINISIGN_URL"
+          echo "$MINISIGN_TARBALL_SHA256  $RUNNER_TEMP/minisign.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/minisign.tar.gz" -C "$RUNNER_TEMP"
+          mkdir "$RUNNER_TEMP/bin"
+          install -m 0755 "$RUNNER_TEMP/minisign-linux/x86_64/minisign" "$RUNNER_TEMP/bin/minisign"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/minisign" -v
+      - name: Write the public key (key id 6E5B30596A7A8CC4, docs/architecture/key-management.md)
+        if: steps.guard.outputs.proceed == 'true'
+        run: |
+          printf '%s\n%s\n' 'untrusted comment: minisign public key 6E5B30596A7A8CC4' 'RWTEjHpqWTBbbijJKtpGHKoHPXdVAbOkQ+9498maEIr0Cjg5smB6Xd7z' > "$RUNNER_TEMP/wom.pub"
+      - name: Re-verify and sign (the only step that reads the key)
+        if: steps.guard.outputs.proceed == 'true'
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          LEG_TAG: ${{ matrix.tag }}
+        run: |
+          umask 077
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$RUNNER_TEMP/signing.key"
+          rc=0
+          python3 -I tools/pipeline/sign_built.py --tarball "build/$LEG_TAG.tar.gz" --result build/result.json \
+            --key "$RUNNER_TEMP/signing.key" --pubkey "$RUNNER_TEMP/wom.pub" --out signed 2> "$RUNNER_TEMP/sign.stderr" || rc=$?
+          rm -f "$RUNNER_TEMP/signing.key"
+          cat "$RUNNER_TEMP/sign.stderr" >&2
+          python3 -I tools/pipeline/handoff.py finish-sign --build-dir build --signed-dir signed --rc "$rc"
+      - name: Remove the key file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/signing.key"
+      - name: Upload the signed result
+        if: always() && steps.guard.outputs.proceed == 'true'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: signed-${{ matrix.tag }}
+          path: |
+            signed/${{ matrix.tag }}.tar.gz
+            signed/${{ matrix.tag }}.tar.gz.minisig
+            signed/result.json
+            signed/outcome.json
+          retention-days: 7
+
+  dry-run:
+    needs: [plan, build]
+    if: always() && github.event_name != 'push' && inputs.dry_run == true && needs.plan.result == 'success' && needs.plan.outputs.has_build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - name: Check out this repository's tools at main's planned head
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.plan.outputs.head_sha }}
+          persist-credentials: false
+      - name: Download this version's build result
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: build-${{ matrix.tag }}
+          path: build
+      - name: Guard (sign only a version that built with exit 0)
+        id: guard
+        run: python3 -I tools/pipeline/handoff.py guard --dir build >> "$GITHUB_OUTPUT"
+      - name: Install minisign (pinned download)
+        if: steps.guard.outputs.proceed == 'true'
+        env:
+          MINISIGN_URL: https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-linux.tar.gz
+          # sha256 of the tarball above; fails closed while empty (task 008b-2 question Q-S)
+          MINISIGN_TARBALL_SHA256: ""
+        run: |
+          [ -n "$MINISIGN_TARBALL_SHA256" ] || { echo "no pinned checksum for the minisign download is set in this workflow"; exit 1; }
+          curl -fsSL -o "$RUNNER_TEMP/minisign.tar.gz" "$MINISIGN_URL"
+          echo "$MINISIGN_TARBALL_SHA256  $RUNNER_TEMP/minisign.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/minisign.tar.gz" -C "$RUNNER_TEMP"
+          mkdir "$RUNNER_TEMP/bin"
+          install -m 0755 "$RUNNER_TEMP/minisign-linux/x86_64/minisign" "$RUNNER_TEMP/bin/minisign"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/minisign" -v
+      - name: Sign with an ephemeral key generated in this run and discarded
+        if: steps.guard.outputs.proceed == 'true'
+        env:
+          LEG_TAG: ${{ matrix.tag }}
+        run: |
+          umask 077
+          mkdir "$RUNNER_TEMP/ephemeral"
+          minisign -G -W -f -p "$RUNNER_TEMP/ephemeral/eph.pub" -s "$RUNNER_TEMP/ephemeral/eph.key" > /dev/null
+          rc=0
+          python3 -I tools/pipeline/sign_built.py --tarball "build/$LEG_TAG.tar.gz" --result build/result.json \
+            --key "$RUNNER_TEMP/ephemeral/eph.key" --pubkey "$RUNNER_TEMP/ephemeral/eph.pub" --out dryrun-signed 2> "$RUNNER_TEMP/sign.stderr" || rc=$?
+          cat "$RUNNER_TEMP/sign.stderr" >&2
+          sed -n '1s/^untrusted comment: minisign public key //p' "$RUNNER_TEMP/ephemeral/eph.pub" > "$RUNNER_TEMP/eph.keyid"
+          rm -rf "$RUNNER_TEMP/ephemeral"
+          python3 -I tools/pipeline/handoff.py finish-sign --build-dir build --signed-dir dryrun-signed --rc "$rc"
+      - name: Assemble the dry-run artefact
+        if: always()
+        run: |
+          mkdir -p dryrun
+          for f in build.log build.stderr; do
+            if [ -f "build/$f" ]; then cp "build/$f" dryrun/; fi
+          done
+          if [ -d dryrun-signed ]; then cp dryrun-signed/* dryrun/; else cp build/outcome.json dryrun/; fi
+          if [ -f dryrun/result.json ] && [ -s "$RUNNER_TEMP/eph.keyid" ]; then
+            printf 'DRY RUN: signed with an ephemeral key generated inside this run and discarded; key_id %s; NOT the production key.\n' "$(cat "$RUNNER_TEMP/eph.keyid")" > dryrun/DRY-RUN.txt
+          else
+            printf 'DRY RUN: nothing was signed (see outcome.json and build.log). No production key is used by a dry run.\n' > dryrun/DRY-RUN.txt
+          fi
+      - name: Upload the dry-run artefact (workflow artifacts only)
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: dryrun-${{ matrix.tag }}
+          path: dryrun
+          retention-days: 7
+      - name: Fail unless the dry run built and signed
+        run: python3 -I tools/pipeline/handoff.py guard --dir dryrun | grep -qx 'proceed=true'
+
+  summary:
+    needs: [plan, build, sign, dry-run]
+    if: always() && github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Fail when the plan job did not succeed
+        env:
+          PLAN_RESULT: ${{ needs.plan.result }}
+        run: |
+          [ "$PLAN_RESULT" = "success" ] || { echo "the plan job ended $PLAN_RESULT; the run is not green"; exit 1; }
+      - name: Check out this repository's tools at main's planned head
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.plan.outputs.head_sha }}
+          persist-credentials: false
+      - name: Download the plan document
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: plan
+          path: plan
+      - name: Download the build results
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: build-*
+          path: outcomes
+      - name: Download the signed results
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: signed-*
+          path: outcomes
+      - name: Conclude the run
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          mkdir -p outcomes
+          python3 -I tools/pipeline/handoff.py summarize --plan plan/plan.json --outcomes outcomes --dry-run "$DRY_RUN"
