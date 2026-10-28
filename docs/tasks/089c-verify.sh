@@ -68,8 +68,8 @@ OLDREF="32c641b5f56139a86c820f0b16d522c0f991d207"
 PIN_BASE="32c641b5f56139a86c820f0b16d522c0f991d207"   # registry main when 089c was cut
 PIN_RED="3b8db962327ea3f4dd82190551b0833e86e9df04"      # 089c-verify.sh + task file only
 PIN_FIX="1564ad0731ea794bcd286f6dcd08ed5d7a77b509"      # 069-verify.sh
-PIN_FINAL="1564ad0731ea794bcd286f6dcd08ed5d7a77b509"  # last commit touching a source file of the part
-PIN_TIP="2f4495902b7c71a89c2fa5d97cab302689819006"      # last commit of the branch before the pin commit (task file only after FINAL)
+PIN_FINAL="7f30d95831678dc8da9f4a66f39e6325e35c3415"  # last commit touching a source file of the part
+PIN_TIP="fc50c2389724caff1263c714278aad232c59953f"      # last commit of the branch before the pin commit (task file only after FINAL)
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
