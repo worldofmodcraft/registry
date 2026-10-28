@@ -83,3 +83,7 @@ bash docs/tasks/008c-verify.sh --scope-selftest            # 5. the self-test al
   `docs/tasks/089-closed-verify-sweep-registry.md`, because the manager's cut commit (60ba327) copied it into the branch ("copied into this branch
   from platform main", task header). It is not in this task's "Scope of this part" list. AC11.4/4c therefore allow it ONLY as that one cut
   copy-in (exactly one commit touched it, before the fix commit, never changed by 089e). Booked as Q3.
+- 2026-10-28 qa-engineer: COMMITS. Content commit (the only one touching 008c-verify.sh) `c68eec7b910a29be295b1944e826497d37cac326` = E_FIX = E_FINAL = E_TIP;
+  pin commit `877a1083839eaeabd7fd4878bc032b4d554d5554` (089e-verify.sh, three pin lines). Size at the pin commit vs base `32c641b`: 008c-verify.sh
+  +68/-48 (116 changed), 089e-verify.sh 308 new lines, task file +85 incl. this log, umbrella copy-in 143 (cut commit, not mine).
+  STATUS: phase 1 complete; NOTHING is done: every criterion above is written-but-not-run. Phase 2 (the commands listed above) is open.
