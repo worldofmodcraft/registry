@@ -47,7 +47,7 @@ section() { printf '\n== %s ==\n' "$1"; }
 S092=docs/tasks/092-verify.sh
 # Fixed SHAs (full 40 characters); no check below reads HEAD, a branch name or origin/main of the repository under test for its frame.
 PIN_RED="32c641b5f56139a86c820f0b16d522c0f991d207"    # registry main when 089d was cut: the UNFIXED 092-verify.sh
-PIN_FIX="8eb35c228e429343a323943f6dc059fcec5f04a4"    # the commit that fixes post_tip_check (092-verify.sh only)
+PIN_FIX="becb41802d95fc776000f381a45728d08826b3b2"    # the commit that fixes post_tip_check (092-verify.sh only)
 PIN_START="75eb9b0ce7ccddd8400eecd06f1a64eec0a1e753"  # 089d dispatch commit (adds the umbrella copy and the task file); 089d's own work starts after it
 PIN_TIP="d065a8643eaf095488c944c7fda2efa64e0cdd95"    # last commit before the pin commit (a placeholder is RED: an unreachable pin is never skipped)
 # 092's own pins, typed here (the controls below use them); asserted to be unchanged in both blobs.
@@ -110,6 +110,9 @@ scn_build() {  # scn_build ID -> sets SC_ROOT SC_TIP SC_HEAD
         a1)  scn_remote "$id"; scn_adv; must sg "$SC_ROOT" merge -q --no-ff -m "merge main into the branch" origin/main ;;
         a2)  scn_remote "$id"; scn_adv; must sg "$SC_ROOT" merge -q --no-commit --no-ff origin/main
              must sg "$SC_ROOT" checkout origin/main -- other.txt; must sg "$SC_ROOT" commit -q -m "merge main, resolved to main's version" ;;
+        a2b) scn_remote "$id"; scn_adv; must sg "$SC_ROOT" merge -q --no-commit --no-ff origin/main
+             printf 'evil\n' >> "$SC_ROOT/other.txt"; must sg "$SC_ROOT" add -A   # edit the merge ...
+             must sg "$SC_ROOT" checkout origin/main -- other.txt; must sg "$SC_ROOT" commit -q -m "merge main, edited, then restored to main's version" ;;
         a3)  scn_norem "$id"; must sg "$SC_ROOT" merge -q --no-ff -m "merge main into the branch (no remote)" main ;;
         b1)  scn_remote "$id"; cfile "$SC_ROOT" other.txt x "branch commit touching a non-092 file" ;;
         b2i) scn_remote "$id"; scn_adv; must sg "$SC_ROOT" merge -q --no-commit --no-ff origin/main
@@ -229,6 +232,7 @@ else fail "fixed extraction has an unexpected 'return 0' (a skip?)"; fi
 CASES="g0|g|PASS|PASS|(1 file name(s))|
 a1|a|PASS|FAIL|(1 file name(s))|
 a2|a|PASS|FAIL|(1 file name(s))|
+a2b|a|PASS|FAIL|(1 file name(s))|
 a3|a|PASS|FAIL|(1 file name(s))|
 b1|b|FAIL|FAIL|other.txt|
 b2i|b|FAIL|FAIL|other.txt|
@@ -327,6 +331,29 @@ PY
     done <<< "$CASES"
     if [ -n "$red_ids" ] && [ -z "$other_bad" ]; then pass "(e) the mutant reddens exactly the (a) cases:$red_ids"
     else fail "(e) mutation result is not 'only (a)' (red:$red_ids; other:$other_bad)"; fi
+    # second mutant: the forbidden "--no-merges alone" variant (merge handling removed; non-merge first-parent commits only)
+    MUT2_FN="$TMP/mut2.fn"
+    python3 -I - "$FIX_FN" "$MUT2_FN" <<'PY2'
+import sys
+s = open(sys.argv[1]).read()
+a = s.index('    merges="$(G rev-list --first-parent --merges')
+b = s.index("    files=\"$(printf '%s\\n' \"$files\" | sed '/^$/d' | sort -u)\"")
+open(sys.argv[2], 'w').write(s[:a] + s[b:])
+PY2
+    if [ -s "$MUT2_FN" ] && ! grep -q -- 'diff-tree --cc' "$MUT2_FN" && grep -q -- '--no-merges' "$MUT2_FN" && bash -n "$MUT2_FN" 2>/dev/null; then
+        pass "(e2) positive control: the --no-merges-alone mutant exists, parses, has no --cc/merge handling"
+    else fail "(e2) the --no-merges-alone mutant was not produced"; fi
+    run_cases "$MUT2_FN" mut2
+    flipped=""; other2=""
+    while IFS='|' read -r id grp ef er nd nn; do
+        mv="$(grep "^$id " "$TMP/res.mut2" | cut -d' ' -f2)"
+        if [ "$mv" != "$ef" ]; then flipped="$flipped $id"; fi
+        printf 'mutant2 %-5s verdict=%-4s expected-with-fix=%s\n' "$id" "$mv" "$ef"
+    done <<< "$CASES"
+    # Every merge scenario whose RED depends on merge handling flips to PASS: b2i/b2ii (--cc), b3 (C^1..C^2 diff), b4 (octopus), b5/b5b (no main ref).
+    # All (a) cases, g0 and b1 keep the fixed function's verdict.
+    if [ "$flipped" = " b2i b2ii b3 b4 b5 b5b" ]; then pass "(e2) the --no-merges-alone mutant flips exactly b2i b2ii b3 b4 b5 b5b to PASS; (a), g0 and b1 are unchanged"
+    else fail "(e2) --no-merges-alone mutant flipped:$flipped (expected exactly b2i b2ii b3 b4 b5 b5b)"; fi
 fi
 
 echo; echo "SUMMARY failed=$FAILURES"
