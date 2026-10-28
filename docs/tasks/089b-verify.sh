@@ -311,7 +311,10 @@ stub_run() {   # stub_run LABEL 039A_BLOB : count invocations of each stubbed sc
     done
     git -C "$d" "${GITID[@]}" commit -q -am "stubs" || { fail "AC8.$label cannot commit the stubs"; return; }
     cp "$blob" "$d/$S039A"
-    ( cd "$d" && PYTHONDONTWRITEBYTECODE=1 env -u WOM_NODE_MODULES bash "$S039A" "$NM" ) > "$TMP/s-$label.out" 2>&1; echo "$?" > "$TMP/s-$label.rc"
+    # 039a's AC12 quiet-wait would count THIS script (a *-verify.sh process, its parent) as "another script running" and wait six hours:
+    # a ps shim on PATH hides 089b-verify.sh only, and only for this one child run; every other *-verify.sh process stays visible.
+    mkdir -p "$TMP/bin" && printf '#!/bin/sh\n/bin/ps "$@" | grep -v "089b-verify[.]sh"\n' > "$TMP/bin/ps" && chmod +x "$TMP/bin/ps"
+    ( cd "$d" && PATH="$TMP/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 env -u WOM_NODE_MODULES bash "$S039A" "$NM" ) > "$TMP/s-$label.out" 2>&1; echo "$?" > "$TMP/s-$label.rc"
 }
 stub_run old "$OLDD/039a.sh"; stub_run new "$NEWD/039a.sh"
 for v in old new; do
