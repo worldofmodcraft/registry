@@ -116,3 +116,7 @@ Criterion 9 (quiet machine) is mandatory: one script at a time, `ps` logged befo
       PASS  AC4.m12 039a class_check widened back to exact counts at HEAD turns red, and only that check: exit 1, FAIL  AC2 positive controls: pinned test(s) not ok at HEAD: 
   The remaining AC11 lines of that run (scope, hunk limits, ancestry) pass once the pins are committed (pin commit follows). Finding 8 is 065 AC3.5; 9 is 075 AC4; 10/11 are the 039a config line (m10/m11 are one line, mutated once
   under two labels); 12 is class_check; S4 is the sweep call (AC8: NEW sweep invoked each of the 22 other scripts once, 039b with `--no-closed`; the OLD sweep ran 039b with no flag, whose predicate waits for a parent 039a: AC8.1/AC8.1b).
+- 2026-10-28 qa-engineer: found by running the harness under its REAL name (earlier runs used a renamed copy): AC8's stubbed whole-039a run deadlocked in principle, because 039a's AC12 quiet-wait counts the
+  parent `089b-verify.sh` process as another running verify script (same class of defect as S4). The stub run now puts a `ps` shim on PATH for that one child that hides only `089b-verify.sh`; nothing else is hidden.
+  Whole harness (default mode, real name, quiet machine: `ps` empty at 2026-10-28T10:23:33Z), 13 minutes: every check PASS (AC0 x13, AC1 x15, AC5 x3, AC3 x6, AC8 x9) except AC11.9 (hunk-limit regex too narrow for the
+  replaced old lines of class_check and the sweep call: a harness bug, not a source finding), widened in commit 9ec482278f58eb94c0fe8e8a057f3fe752ea30ad. Mutation mode (`--mutate`) 5/5 PASS (above).
