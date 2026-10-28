@@ -87,3 +87,7 @@ bash docs/tasks/008c-verify.sh --scope-selftest            # 5. the self-test al
   pin commit `877a1083839eaeabd7fd4878bc032b4d554d5554` (089e-verify.sh, three pin lines). Size at the pin commit vs base `32c641b`: 008c-verify.sh
   +68/-48 (116 changed), 089e-verify.sh 308 new lines, task file +85 incl. this log, umbrella copy-in 143 (cut commit, not mine).
   STATUS: phase 1 complete; NOTHING is done: every criterion above is written-but-not-run. Phase 2 (the commands listed above) is open.
+- 2026-10-28 manager (session 14): phase 1 accepted for phase 2 (log check exit 0; head `903b07e`). Triage (★, overnight ruling; §8b 3a):
+  Q1 ★ A (pins per scenario subshell; the real `scope_violations` is exercised). Q2 ★ A. Q3 ★ A: the umbrella copy is the manager's dispatch
+  commit, the same shape as 089b; AC11 allowing it only as that single pre-fix copy-in is correct. The self-test replacement (no-main-ref ->
+  bad-pin, `scope-fixed-base` -> two mutations) is accepted as equivalent-or-stronger; the reviewer is to confirm no assertion was lost.
