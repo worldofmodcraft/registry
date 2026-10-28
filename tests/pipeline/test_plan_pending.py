@@ -271,6 +271,19 @@ class C17bSchemaFault(Base):
                                  [("mods/mc.a/entry.json", "fault", None)], label)
                 self.assertTrue(doc["fault"][0]["reason"])
 
+    def test_c17b_deeply_nested_entry_is_a_per_entry_fault_and_others_still_plan(self):
+        # 200,000 "[" makes json.loads raise RecursionError (not a ValueError): one hostile entry must not kill planning.
+        self.reg.add(None, dirname="mc.deep", raw="[" * 200000)
+        self.reg.add(entry("zz", "b", [pending("0.1.0")]))
+        doc = self.plan()
+        self.assertEqual(self.ids(doc, "build"), ["zz.b@0.1.0"])
+        self.assertEqual([(f["entry_path"], f["kind"], f["version_id"]) for f in doc["fault"]],
+                         [("mods/mc.deep/entry.json", "fault", None)])
+        self.assertIn("nested", doc["fault"][0]["reason"])
+        r = self.cli()
+        self.assertEqual(r.returncode, 0, r.stderr)  # a plan with faults is written, exit 0 (C17f)
+        self.assertEqual(len(json.loads(r.stdout)["fault"]), 1)
+
     def test_c17b_positive_control_valid_entries_of_every_state_are_not_faults(self):
         self.reg.add(entry("mc", "a", [pending("1.0.0-rc.1"), published("1.0.0"), removed("0.9.0"), rejected("0.8.0")]))
         doc = self.plan()
