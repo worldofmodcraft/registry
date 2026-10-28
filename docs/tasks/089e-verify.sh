@@ -60,7 +60,7 @@ FINAL008C="7810e70af50d7e2ebae1e53dccba37be1095afe7"  # M^2
 E_BASE="32c641b5f56139a86c820f0b16d522c0f991d207"     # registry main when 089e was cut (= M008C)
 E_FIX="c68eec7b910a29be295b1944e826497d37cac326"     # first commit touching 008c-verify.sh
 E_FINAL="c68eec7b910a29be295b1944e826497d37cac326"   # last commit touching 008c-verify.sh
-E_TIP="c68eec7b910a29be295b1944e826497d37cac326"     # last commit before the pin commit; after it only the task file and the pin lines of this script may change
+E_TIP="48141c31631f6a9dbe6ce2df06a15d1054efed1d"     # last commit before the pin commit; after it only the task file and the pin lines of this script may change
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
