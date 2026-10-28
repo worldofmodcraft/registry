@@ -14,8 +14,72 @@ Re-pin `008c-verify.sh`'s own-change scope check from "merge-base with current o
 Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file `docs/tasks/089b-verify.sh`) and the 084/087 reference pattern.
 
 ## Questions  (agent-maintained; see MANAGER.md 8b)
+- Q1: how the scope self-test proves the fix without a main ref | options: A) keep `scope_violations` exercising throwaway repos, with PIN_BASE/PIN_FINAL assigned INSIDE each scenario's subshell (a script-internal assignment, no environment override); B) pass base/final as function arguments; C) drop the self-test and rely on 089e-verify.sh | assumed: A (smallest diff to the existing scenarios A-D, keeps every assertion; the live check and the self-test call the same function) | built on assumption: the scenarios in `008c-verify.sh` `scope_selftest`
+- Q2: 089e-verify.sh's own-change pins E_FIX/E_FINAL/E_TIP | options: A) FIX = FINAL = the one content commit (the only commit touching 008c-verify.sh), TIP = the same commit, pin commit changes only the three pin lines of 089e-verify.sh, later commits only the task file (asserted by AC11.5); B) a separate red commit as in 089b | assumed: A (there is no red commit to pin: the OLD script is the blob at M, which is registry main) | built on assumption: AC11 of `089e-verify.sh`
+- Q3: the umbrella copy in the branch is outside the part's declared scope | options: A) allow it in AC11 as the cut copy-in only (one commit, before the fix, unchanged by 089e); B) add it to this part's scope list; C) drop it from the branch before merge | assumed: A | built on assumption: AC11.4/4c of `089e-verify.sh`
 
 ---
 # Task 089e log  (append-only)
 - 2026-10-28 manager (session 14): cut from umbrella 089 and dispatched for phase 1 (no verify runs while 089b's long driver holds the machine);
   base registry main `32c641b` (087, 082, 039b, 092, 008c merged).
+- 2026-10-28 qa-engineer (phase 1, session 14): re-derived the pins from git (read-only): M = `32c641b5f56139a86c820f0b16d522c0f991d207`
+  (`git log --merges --first-parent --grep='Merge pull request #27 ...'` on this branch returns exactly it); BASE = `git merge-base M^1 M^2` =
+  `e2f7fe383d7b2231e1d37a73e474bca7ed56af46` (= registry main when 008c was cut and the base of 089e's frame M^1); FINAL = `M^2` =
+  `7810e70af50d7e2ebae1e53dccba37be1095afe7`. `git diff --name-only BASE FINAL` = build-pipeline.md, 008c task file, 008c-verify.sh,
+  test_write_back.py, write_back.py: all five inside 008c's SCOPE_RE (so the fixed check is green on M by construction). git 2.53.0.
+- 2026-10-28 qa-engineer: PHASE 1 HARD CONSTRAINT observed: NO `*-verify.sh` was executed (not 008c, not 089e, no --mutate); `ps` showed 34 verify
+  processes (another task's driver) when I finished. Only read-only git, awk/grep over blobs (region/identity extraction, below), and `bash -n`.
+- 2026-10-28 qa-engineer: EDIT `docs/tasks/008c-verify.sh` (scope check and pins only). Removed `scope_base` (merge-base with origin/main or
+  refs/heads/main). Added `PIN_M`, `PIN_BASE`, `PIN_FINAL` (full SHAs, assigned unconditionally, no env override), `pin_full` (40 hex AND
+  resolves), and `scope_violations` = `git diff --name-only PIN_BASE PIN_FINAL` minus SCOPE_RE; returns 1 (FAIL) when a pin is not a full SHA,
+  does not resolve, or BASE is not an ancestor of FINAL. Live check: each of the three pins must be usable (FAIL otherwise), BASE/FINAL must
+  equal `merge-base(M^1,M^2)` / `M^2` re-derived at run time, the range must be non-empty, and the violations list must be empty. The old
+  "no origin/main or refs/heads/main" message and the "changed files since merge-base" message are gone with the code they described.
+- 2026-10-28 qa-engineer: SELF-TEST decision (Q1 assumed A; no assertion dropped, each re-expressed, one strengthened). Scenario merge-from-main
+  (was A): PIN_BASE/PIN_FINAL are set inside the scenario subshell to the repo's base and 'work' commits, main then advances and is merged
+  into the branch; the pinned-range check must be green and the OLD formula (diff ending at HEAD, which replaces the old "diff against a fixed
+  ancestor" sensitivity proof) must be red, so the scenario is shown sensitive. stray-commit (B) and stray-plus-merge (C): unchanged intent, the
+  stray commit is the pinned FINAL; C still merges main afterwards and must flag only stray.txt. no-main-ref (D) is replaced by bad-pin: there is
+  no main ref in the design any more, so the equivalent "cannot compute the base must FAIL" is: a 7-character pin, `deadbee`, a nonexistent full
+  SHA, and FINAL not a descendant of BASE all FAIL, plus a valid-pin control that still flags stray.txt. The two `--mutate` mutations of finding 5
+  (`scope-fixed-base`) are replaced by `scope-right-side-head` (pinned right side widened to HEAD -> merge-from-main red) and
+  `scope-unusable-pin-passes` (`return 1` -> `return 0` on a bad pin -> bad-pin red); anchors are whole-line matches (`grep -cxF`) and must occur once.
+  Not run: all of this is written-but-not-run until phase 2. Output messages avoid the words skip/not evaluated (089e AC3 greps for them).
+- 2026-10-28 qa-engineer: static reads only (not executions): the 25 `run_mut` calls (the 2 `scope_mut` calls are new) and the two blocks of existing checks
+  (mutation block 32 lines, normal-mode suite block 45 lines) are byte-identical OLD vs NEW (awk extraction, same extraction coded in
+  089e-verify.sh AC11.6); the new scope region has 0 HEAD/origin/main/refs/heads/main lines, the OLD region has 3 (positive control).
+- 2026-10-28 qa-engineer: WROTE `docs/tasks/089e-verify.sh` (executable, `bash -n` clean, NOT run). Modes: default (AC2, AC1, AC3, AC5, AC11),
+  `--mutate` (AC4), `--own-only` (AC2 + AC11, runs nothing). Quiet machine: `wait_quiet` polls `ps -eo pid=,args=` for any `*-verify.sh` other than
+  itself and its ancestors, logs the lines, sleeps 30 s, caps at 6 h (timeout = FAIL, run not executed); called before EVERY child run.
+  CRITERIA COVERAGE (all written-but-not-run): (1) red first = AC1: OLD blob at M on frame f1 (HEAD = M, origin/main = M) must show
+  `FAIL  no changes since base`; f2 (M + merge of a later branch adding a non-008c file, origin/main = M) must show `FAIL  out of scope: ...`; f3
+  (main moved to the later commit and merged into HEAD) must show `no changes since base`; NEW green on all three. (2) = AC2: M found by
+  `git log --merges --first-parent --grep` == pinned, BASE/FINAL recomputed, the NEW script's three pins equal them, no HEAD/main read in the
+  scope region (positive control on OLD). (3) = AC3: PIN_M, PIN_BASE, PIN_FINAL each replaced with `deadbee` -> red with `FAIL  scope pin KEY='deadbee'
+  ...`; skip/not-evaluated grep = 0 with positive control. (4) = AC4 in `--mutate`: m1 live check widened to merge-base(HEAD, origin/main)..HEAD
+  on f2 -> exactly one FAIL (`out of scope`); m2 right side widened to HEAD -> only scope check + its self-test; m3 runs HEAD's `008c-verify.sh
+  --mutate` from a clean clone and requires exit 0 and `ok mutation` count = (25 run_mut + 2 scope_mut + 1 second-module = 28) = expected,
+  both scope mutations named; an unmutated control on f2 is green. (5) = AC5: the HEAD script (asserted equal to the fix commit's) exits 0 on HEAD
+  and on HEAD + a merge with a later branch. (9) = wait_quiet. (11) = AC11: pins full/existing/ordered; FIX/FINAL are the first/last commits of
+  BASE..TIP touching 008c-verify.sh; BASE..TIP files subset of {008c-verify.sh, 089e-verify.sh, this file}; TIP..HEAD only this file and the three
+  pin lines of 089e-verify.sh; 008c-verify.sh at HEAD == FINAL; existing-check blocks byte-identical; modes 100755.
+- 2026-10-28 qa-engineer: PHASE 2 COMMANDS (run by hand, in this order, quiet machine; nothing else may run any `*-verify.sh`; each prints its
+  own `ps` log; paste the full output into this log):
+```
+rm -rf /tmp/p2-089e && git clone https://github.com/worldofmodcraft/registry /tmp/p2-089e
+cd /tmp/p2-089e && git checkout task/089e-closed-verify-sweep-registry-e
+export PYTHONDONTWRITEBYTECODE=1
+git --version && ps -eo pid,args | grep '[v]erify.sh'      # must print nothing but the git version
+bash docs/tasks/089e-verify.sh --own-only                  # 1. pins + scope on fixed SHAs, runs nothing else
+bash docs/tasks/089e-verify.sh                             # 2. AC2, AC1 (red first), AC3, AC5, AC11
+bash docs/tasks/089e-verify.sh --mutate                    # 3. AC4
+bash docs/tasks/008c-verify.sh                             # 4. item-12 control, plain, on the branch tip (HEAD)
+bash docs/tasks/008c-verify.sh --scope-selftest            # 5. the self-test alone
+```
+  A fresh clone has no `origin/main` problem: nothing in the fixed check reads it (089e builds its own frames with explicit refs). If a command
+  fails, that is a finding: log file:line, expected vs actual, do not adjust the test. 4 and 5 are redundant with the HEAD runs inside 2/3 but are the
+  plain-invocation proof.
+- 2026-10-28 qa-engineer: scope note found while writing AC11: `git diff --name-only 32c641b..HEAD` also lists the umbrella
+  `docs/tasks/089-closed-verify-sweep-registry.md`, because the manager's cut commit (60ba327) copied it into the branch ("copied into this branch
+  from platform main", task header). It is not in this task's "Scope of this part" list. AC11.4/4c therefore allow it ONLY as that one cut
+  copy-in (exactly one commit touched it, before the fix commit, never changed by 089e). Booked as Q3.
