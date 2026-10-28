@@ -120,3 +120,4 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   **(3) not done (optional):** a deterministic mid-function git failure (grafted/replaced object) was judged not simple enough; the failure paths are covered by the
   `|| fail` guards and by the existing unreachable-pin controls only. Booked as a possible follow-up, no decision needed.
   Pins re-derived next (PIN_FIX above; PIN_TIP by the pin commit that follows this entry).
+- 2026-10-28 qa-engineer: re-pinned: PIN_FIX=becb41802d95fc776000f381a45728d08826b3b2, PIN_TIP=8a8eb472f9fc6d61434b1ca23cc00c245bae3084 (pin commit 7c658c97146d031cfe9d3c38723e47420bc5f4b5 touches only 089d-verify.sh). `git diff --name-only PIN_START PIN_TIP` = the three own files (plain git). Phase-2 commands unchanged. Still written-but-not-run.
