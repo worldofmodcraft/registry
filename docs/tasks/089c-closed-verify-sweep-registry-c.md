@@ -91,3 +91,13 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   Q1 ★ A: for S1 the unfixed script's red is the silent skip (exit 0, "not evaluated", no AC5.3 verdict), asserted in AC1.b with control AC1.a;
   criterion 5's non-zero-exit positive control does not apply to a defect whose symptom is a skip (same reasoning as 090's AC5 triage).
   Q2 ★ A: absent `refs/remotes/origin/main` = FAIL; phase 2 runs in a fresh GitHub clone. Q3 ★ A: as built (matches 089b Q9).
+- 2026-10-28 qa-engineer (phase 1, fix round after static review PASS-WITH-NOTES; still no *-verify.sh executed, `bash -n` only): 
+  (1) AC4.m3 replaced (`7f30d95831678dc8da9f4a66f39e6325e35c3415`): it now mutates 069's AC5.3 `fail` line to `:` and, for three unreadable pins (`deadbee`, a well-formed absent 40-hex SHA,
+  the root commit), asserts exit 0 and that the expected `FAIL AC5.3` is ABSENT, i.e. the AC3.1-3.3 detectors redden when the guard is removed. The old
+  m3 inserted the very words its grep looked for and could not fail for a 069 reason. Written-not-run.
+  (2) AC11.9a/b added: TIP..HEAD touches only 089c-verify.sh and this task file, and 089c-verify.sh changes only its `PIN_*` lines after TIP.
+  Consequence: the fix round is a source-touching commit, so the pins move: PIN_RED and PIN_FIX unchanged; PIN_FINAL = `7f30d95831678dc8da9f4a66f39e6325e35c3415` (the m3/AC11.9 content commit);
+  PIN_TIP = the log commit that follows it; a final pin commit rewrites only PIN_FINAL and PIN_TIP.
+  (3) Note for phase 2: step 2 (the RED commit run) is red BY PLACEHOLDERS (PIN_FIX etc. are `__FIX__`); it proves only that the script cannot pass unpinned.
+  The S1 red-first evidence is AC1.b (OLD 069 with the branch deleted: exit 0, 'not evaluated', no AC5.3 verdict) against AC1.c (NEW passes AC5.3).
+
