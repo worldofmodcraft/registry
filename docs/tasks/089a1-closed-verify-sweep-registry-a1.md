@@ -19,3 +19,9 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
 # Task 089a1 log  (append-only)
 - 2026-10-28 manager (session 14): cut from umbrella 089 and dispatched for phase 1 (no verify runs while 089b's long driver holds the machine);
   base registry main `32c641b` (087, 082, 039b, 092, 008c merged).
+- 2026-10-28 qa-engineer (phase 1; NO `*-verify.sh` executed, per the brief: another task's long driver holds the machine): read the task, umbrella 089,
+  part B's `089b-verify.sh` (reference pattern), 087/084 files. Machine state at start (`ps`): `039a-verify.sh`, `064-verify.sh`, `062-verify.sh`, `008a-verify.sh` of other
+  worktrees running, which confirms the constraint. Tooling note: `pytest` is NOT installed here (`No module named pytest`); the two test files are run with
+  `python3 -m unittest discover -s tests/registry -p <file>` instead (same tests; the repo's own runner is unittest). Recorded as an assumption, see Questions.
+  RED commit (next): `docs/tasks/089a1-verify.sh` only (plus this log). The source fixes follow in the FIX commit, so the script exists before the fix (§2c rule 5).
+  The script is WRITTEN-BUT-NOT-RUN: every criterion is unproven until phase 2.
