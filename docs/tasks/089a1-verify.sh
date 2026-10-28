@@ -214,7 +214,14 @@ fi
 # own-change reads: the new check reads a blob of the pin; no worktree read of the README / reserved list remains (non-zero counts required, §2c rule 1)
 cnt() { grep -cF -- "$2" "$1"; }
 # wt FILE : lines (comments stripped) that hand docs/contracts/README.md (the worktree path) to a command as an argument after a quoted pattern
-wt() { grep -v '^[[:space:]]*#' "$1" | grep -cE "[\"'] docs/contracts/README\.md([[:space:]]|\$)"; }
+# plus bare reads (cat/sed/head/tail/awk/`<` of the path, outside comments and outside `git show`), e.g. `cat docs/contracts/README.md | grep ...`
+BARE='(cat|sed|head|tail|awk|<)([[:space:]]+-[^[:space:]]+)*[[:space:]]*docs/contracts/README\.md'
+wt() {
+    local a b
+    a=$(grep -v '^[[:space:]]*#' "$1" | grep -cE "[\"'] docs/contracts/README\.md([[:space:]]|\$)")
+    b=$(grep -v '^[[:space:]]*#' "$1" | grep -v 'git show' | grep -cE "$BARE")
+    echo $((a + b))
+}
 [ "$(cnt "$NEWD/$b007a" 'git show "$FINAL:$README_PATH"')" -ge 1 ] \
     && [ "$(wt "$NEWD/$b007a")" = 0 ] \
     && pass "AC0.11 007a reads the README with git show \"\$FINAL:...\" and no grep/cat of docs/contracts/README.md in the worktree remains" || fail "AC0.11 007a still reads the worktree README (or does not read the pin)"
@@ -229,6 +236,9 @@ wt() { grep -v '^[[:space:]]*#' "$1" | grep -cE "[\"'] docs/contracts/README\.md
 # the OLD scripts did read the worktree (positive control for the counts above: the grep CAN match)
 [ "$(wt "$OLDD/$b007a")" -ge 2 ] && [ "$(wt "$OLDD/$b007b")" -ge 2 ] && [ "$(wt "$OLDD/$b008a")" -ge 1 ] \
     && pass "AC0.16 positive control: the OLD 007a/007b/008a scripts do contain worktree README greps (>= 2, >= 2, >= 1)" || fail "AC0.16 the worktree-read grep cannot match the OLD scripts"
+# positive control for the bare-read form (the OLD scripts have none, so a sample must match; a git show line and a message must not)
+printf 'cat docs/contracts/README.md | grep -q x\nsed -n 1p < docs/contracts/README.md\ngit show "$F:docs/contracts/README.md" | cat\nok "criterion 12: docs/contracts/README.md at x"\n' > "$TMP/bare.sh"
+[ "$(wt "$TMP/bare.sh")" = 2 ] && pass "AC0.16b positive control: the worktree-read detector counts the two bare reads and ignores the git show line and the message" || fail "AC0.16b the bare-read detector miscounts a sample ($(wt "$TMP/bare.sh"), want 2)"
 # the detectors of findings 2 and 4 can match (positive controls on the commits BEFORE each task's change), and do not match at FINAL
 if [ -n "${a_b:-}" ] && [ -n "${b_b:-}" ]; then
     [ "$(G show "$a_b:$README" | grep -cE 'task 007$|task 007 +builds')" -ge 1 ] && [ "$(G show "$a_f:$README" | grep -cE 'task 007$|task 007 +builds')" = 0 ] \
@@ -295,6 +305,10 @@ if mk_pin_variant "$TMP/n4a" 's/\*\*built\*\* (task 007b) is the ownership check
     cp "$NEWD/$b007b" "$TMP/n4a/$S007B" && chmod +x "$TMP/n4a/$S007B" && edit_file "$TMP/n4a/$S007B" "FINAL007B=\"$(pin_of "$NEWD/$b007b" FINAL007B)\"" "FINAL007B=\"$X\"" \
         && rc=$(run_in "$TMP/n4a" "$TMP/n4a.out" bash "$S007B")
     expect "AC1.4b the NEW 007b-verify.sh is RED when the README at the pin does not say the checker is built (finding 4 is not vacuous)" red "${rc:-0}" "$TMP/n4a.out" "^FAIL  README at $X does not state that the ownership checker"
+    # the true red-first of the vacuity: on the SAME frame (worktree README = the not-built fixture) the OLD script's finding-4 line is GREEN
+    [ "$(grep -c 'was never built here, the ownership checker' "$TMP/n4a/$README")" = 1 ] && pass "AC1.4d the frame's worktree README is the not-built fixture" || fail "AC1.4d the frame's worktree README is not the not-built fixture"
+    place "$TMP/n4a" "$OLDD/$b007b" "$S007B"; rc=$(run_in "$TMP/n4a" "$TMP/n4o.out" bash "$S007B")
+    expect "AC1.4e the OLD 007b-verify.sh on the same frame: its finding-4 line is green although the README no longer says the checker is built (vacuous)" green "$rc" "$TMP/n4o.out" '^ok    README no longer lists the ownership checker as still to come' '!^FAIL'
 else fail "AC1.4.2 cannot build the not-built pin variant"; fi
 X=""
 if mk_pin_variant "$TMP/n4b" 's/\*\*built\*\* (task 007b) is the ownership checker/**still to come** are the ownership checker (task 007b/' && [ -n "$X" ]; then
