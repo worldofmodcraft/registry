@@ -49,7 +49,7 @@ S092=docs/tasks/092-verify.sh
 PIN_RED="32c641b5f56139a86c820f0b16d522c0f991d207"    # registry main when 089d was cut: the UNFIXED 092-verify.sh
 PIN_FIX="becb41802d95fc776000f381a45728d08826b3b2"    # the commit that fixes post_tip_check (092-verify.sh only)
 PIN_START="75eb9b0ce7ccddd8400eecd06f1a64eec0a1e753"  # 089d dispatch commit (adds the umbrella copy and the task file); 089d's own work starts after it
-PIN_TIP="d065a8643eaf095488c944c7fda2efa64e0cdd95"    # last commit before the pin commit (a placeholder is RED: an unreachable pin is never skipped)
+PIN_TIP="8a8eb472f9fc6d61434b1ca23cc00c245bae3084"    # last commit before the pin commit (a placeholder is RED: an unreachable pin is never skipped)
 # 092's own pins, typed here (the controls below use them); asserted to be unchanged in both blobs.
 P092_BASE="426873502a150ef746063c1b55c2cfbfeed31566"
 P092_FINAL="ab31a88e6e828db689b64e73d4310320938570de"
