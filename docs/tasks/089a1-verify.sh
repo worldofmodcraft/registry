@@ -66,10 +66,10 @@ README=docs/contracts/README.md
 OLDREF="32c641b5f56139a86c820f0b16d522c0f991d207"
 # 089a1's own commits (AC11). PIN_RED/FIX/FINAL/TIP are filled in by the pin commit after the red and fix commits exist.
 PIN_BASE="32c641b5f56139a86c820f0b16d522c0f991d207"   # registry main when 089a1 was cut
-PIN_RED="__RED__"      # 089a1-verify.sh + task files only
-PIN_FIX="__FIX__"      # 007a-verify.sh, 007b-verify.sh, 008a-verify.sh, test_hardening.py, test_classify.py
-PIN_FINAL="__FINAL__"  # last commit in BASE..TIP touching a source file or script of the part
-PIN_TIP="__TIP__"      # last commit of the branch before the pin commit (task-file/log only after FINAL)
+PIN_RED="55c00bc056a93bce8752db022da971ca558f410a"      # 089a1-verify.sh + task files only
+PIN_FIX="1cd84e70bbbfb43a1dfffed4614938fd8978c4d6"      # 007a-verify.sh, 007b-verify.sh, 008a-verify.sh, test_hardening.py, test_classify.py
+PIN_FINAL="1cd84e70bbbfb43a1dfffed4614938fd8978c4d6"  # last commit in BASE..TIP touching a source file or script of the part
+PIN_TIP="b6e08bfb4ed7218c399e673aacf595de5b7e608d"      # last commit of the branch before the pin commit (task-file/log only after FINAL)
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
