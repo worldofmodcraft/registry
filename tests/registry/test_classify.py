@@ -1,10 +1,18 @@
 """classify: criterion 8 (exhaustive, fail closed), R1 path form, merge-base reserved list, positive controls."""
 
 import json
+import subprocess
 import unittest
 
 import support
 from support import RESERVED, classify, report
+
+
+# Task 089a1 (finding 13, Q3 answer A): the equality test below pins reserved-namespaces.json as task 007a shipped it, so it reads
+# the blob at 007a's FINAL (the last commit of registry PR #10, merge 3c94cf2: `git rev-parse 3c94cf2^2`), never the worktree or
+# HEAD. Consequence accepted by Ludwig (umbrella 089, Q3): this test no longer guards the LIVE reserved list. An unreachable pin
+# is a FAILURE (the blob read must succeed), never a skip.
+RESERVED_PIN_FINAL = "aaf426060338776a4556f35c1bb5cb6a20d65ea4"
 
 
 def cls(paths, reserved=RESERVED):
@@ -130,7 +138,10 @@ class ReservedListIsMergeBaseData(unittest.TestCase):
         self.assertEqual(cls(["mods/mc.core/entry.json"], merge_base)["class"], "reserved-namespace")
 
     def test_the_real_reserved_list_in_this_repo_has_mc_and_test(self):
-        data = json.loads((support.REPO / "reserved-namespaces.json").read_text())
+        p = subprocess.run(["git", "-C", str(support.REPO), "show", RESERVED_PIN_FINAL + ":reserved-namespaces.json"],
+                           capture_output=True, text=True)
+        self.assertEqual(p.returncode, 0, "git show %s:reserved-namespaces.json failed (an unreachable pin is a failure)" % RESERVED_PIN_FINAL)
+        data = json.loads(p.stdout)
         self.assertEqual(classify.reserved_names(data), {"mc", "test"})
 
 

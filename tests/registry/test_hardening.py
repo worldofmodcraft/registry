@@ -17,6 +17,17 @@ from support import CLI, append_only, entry, pending, published, rejected, schem
 ENTRY = "mods/kelsi.housing/entry.json"
 PAGE = "mods/kelsi.housing/page.json"
 
+# Task 089a1 (finding 7): the README half of test_f2_help_and_readme_say_diff_with_no_renames is the 007a fix round's OWN change,
+# so it reads docs/contracts/README.md as it stood at 007a's pinned FINAL (the last commit of registry PR #10, merge 3c94cf2:
+# `git rev-parse 3c94cf2^2`), never the worktree or HEAD: a later task may legitimately reword the README (REVIEW-CHECKLIST item 12).
+# An unreachable pin is a FAILURE (the blob read must succeed), never a skip.
+README_PIN_FINAL = "aaf426060338776a4556f35c1bb5cb6a20d65ea4"
+
+
+def readme_at(pin):
+    p = subprocess.run(["git", "-C", str(support.REPO), "show", pin + ":docs/contracts/README.md"], capture_output=True, text=True)
+    return p.returncode, p.stdout
+
 
 def t1_with(**change):
     w = published()
@@ -150,7 +161,9 @@ class F2Symlinks(unittest.TestCase):
     def test_f2_help_and_readme_say_diff_with_no_renames(self):
         helptext = subprocess.run([sys.executable, str(CLI), "--help"], capture_output=True, text=True).stdout
         self.assertIn("--no-renames", helptext)
-        self.assertIn("--no-renames", (support.REPO / "docs" / "contracts" / "README.md").read_text())
+        code, readme = readme_at(README_PIN_FINAL)
+        self.assertEqual(code, 0, "git show %s:docs/contracts/README.md failed (an unreachable pin is a failure)" % README_PIN_FINAL)
+        self.assertIn("--no-renames", readme)
 
 
 class F3DuplicateKeys(unittest.TestCase):

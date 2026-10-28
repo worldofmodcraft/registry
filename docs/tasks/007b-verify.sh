@@ -77,8 +77,13 @@ crit "CLI          ownership_cli exit codes in unittest"                     "te
 # Task 071: the scope and size claims below describe 007b's OWN change, so they measure 007b's pinned PR range (registry PR #12,
 # merge 70cedca), never HEAD or origin/main: BASE007B = merge-base of 70cedca's parents, FINAL007B = 70cedca^2 (its last commit).
 # A later task that legitimately edits tools/registry/schema.py or adds a file no longer reddens this script.
-BASE007B="fb76ee5"
-FINAL007B="17555d9"
+# Task 089a1 (findings 3 and 4): the two README checks below are 007b's OWN change to docs/contracts/README.md, so they read the
+# README blob at FINAL007B (`git show $FINAL007B:docs/contracts/README.md`), never HEAD; an unreadable pin FAILS them. Finding 4 was
+# vacuous (the grep matched no line, so the branch always passed): it now also requires the positive statement that the README
+# calls the ownership checker built, and a grep for the old wording that finds nothing is not accepted as the only evidence.
+# Pins are full SHAs: BASE007B = `git merge-base 70cedca^1 70cedca^2`, FINAL007B = `git rev-parse 70cedca^2`.
+BASE007B="fb76ee54aac413cd40fa61df31c3f11d8cbb76e3"
+FINAL007B="17555d94323192eaf315c49818ff34b393f57aa2"
 PINS_OK=1
 for pin in "$BASE007B" "$FINAL007B"; do
   if git merge-base --is-ancestor "$pin" HEAD 2>/dev/null; then ok "pinned commit $pin is reachable from HEAD"; else fail "pinned commit $pin is not reachable from HEAD (a pin that cannot be read proves nothing; fetch the full history)"; PINS_OK=0; fi
@@ -97,8 +102,20 @@ if grep -nE 'GITHUB_ACTOR|gh auth|hosts\.yml|\.claude' tools/registry/ownership*
 python3 tools/registry/ownership_cli.py --help | grep -q "NEVER a merge signal" && ok "CLI help documents that accepted is never a merge signal (I8)" || fail "CLI help lacks the I8 warning"
 python3 tools/registry/ownership_cli.py --help | grep -q "0 accepted, 1 rejected, 2 usage or internal error" && ok "CLI help documents the three exit codes" || fail "CLI help lacks the exit codes"
 python3 tools/registry/ownership_cli.py --help | grep -q "authorises nobody" && ok "CLI help documents that r11_identity None authorises nobody" || fail "CLI help lacks the R11 default"
-grep -q "ownership" docs/contracts/README.md && grep -q "task 039" docs/contracts/README.md && ok "criterion 12: docs/contracts/README.md names the ownership checker as built and 039 as owed" || fail "criterion 12: README not updated"
-if grep -n "ownership checker (task 007b" docs/contracts/README.md | grep -qi "still to come"; then fail "README still lists the ownership checker as still to come"; else ok "README no longer lists the ownership checker as still to come"; fi
+README_PATH=docs/contracts/README.md
+if README_TXT=$(git show "$FINAL007B:$README_PATH" 2>/dev/null) && [ -n "$README_TXT" ]; then
+  ok "$README_PATH is readable at 007b's pinned FINAL $FINAL007B (criterion 12 reads that copy, never HEAD)"
+else
+  README_TXT=""
+  fail "pinned commit $FINAL007B (or $README_PATH at it) is not readable: criterion 12 has no README to read"
+fi
+if printf '%s\n' "$README_TXT" | grep -q "ownership" && printf '%s\n' "$README_TXT" | grep -q "task 039"; then ok "criterion 12: docs/contracts/README.md at $FINAL007B names the ownership checker as built and 039 as owed"; else fail "criterion 12: README at $FINAL007B not updated (or unreadable)"; fi
+# the old wording ("ownership checker (task 007b" on a line saying "still to come") must be gone, AND the new wording must be present:
+# the new statement is what makes this check non-vacuous (the old grep matches no line at FINAL007B, so absence alone proves nothing).
+if [ -z "$README_TXT" ]; then fail "README-ownership-checker-built check cannot run: README at $FINAL007B unreadable (an empty input proves nothing)"
+elif printf '%s\n' "$README_TXT" | grep -n "ownership checker (task 007b" | grep -qi "still to come"; then fail "README at $FINAL007B still lists the ownership checker as still to come"
+elif printf '%s\n' "$README_TXT" | grep -qF '**built** (task 007b) is the ownership checker'; then ok "README at $FINAL007B lists the ownership checker as built (task 007b) and no longer as still to come"
+else fail "README at $FINAL007B does not state that the ownership checker (task 007b) is built"; fi
 # real exit codes through the real CLI
 D=$(mktemp -d "${WOM_TMP:-${TMPDIR:-/tmp}}/wom007b-cli.XXXXXX")
 mkdir -p "$D/old/mods/alice.tool" "$D/new/mods/alice.tool"
