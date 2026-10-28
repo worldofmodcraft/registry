@@ -207,9 +207,11 @@ class C17aSkip(Base):
     def test_c17a_summarize_over_a_skip_plan_is_non_green_naming_the_version(self):
         self.reg.add(entry("mc", "a", [pending("1.1.0")]))
         doc = self.plan(branches=["pipeline/mc.a-1.1.0"])
+        self.assertEqual(self.ids(doc, "skip"), ["mc.a@1.1.0"], "control: the plan holds the skip, not a build")
+        self.assertEqual(doc["build"], [])
         green, msg = pp.summarize_outcomes(doc, [])
         self.assertFalse(green)
-        self.assertIn("mc.a@1.1.0", msg)
+        self.assertIn("skipped mc.a@1.1.0", msg)
 
     def test_c17a_a_similar_branch_name_does_not_skip(self):
         self.reg.add(entry("mc", "a", [pending("1.1.0")]))
@@ -252,7 +254,7 @@ class C17bSchemaFault(Base):
             "published-missing-key": json.dumps(entry("mc", "a", [{k: v for k, v in published("1.0.0").items() if k != "key_id"}])),
             "bad-status": json.dumps(entry("mc", "a", [{**pending("1.0.0"), "status": "building"}])),
             "bad-semver": json.dumps(entry("mc", "a", [pending("1.0")])),
-            "arabic-digit-semver": json.dumps(entry("mc", "a", [pending("١.0.0")])),
+            "arabic-digit-semver": json.dumps(entry("mc", "a", [pending("1٠.0.0")])),  # Arabic-Indic zero after the 1
             "trailing-newline-commit": json.dumps(entry("mc", "a", [{**pending("1.0.0"), "commit": COMMIT + "\n"}])),
             "bad-source-url": json.dumps(entry("mc", "a", [{**pending("1.0.0"), "source_url": "not a url"}])),
             "duplicate-version": json.dumps(entry("mc", "a", [pending("1.0.0"), pending("1.0.0")])),
@@ -422,6 +424,8 @@ class C17fExitCodes(Base):
             ["--dry-run", "false", "--dry-run-source-url", url, "--dry-run-commit", c],   # pair without dry_run
             ["--dry-run", "true", "--dry-run-source-url", url],                              # half a pair
             ["--dry-run", "true", "--dry-run-commit", c],
+            ["--dry-run", "true", "--version", "mc.a@1.0.0", "--dry-run-source-url", url],  # half a pair beside a version
+            ["--dry-run", "true", "--version", "mc.a@1.0.0", "--dry-run-commit", c],
             ["--dry-run", "true", "--dry-run-source-url", url, "--dry-run-commit", c, "--version", "mc.a@1.0.0"],
             ["--dry-run", "true", "--dry-run-source-url", "http://example.invalid/x", "--dry-run-commit", c],
             ["--dry-run", "true", "--dry-run-source-url", "https://", "--dry-run-commit", c],
