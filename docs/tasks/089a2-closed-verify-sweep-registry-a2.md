@@ -102,3 +102,4 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
     10. `bash docs/tasks/062-verify.sh "$PWD/tools/dev/node_modules"; echo rc=$?` on HEAD (whole; its AC4.057.swap-pins and AC4.057.bad-pin must PASS, not "the mutation did not apply"); paste the output
     11. `bash docs/tasks/070-verify.sh "$PWD/tools/dev/node_modules"; echo rc=$?` once on HEAD (hours; runs the 12 closed scripts on a later branch; S5 `FAIL AC1.5` watched; paste the full output if it recurs; see Q3 for `--mutate`)
     12. paste the OLD-script red lines from step 5 (AC1.6a, AC1.2a, AC1.S3a, AC1.Xb); mark criteria done only then; push; no PR.
+- 2026-10-28 qa-engineer: fix-round pin commit `9cc2834e26ef7d62f2ddb1bd2eb08edc3e931c98` (089a2-verify.sh pins only: PIN_TIP = the scope/mapping log commit above). Static checks of the range: last source-or-script-touching commit in BASE..TIP is becccde (FINAL); FINAL..TIP touches the task file only.
