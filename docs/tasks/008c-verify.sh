@@ -10,7 +10,24 @@ cd "$(dirname "$0")/../.." || exit 99
 FAILS=0
 fail() { echo "FAIL  $*"; FAILS=$((FAILS + 1)); }
 ok()   { echo "ok    $*"; }
-BASE=e2f7fe3   # registry main when 008c was dispatched
+SCOPE_RE='tools/pipeline/write_back.py|tests/pipeline/test_write_back.py|docs/pipeline/build-pipeline.md|docs/tasks/008c-pipeline-write-back.md|docs/tasks/008c-verify.sh'
+
+# The left side of the scope diff is the merge-base with the CURRENT main, so a merge of main into the
+# branch does not drag main's files into the diff. A fixed ancestor commit would. If no main ref
+# exists the check cannot run: that is a FAIL, never a skip.
+scope_base() {
+  local r
+  for r in origin/main refs/heads/main; do
+    if git rev-parse -q --verify "$r^{commit}" >/dev/null 2>&1; then git merge-base HEAD "$r"; return $?; fi
+  done
+  return 1
+}
+# Prints out-of-scope changed files (one per line); returns 1 if the base cannot be computed.
+scope_violations() {
+  local b; b=$(scope_base) || return 1
+  [ -n "$b" ] || return 1
+  git diff --name-only "$b" HEAD | grep -vxE "$SCOPE_RE" || true
+}
 
 for tool in git python3 grep; do
   command -v "$tool" >/dev/null 2>&1 && ok "tool present: $tool" || fail "tool missing: $tool"
@@ -21,22 +38,68 @@ export PYTHONDONTWRITEBYTECODE=1
 MOD=tools/pipeline/write_back.py
 TST=tests/pipeline/test_write_back.py
 
+
+# ---------------------------------------------------------------- scope self-test (finding 5)
+# Scenarios in throw-away repos, each judged by scope_violations (the real function) and, to prove
+# the scenario is sensitive, by the OLD formula (diff against a fixed ancestor).
+scope_selftest() {
+  local T rc=0 first old
+  T=$(mktemp -d "${TMPDIR:-/tmp}/w008c-scope.XXXXXX")
+  export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
+  g() { git -c init.defaultBranch=main -c commit.gpgsign=false "$@"; }
+  mkrepo() { # $1 dir; leaves cwd inside it, on main, with one base commit
+    mkdir "$1" && cd "$1" && g init -q && echo base > README && g add README && g commit -q -m base
+    first=$(git rev-parse HEAD)
+  }
+  # A: main advances with an OUT-of-scope file, then is merged into the branch: must be GREEN
+  ( mkrepo "$T/a" && g checkout -q -b task && mkdir -p tools/pipeline && echo x > tools/pipeline/write_back.py \
+      && g add . && g commit -q -m work && g checkout -q main && echo m > main-only.txt && g add . && g commit -q -m "main moves" \
+      && g checkout -q task && g merge -q --no-edit main
+    new=$(scope_violations; echo "rc=$?"); old=$(git diff --name-only "$first...HEAD" | grep -vxE "$SCOPE_RE" || true)
+    [ "$new" = "rc=0" ] && echo "ok    scope scenario merge-from-main: new check green" || { echo "FAIL  scope scenario merge-from-main: new check red: $new"; exit 1; }
+    [ -n "$old" ] && echo "ok    scope scenario merge-from-main: old fixed-base formula is red (flags: $old), scenario is sensitive" || { echo "FAIL  scope scenario merge-from-main: old formula not red, scenario is not sensitive"; exit 1; }
+  ) || rc=1
+  # B: control, a stray out-of-scope commit on the branch: must be RED
+  ( mkrepo "$T/b" && g checkout -q -b task && echo x > stray.txt && g add . && g commit -q -m stray
+    new=$(scope_violations; echo "rc=$?")
+    [ "$new" = "stray.txt
+rc=0" ] && echo "ok    scope scenario stray-commit: new check red as it must be (flags stray.txt)" || { echo "FAIL  scope scenario stray-commit: not flagged: $new"; exit 1; }
+  ) || rc=1
+  # C: control, a stray commit on the branch AND a merge from main: still RED, and only for the stray file
+  ( mkrepo "$T/c" && g checkout -q -b task && echo x > stray.txt && g add . && g commit -q -m stray && g checkout -q main \
+      && echo m > main-only.txt && g add . && g commit -q -m "main moves" && g checkout -q task && g merge -q --no-edit main
+    new=$(scope_violations; echo "rc=$?")
+    [ "$new" = "stray.txt
+rc=0" ] && echo "ok    scope scenario stray-plus-merge: flags only stray.txt" || { echo "FAIL  scope scenario stray-plus-merge: $new"; exit 1; }
+  ) || rc=1
+  # D: no main ref at all: the base cannot be computed, which must FAIL (never skip)
+  ( mkrepo "$T/d" && g branch -m side && echo x > stray.txt && g add . && g commit -q -m x
+    if scope_violations >/dev/null 2>&1; then echo "FAIL  scope scenario no-main-ref: check passed without a base"; exit 1; else echo "ok    scope scenario no-main-ref: check fails (no skip)"; fi
+  ) || rc=1
+  rm -r "$T"
+  return $rc
+}
+if [ "${1:-}" = "--scope-selftest" ]; then
+  scope_selftest; rc=$?; echo "SUMMARY scope-selftest rc=$rc"; exit "$rc"
+fi
+
 # ---------------------------------------------------------------- mutation mode
 if [ "${1:-}" = "--mutate" ]; then
   if [ -n "$(git status --porcelain -- tools tests docs)" ]; then
     fail "uncommitted changes: mutations run against the COMMITTED tree, commit first"
     echo "SUMMARY failed=$FAILS"; exit "$FAILS"
   fi
-  SCR=$(mktemp -d "${TMPDIR:-/tmp}/w008c-mut.XXXXXX"); trap 'rm -rf "$SCR"' EXIT
+  SCR=$(mktemp -d "${TMPDIR:-/tmp}/w008c-mut.XXXXXX"); trap 'rm -r "$SCR"' EXIT
   BEFORE=$(sha256sum "$MOD" "$TST" docs/tasks/008c-verify.sh contracts/artifact-naming.md | sha256sum)
   # baseline must be green, or red means nothing
   git archive HEAD | tar -x -C "$SCR"
   ( cd "$SCR" && python3 tests/pipeline/run_checks.py --only test_write_back >"$SCR/base.out" 2>/dev/null )
   [ $? -eq 0 ] && ok "baseline green in scratch copy" || { fail "baseline not green"; echo "SUMMARY failed=$FAILS"; exit "$FAILS"; }
+  fresh_t() { [ ! -e "$SCR/t" ] || rm -r "$SCR/t"; mkdir "$SCR/t"; }
   # id | file | old | new | check names that must be FAIL (space separated)
   run_mut() {
     local id="$1" file="$2" old="$3" new="$4"; shift 4
-    rm -rf "$SCR/t"; mkdir "$SCR/t"; git archive HEAD | tar -x -C "$SCR/t"
+    fresh_t; git archive HEAD | tar -x -C "$SCR/t"
     if ! OLD="$old" NEW="$new" F="$SCR/t/$file" python3 -I - <<'PY'
 import os,sys
 p=os.environ["F"]; s=open(p,encoding="utf-8").read(); o=os.environ["OLD"]
@@ -79,8 +142,21 @@ import subprocess
   run_mut contract-changed contracts/artifact-naming.md 'https://archive.worldofmodcraft.com/mc.hello-world-1.0.0/mc.hello-world-1.0.0.tar.gz`
    - signature URL' 'https://archive.worldofmodcraft.com/mc.hello-world-1.0.1/mc.hello-world-1.0.0.tar.gz`
    - signature URL' test_ac5_host_constant_and_contract_agree
+  run_mut ascii-flag-dropped $MOD 're.fullmatch(pattern, value, re.ASCII)' 're.fullmatch(pattern, value)' test_fix1_non_ascii_digit_in_version_refused_by_source_archive_url test_fix1_non_ascii_digit_in_published_at_refused
+  run_mut pending-shape-dropped $MOD 'if set(entry["versions"][idx]) != PENDING_KEYS:' 'if False:' test_fix2_pending_shape_stray_and_preexisting_keys_refused test_fix2_missing_pending_key_refused
+  # finding 5: the scope check reverts to a fixed ancestor as its left side -> the self-test must go red
+  mkdir "$SCR/s" && git show HEAD:docs/tasks/008c-verify.sh > "$SCR/s/v.sh"
+  if [ "$(grep -c 'if git rev-parse -q --verify "$r^{commit}" >/dev/null 2>&1; then git merge-base HEAD "$r"; return $?; fi' "$SCR/s/v.sh")" != 1 ]; then
+    fail "mutation scope-fixed-base: anchor not found exactly once (broken search)"
+  else
+    sed 's#git merge-base HEAD "$r"; return $?;#git rev-list --max-parents=0 HEAD | tail -1; return 0;#' "$SCR/s/v.sh" > "$SCR/s/m.sh"
+    cmp -s "$SCR/s/v.sh" "$SCR/s/m.sh" && fail "mutation scope-fixed-base: sed changed nothing" || {
+      ( cd "$SCR" && bash "$SCR/s/m.sh" --scope-selftest >"$SCR/s/out" 2>&1 )
+      grep -q "^FAIL  scope scenario merge-from-main" "$SCR/s/out" && ok "mutation scope-fixed-base: red -> scope scenario merge-from-main" || { fail "mutation scope-fixed-base not red"; cat "$SCR/s/out"; }
+    }
+  fi
   # file-adding mutation: a second module hard-codes the host
-  rm -rf "$SCR/t"; mkdir "$SCR/t"; git archive HEAD | tar -x -C "$SCR/t"
+  fresh_t; git archive HEAD | tar -x -C "$SCR/t"
   echo 'U = "https://archive.worldofmodcraft.com/x"' > "$SCR/t/tools/pipeline/other_hardcode.py"
   ( cd "$SCR/t" && python3 tests/pipeline/run_checks.py --only test_write_back >"$SCR/m.out" 2>/dev/null )
   grep -q "^CHECK .*test_ac5_host_is_written_only_in_write_back_py_under_tools FAIL$" "$SCR/m.out" \
@@ -129,21 +205,23 @@ HITS=$(grep -rlF archive.worldofmodcraft.com tools --include='*.py' | tr '\n' ' 
 # AC6 grep with positive control
 echo 'import subprocess' > "$PC/c.py"
 grep -qE '^\s*(import|from)\s+(subprocess|socket|ssl|urllib|http|requests|httpx|aiohttp)\b' "$PC/c.py" && ok "positive control: import grep finds subprocess" || fail "import grep is blind"
-rm -rf "$PC"
+rm -r "$PC"
 grep -qE '^\s*(import|from)\s+(subprocess|socket|ssl|urllib|http|requests|httpx|aiohttp)\b' $MOD && fail "write_back.py imports subprocess/network" || ok "write_back.py imports neither subprocess nor a network library"
 
 # docs
 grep -q '^## Write-back (task 008c)' docs/pipeline/build-pipeline.md && ok "build-pipeline.md has the write-back section" || fail "write-back section missing"
 grep -q '\[unverified\] Nothing here checks a hash against a tarball' docs/pipeline/build-pipeline.md && ok "[unverified] hash note recorded" || fail "[unverified] note missing"
 
-# hygiene and scope (three-dot diff: tolerant of merges from main)
+# hygiene and scope (left side = merge-base with the current main; see scope_base)
 [ -x docs/tasks/008c-verify.sh ] && ok "verify script executable" || fail "verify script not executable"
 git ls-files | grep -E '(__pycache__|\.pyc$)' >/dev/null && fail "bytecode tracked" || ok "no bytecode tracked"
-if git cat-file -e "$BASE^{commit}" 2>/dev/null; then
-  CH=$(git diff --name-only "$BASE...HEAD")
-  [ -n "$CH" ] && ok "changed files since base: $(echo $CH | wc -w)" || fail "no changes since base (broken search)"
-  BAD=$(echo "$CH" | grep -vxE 'tools/pipeline/write_back.py|tests/pipeline/test_write_back.py|docs/pipeline/build-pipeline.md|docs/tasks/008c-pipeline-write-back.md|docs/tasks/008c-verify.sh' || true)
+scope_selftest >"/tmp/w008c-scope.$$" 2>&1 && ok "scope check self-test (merge-from-main green, stray commit red, no main ref fails)" || { fail "scope self-test failed"; cat "/tmp/w008c-scope.$$"; }
+grep '^ok' "/tmp/w008c-scope.$$" | sed 's/^/        /'; rm -f "/tmp/w008c-scope.$$"
+if SB=$(scope_base); then
+  CH=$(git diff --name-only "$SB" HEAD)
+  [ -n "$CH" ] && ok "changed files since merge-base ${SB:0:7} with main: $(echo $CH | wc -w)" || fail "no changes since base (broken search)"
+  BAD=$(scope_violations || echo "BASE-ERROR")
   [ -z "$BAD" ] && ok "all changes inside the declared file scope" || fail "out of scope: $BAD"
-else fail "base commit $BASE not present"; fi
+else fail "no origin/main or refs/heads/main: scope cannot be checked (never skipped)"; fi
 
 echo "SUMMARY failed=$FAILS"; exit "$FAILS"

@@ -188,7 +188,7 @@ commit or merge anything; who may commit its output is task 008b plus the owners
 
 - `write_back_values(result, source_archive)` returns exactly five keys: `source_archive` (the argument,
   passed through), `source_sha256`, `signature` and `key_id` (from `result.artifact`) and `published_at`
-  (= `result.built_at`, RFC 3339 UTC).
+  (= `result.built_at`; it must match `entry.schema.json`'s `published_at` pattern, see the `bad-value` row below).
 - `source_archive_url(namespace, name, version)` returns
   `https://archive.worldofmodcraft.com/<tag>/<tag>.tar.gz` with `tag` = `naming.release_tag(...)`. The
   host is the single constant `ARCHIVE_HOST`, whose value comes from `contracts/artifact-naming.md`
@@ -208,9 +208,10 @@ a PR rejection) with a `reason`:
 | `id-mismatch` | `result.id` differs from the entry's `id` |
 | `version-absent` / `version-duplicate` | no version, or more than one, equals `result.version` |
 | `not-pending` | the version is `published`, `removed` or `rejected` |
+| `pending-shape` | the target `pending` version does not have exactly the four pending keys `version`, `commit`, `source_url`, `status` (`contracts/append-only.rules.md` key-set table; `entry.schema.json`'s `pending` branch): a stray key such as `reason`, or an already-present write-back key such as `source_archive`, is refused before anything is written |
 | `result-missing-field` | `result` lacks `artifact.source_sha256`, `artifact.signature`, `artifact.key_id` or `built_at` |
 | `key-set` | the computed values do not have exactly the five keys |
-| `bad-value` | a value fails its `entry.schema.json` pattern (checked with full-match, so a trailing newline fails), or `signature` is empty |
+| `bad-value` | a value fails its `entry.schema.json` pattern, or `signature` is empty. Patterns are matched as ECMA-262 does: full-match (a trailing newline fails) and ASCII-only digits (`\d` is `[0-9]`, so Arabic-Indic digits fail). `published_at` accepts what the schema pattern accepts: `YYYY-MM-DDThh:mm:ss`, an optional fraction (`.` and one or more digits), then `Z` or a `+hh:mm`/`-hh:mm` offset. The pattern checks shape only, not calendar validity (month 13 passes) |
 | `bad-id` / `bad-version` / `reserved-namespace` | `source_archive_url` input is not a valid id, a semver string, or a Windows reserved device name |
 | `entry-malformed` / `result-malformed` | the arguments are not objects of the expected shape |
 

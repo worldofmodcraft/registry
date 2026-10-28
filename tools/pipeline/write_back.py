@@ -26,6 +26,10 @@ from pipeline_errors import PipelineError, Rejected  # noqa: E402
 # contracts/artifact-naming.md, "The archived-source URL (`source_archive`)".
 ARCHIVE_HOST = "archive.worldofmodcraft.com"
 
+# The exact key set of a `pending` version: contracts/append-only.rules.md, "pending" row of the
+# key-set table, and the `pending` branch of contracts/entry.schema.json's version `oneOf`.
+PENDING_KEYS = frozenset({"version", "commit", "source_url", "status"})
+
 FIVE_KEYS = ("source_archive", "source_sha256", "signature", "key_id", "published_at")
 
 
@@ -50,8 +54,9 @@ _PATTERNS = {k: _VPROPS[k]["pattern"] for k in ("source_archive", "source_sha256
 
 
 def _fullmatch(pattern: str, value) -> bool:
-    # fullmatch, not search: `$` would tolerate a trailing newline.
-    return isinstance(value, str) and re.fullmatch(pattern, value) is not None
+    # fullmatch, not search: `$` would tolerate a trailing newline. re.ASCII: the schema patterns are
+    # ECMA-262 regexes, where `\d` is [0-9]; Python's default would accept non-ASCII Unicode digits.
+    return isinstance(value, str) and re.fullmatch(pattern, value, re.ASCII) is not None
 
 
 def source_archive_url(namespace: str, name: str, version: str) -> str:
@@ -107,6 +112,9 @@ def apply_write_back(entry: dict, result: dict, source_archive: str) -> dict:
     status = entry["versions"][idx].get("status")
     if status != "pending":
         raise WriteBackRefused("not-pending", f"version {rv!r} has status {status!r}; only `pending` may be written back (ADR-0121)")
+
+    if set(entry["versions"][idx]) != PENDING_KEYS:
+        raise WriteBackRefused("pending-shape", f"version {rv!r} has keys {sorted(entry['versions'][idx])}, a pending version has exactly {sorted(PENDING_KEYS)} (append-only.rules.md)")
 
     values = write_back_values(result, source_archive)
     if set(values) != set(FIVE_KEYS) or len(values) != len(FIVE_KEYS):

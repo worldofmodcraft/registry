@@ -311,6 +311,53 @@ class Ac2Refusals(unittest.TestCase):
                 self.assertEqual(cm.exception.reason, reason)
 
 
+class ReviewFixes(unittest.TestCase):
+    """Fix round (independent review, 2026-10-28). Each test was added red against the then-current code."""
+    ARABIC = "\u0663"   # ARABIC-INDIC DIGIT THREE: matches Python's \d, not JSON Schema's
+
+    def test_fix1_non_ascii_digit_in_version_refused_by_source_archive_url(self):
+        for v in ("1.0.1" + self.ARABIC, self.ARABIC + ".0.0", "1.0.0-rc." + self.ARABIC):
+            with self.subTest(version=v):
+                with self.assertRaises(wb.WriteBackRefused) as cm:
+                    wb.source_archive_url("mc", "h", v)
+                self.assertEqual(cm.exception.reason, "bad-version")
+
+    def test_fix1_non_ascii_digit_in_published_at_refused(self):
+        for bad in ("2026-10-2" + self.ARABIC + "T10:00:00Z", "202" + self.ARABIC + "-10-28T10:00:00Z",
+                    "2026-10-28T10:00:00." + self.ARABIC + "Z"):
+            r = result_for(); r["built_at"] = bad
+            with self.subTest(built_at=bad):
+                Ac2Refusals().refused("bad-value", entry_with(PEND), r)
+
+    def test_fix1_non_ascii_digit_in_id_refused(self):
+        with self.assertRaises(wb.WriteBackRefused) as cm:
+            wb.source_archive_url("mc", "h" + self.ARABIC, "1.0.0")
+        self.assertIn(cm.exception.reason, ("bad-id",))
+
+    def test_fix2_pending_shape_stray_and_preexisting_keys_refused(self):
+        cases = {
+            "stray reason": dict(PEND, reason="x"),
+            "stray build_log_url": dict(PEND, build_log_url="https://example.org/l"),
+            "pre-existing source_archive": dict(PEND, source_archive=ARCHIVE),
+            "pre-existing published_at": dict(PEND, published_at=BUILT_AT),
+            "pre-existing key_id": dict(PEND, key_id=KEY_ID),
+            "unknown key": dict(PEND, note="x"),
+        }
+        for label, v in cases.items():
+            with self.subTest(case=label):
+                Ac2Refusals().refused("pending-shape", entry_with(v), result_for())
+
+    def test_fix2_missing_pending_key_refused(self):
+        for k in ("commit", "source_url"):
+            v = dict(PEND); del v[k]
+            with self.subTest(missing=k):
+                Ac2Refusals().refused("pending-shape", entry_with(v), result_for())
+
+    def test_fix2_exact_pending_shape_still_accepted(self):
+        out = wb.apply_write_back(entry_with(PEND), result_for(), ARCHIVE)
+        self.assertEqual(out["versions"][0]["status"], "published")
+
+
 class Ac3SharedCorpus(unittest.TestCase):
     def test_ac3_selection_is_not_vacuous(self):
         acc, rej = t1_accept_rows(), t1_reject_rows()
@@ -320,27 +367,45 @@ class Ac3SharedCorpus(unittest.TestCase):
         self.assertIn("t1-exact", names)
         self.assertIn("t1-two-elements-two-transitions", names)
 
+    def _run_row(self, name, old, new, idx):
+        cur = copy.deepcopy(old)
+        for i in idx:   # once per T1 element, in order, each call on the previous output
+            nv = new["versions"][i]
+            cur = wb.apply_write_back(cur, synthetic(old, nv), nv["source_archive"])
+            self.assertEqual(cur["versions"][i], nv, f"{name}: element {i} reproduced")
+        # every element that is not a T1 element is untouched by the T1 calls
+        for j, v in enumerate(old["versions"]):
+            if j not in idx:
+                self.assertEqual(cur["versions"][j], v, name)
+        return cur
+
     def test_ac3_accept_rows_reproduced_per_t1_element(self):
-        took_multi = []
+        multi_path, mixed = set(), set()
         for row, idx in t1_accept_rows():
             old, new = row["old"], row["new"]
-            cur = copy.deepcopy(old)
-            for i in idx:   # once per T1 element, in order, each call on the previous output
-                nv = new["versions"][i]
-                res = synthetic(old, nv)
-                cur = wb.apply_write_back(cur, res, nv["source_archive"])
-                self.assertEqual(cur["versions"][i], nv, f"{row['name']}: element {i} reproduced")
-            if len(idx) > 1 or len(new["versions"]) > 1 or old != cur:
-                took_multi.append(row["name"])
-            # every element that is not a T1 element is untouched by the T1 calls
-            for j, v in enumerate(old["versions"]):
-                if j not in idx:
-                    self.assertEqual(cur["versions"][j], v, row["name"])
+            cur = self._run_row(row["name"], old, new, idx)
+            if len(idx) > 1:          # more than one T1 element: the call-per-element path
+                multi_path.add(row["name"])
+            if any(j not in idx and old["versions"][j] != new["versions"][j] for j in range(len(old["versions"]))):
+                mixed.add(row["name"])   # a T1 accompanied by another changed element (left untouched)
             if row["name"] == "t1-exact":
                 self.assertEqual(cur, new)
                 self.assertEqual(classify(old, cur)[0], "accept")
-        self.assertIn("t1-two-elements-two-transitions", took_multi)
-        self.assertIn("t1-and-t3-different-elements", took_multi)
+        # The corpus as of 057 has no accept row with two T1 elements; this states exactly that.
+        self.assertEqual(multi_path, set())
+        self.assertEqual(mixed, {"t1-two-elements-two-transitions", "t1-and-t3-different-elements"})
+
+    def test_ac3_multi_t1_path_control(self):
+        """Control for the call-per-element path the corpus does not currently exercise: a synthetic
+        two-pending row, built like a corpus row, must be reproduced element by element."""
+        p2 = dict(PEND, version="1.1.0")
+        pub = lambda v, h: dict(v, status="published", source_archive=ARCHIVE, source_sha256=h, signature=SIG,
+                                key_id=KEY_ID, published_at=BUILT_AT)
+        old = entry_with(PEND, p2)
+        new = entry_with(pub(PEND, SHA), pub(p2, "f" * 64))
+        cur = self._run_row("synthetic-two-t1", old, new, [0, 1])
+        self.assertEqual(cur, new)
+        self.assertEqual(classify(old, cur)[0], "accept")
 
     def test_ac3_reject_rows_are_refused_or_not_produced(self):
         refused, not_produced = [], []
