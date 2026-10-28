@@ -101,3 +101,22 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   (scenarios in 089d-verify.sh; 092's diff stays minimal, per (f)). Q4 ★ A (a real conflict cannot arise for a 092-only branch; the forced
   resolution is the faithful form). Q5 ★ A. The phase-2 open point (092 default expected NOT-APPLICABLE (merged) on this branch) is a
   prediction to check, not an adjustment; a FAIL there is a finding.
+- 2026-10-28 qa-engineer (phase 1 fix round after static review PASS-WITH-NOTES; still no `*-verify.sh` run). Finding -> commit:
+  **(4)** `post_tip_check` now reads `git rev-list --parents -n 1 C` into a variable with `|| fail` before counting words, and a parent count below 3 words
+  is also RED, so a git failure cannot give np=0 and skip the octopus check: commit `becb41802d95fc776000f381a45728d08826b3b2` (092-verify.sh only, one hunk
+  `@@ -684 +684,3 @@` inside the function; this is the NEW PIN_FIX; the old 8eb35c2 is superseded; hunk limits of (f) unchanged).
+  **(2)** second mutant in `--mutate` (the forbidden `--no-merges`-alone variant: merge handling removed) and **(1)** scenario `a2b` (merge, edit
+  other.txt, then restore main's version; unfixed FAIL, fixed PASS): commit `a05a4d773357e0c3957d7344c2a971aa5fb30036` (089d-verify.sh only).
+  **Deviation from the review's expected set, found with the development harness (throwaway shell outside the repo, sourcing only BEGIN-LIB..END-LIB; mutant
+  python blocks extracted verbatim from the script):** the `--no-merges`-alone mutant flips **b2i, b2ii, b3, b4 AND b5, b5b** to PASS, not only the first four.
+  Reason: b5/b5b are merges from "main" with no main ref; with merge handling removed they are invisible. The assertion is therefore the exact set
+  `b2i b2ii b3 b4 b5 b5b`; (a) cases (a1, a2, a2b, a3), g0 and b1 keep the fixed verdicts (PASS, PASS, PASS, PASS, PASS, FAIL). Harness result, all 12 cases:
+  fixed = PASS on g0 a1 a2 a2b a3, FAIL on b1 b2i b2ii b3 b4 b5 b5b; mutant 1 (old pattern) = FAIL on every case except g0; mutant 2 as stated.
+  **(1) note:** a2 is tree-equivalent to a1 (same resulting tree and same `diff-tree --cc` result); only the procedure differs (explicit `checkout origin/main -- file`), as the
+  spec text asks. a2b is the tree-equivalent variant that edits the merge first and then restores main's version.
+  **Note on Q6:** the implementation's "C^2 is an ancestor of the main ref" equals the spec's "every commit in C^1..C^2 is reachable from main" except for an empty
+  range (C^2 already an ancestor of C^1): there the spec is vacuously true while the implementation also needs C^2 itself on main; stricter, fail-safe (such a merge is then
+  diffed C^1 vs C^2 and its files counted, never skipped).
+  **(3) not done (optional):** a deterministic mid-function git failure (grafted/replaced object) was judged not simple enough; the failure paths are covered by the
+  `|| fail` guards and by the existing unreachable-pin controls only. Booked as a possible follow-up, no decision needed.
+  Pins re-derived next (PIN_FIX above; PIN_TIP by the pin commit that follows this entry).
