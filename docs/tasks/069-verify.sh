@@ -92,6 +92,9 @@ mk_later() {   # mk_later DEST : HEAD plus two new source files under tools/regi
 }
 run007a() { ( cd "$1" && bash docs/tasks/007a-verify.sh ) > "$2" 2>&1; echo $?; }
 BASE062="e009ef0"            # registry origin/main when task 062 was cut; AC6.034 compares against it
+# Task 064's FINAL: the last commit of registry PR #13 (merge 79d5377, git rev-parse 79d5377^2); the former tip of
+# origin/task/064-schema-check-end-anchor. Full 40-character SHA, an ancestor of registry main (task 089c, S1). No env override.
+PIN064="5002b4624abf0c09a6a1e1a94856e138ed5775f6"
 # extract_helper CLONE : the helper.py that CLONE's 062-verify.sh writes out (the heredoc between 'PYH' markers)
 extract_helper() {
     sed -n "/^cat > \"\$TMP\/helper.py\" <<'PYH'\$/,/^PYH\$/p" "$1/docs/tasks/062-verify.sh" | sed '1d;$d' > "$TMP/helper062.py"
@@ -200,13 +203,13 @@ else
     [ $rc = 0 ] && grep -q 'untouched' "$TMP/judge.txt" && pass "AC5.1 an untouched 034-verify.sh is accepted" || fail "AC5.1 an untouched 034-verify.sh was not accepted (rc $rc)"
     c33_judge "$TMP/034.064" > "$TMP/judge.txt"; rc=$?; cat "$TMP/judge.txt"
     [ $rc = 0 ] && grep -q 'only task 064' "$TMP/judge.txt" && pass "AC5.2 034-verify.sh with task 064's C3.3 re-pin applied is accepted" || fail "AC5.2 task 064's re-pin was not accepted (rc $rc)"
-    # the real thing, when the branch is reachable here (it is deleted after 064 merges; then AC5.2 above is the evidence)
-    if git -C "$ROOT" cat-file -e origin/task/064-schema-check-end-anchor:docs/tasks/034-verify.sh 2>/dev/null; then
-        git -C "$ROOT" show origin/task/064-schema-check-end-anchor:docs/tasks/034-verify.sh > "$TMP/034.real"
+    # the real thing: 034-verify.sh as of the FINAL of task 064's PR #13 (a pinned full SHA, reachable from registry main, so the
+    # read does not depend on the branch still existing). An unreachable pin is a FAIL, never a skip (task 089c, side finding S1).
+    if git -C "$ROOT" cat-file -e "$PIN064^{commit}" 2>/dev/null && git -C "$ROOT" show "$PIN064:docs/tasks/034-verify.sh" > "$TMP/034.real" 2>/dev/null && [ -s "$TMP/034.real" ]; then
         c33_judge "$TMP/034.real" > "$TMP/judge.txt"; rc=$?; cat "$TMP/judge.txt"
-        [ $rc = 0 ] && grep -q 'only task 064' "$TMP/judge.txt" && pass "AC5.3 the actual 034-verify.sh on origin/task/064-schema-check-end-anchor ($(git -C "$ROOT" rev-parse --short origin/task/064-schema-check-end-anchor)) is accepted" || fail "AC5.3 the actual 064 branch's 034-verify.sh is not accepted (rc $rc)"
+        [ $rc = 0 ] && grep -q 'only task 064' "$TMP/judge.txt" && pass "AC5.3 the actual 034-verify.sh at task 064's FINAL ($PIN064) is accepted" || fail "AC5.3 the actual 064 034-verify.sh at $PIN064 is not accepted (rc $rc)"
     else
-        echo "  note: origin/task/064-schema-check-end-anchor is not available in this clone; AC5.3 (the real branch file) not evaluated, AC5.2 is the evidence"
+        fail "AC5.3 pinned commit $PIN064 (task 064's FINAL) or its docs/tasks/034-verify.sh cannot be read in this clone"
     fi
 fi
 
