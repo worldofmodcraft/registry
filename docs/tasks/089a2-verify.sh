@@ -71,10 +71,10 @@ OLDREF="32c641b5f56139a86c820f0b16d522c0f991d207"
 PIN_BASE="32c641b5f56139a86c820f0b16d522c0f991d207"   # registry main when 089a2 was cut
 PIN_RED="42d7d46c9081c11f217e50c4be21f93f3b5e022e"      # 089a2-verify.sh + task files only
 PIN_FIX="672edcd971fdf74e0a827fa4255f87cfcbb02cbe"      # 057-verify.sh, 057-textchecks.py, 070-verify.sh
-PIN_RED2="__RED2__"    # fix round 1, fixtures first: 089a2-verify.sh + task files only (the 062 cross-check, exact 057 hunk list)
-PIN_FIX2="__FIX2__"    # fix round 1: 062-verify.sh only (the 057 mutation literals)
-PIN_FINAL="__FINAL__"  # last commit touching a source file or script of the part (= PIN_FIX2; the NEW blobs are read here)
-PIN_TIP="__TIP__"      # last commit of the branch before the pin commit (task-file only after FINAL)
+PIN_RED2="4b8151b4ac68ec6131217623561b827af800228b"    # fix round 1, fixtures first: 089a2-verify.sh + task files only (the 062 cross-check, exact 057 hunk list)
+PIN_FIX2="becccdedd9b5b6f9aed930fcb4018be79c086aea"    # fix round 1: 062-verify.sh only (the 057 mutation literals)
+PIN_FINAL="becccdedd9b5b6f9aed930fcb4018be79c086aea"  # last commit touching a source file or script of the part (= PIN_FIX2; the NEW blobs are read here)
+PIN_TIP="919f59f77357033fa4645ccf285fa15ff7724d42"      # last commit of the branch before the pin commit (task-file only after FINAL)
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
