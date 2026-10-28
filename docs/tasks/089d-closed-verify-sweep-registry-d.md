@@ -90,3 +90,8 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   (092 was merged into main, so TIP is reachable only through the merge), hence the check prints NOT-APPLICABLE (merged), as on main. Phase 2 must
   confirm this in the 092 default output; if it instead prints a FAIL, that is a finding for the manager, not something to adjust.
 - 2026-10-28 qa-engineer: scope: files changed so far = `docs/tasks/092-verify.sh`, `docs/tasks/089d-verify.sh`, this task file; nothing else.
+- 2026-10-28 qa-engineer: **pins final**: PIN_RED=32c641b5f56139a86c820f0b16d522c0f991d207, PIN_FIX=8eb35c228e429343a323943f6dc059fcec5f04a4, PIN_START=75eb9b0ce7ccddd8400eecd06f1a64eec0a1e753,
+  PIN_TIP=d065a8643eaf095488c944c7fda2efa64e0cdd95 (set by pin commit c41a9c47eea88f3c92c5c74f53f72159b23b5a0c, which touches only 089d-verify.sh). Verified by plain git (not by running the
+  script): `git diff --name-only PIN_START PIN_TIP` = the three own files. Correction to the entry above: the muddled sentence about "commits after TIP
+  touching more than 092 files" is moot; the open point is only whether the fresh-clone 092 default run prints NOT-APPLICABLE (merged) (expected) or a FAIL.
+  Phase 1 ends here; everything is written-but-not-run; phase 2 awaits the quiet machine.
