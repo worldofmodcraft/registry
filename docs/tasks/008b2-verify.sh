@@ -142,6 +142,17 @@ def c14_sign():
 check("c14 (d) signing job: key once, needs build, no clone/build tool/source_url, own checkout only", c14_sign)
 
 
+def c14_unset():
+    name, job = sign_job()
+    steps = [s for s in job["steps"] if "secrets.MINISIGN_SECRET_KEY" in dump(s)]
+    assert len(steps) == 1, "signing step not found exactly once"
+    run = steps[0]["run"]
+    assert "unset MINISIGN_SECRET_KEY" in run, "the signing step never unsets MINISIGN_SECRET_KEY"
+    w, u, p = run.find('> "$RUNNER_TEMP/signing.key"'), run.find("unset MINISIGN_SECRET_KEY"), run.find("sign_built.py")
+    assert 0 <= w < u < p, "the key must be written, then unset, before sign_built.py is invoked"
+check("c14 (d2) signing step unsets the secret from the environment before the python call", c14_unset)
+
+
 def c14_f():
     name, job = sign_job()
     assert job.get("environment") == "signing", f"signing job environment is {job.get('environment')!r}"
@@ -179,7 +190,9 @@ def c17():
                     bound[k] += 1
     for k, n in bound.items():
         assert n >= 1, f"no env binding of inputs.{k} found (zero matches)"
-    assert "${{ inputs." not in "\n".join(str(s.get("run", "")) for j in jobs.values() for s in j.get("steps", [])), "${{ inputs.* }} inside a run:"
+    for jn, j in jobs.items():
+        for s in j.get("steps", []):
+            assert "${{" not in str(s.get("run", "")), f"job {jn}: an expression ${{{{ }}}} appears inside a run: block (design 9: values reach scripts through env: only)"
     matrixed = [n for n, j in jobs.items() if "strategy" in j]
     assert matrixed, "no matrix job found (zero matches)"
     for n in matrixed:
@@ -190,8 +203,17 @@ check("c17 inputs reach scripts only through env:; fail-fast false", c17)
 # ---- criterion 25
 def c25():
     assert jobs, "no jobs found (zero matches)"
+    G = "github.event_name != 'push'"
+    expected = {
+        "plan": G,
+        "build": G + " && needs.plan.result == 'success' && needs.plan.outputs.has_build == 'true'",
+        "sign": "always() && " + G + " && github.ref == 'refs/heads/main' && needs.plan.result == 'success' && needs.plan.outputs.has_build == 'true' && inputs.dry_run != true",
+        "dry-run": "always() && " + G + " && inputs.dry_run == true && needs.plan.result == 'success' && needs.plan.outputs.has_build == 'true'",
+        "summary": "always() && " + G,
+    }
+    assert set(jobs) == set(expected), f"jobs are {sorted(jobs)}, expected {sorted(expected)}"
     for n, j in jobs.items():
-        assert "github.event_name != 'push'" in str(j.get("if", "")), f"job {n} lacks the push gate"
+        assert str(j.get("if", "")).strip() == expected[n], f"job {n}: if is {j.get('if')!r}, expected exactly {expected[n]!r}"
     assert jobs["summary"]["if"] == "always() && github.event_name != 'push'", f"summary if is {jobs['summary'].get('if')!r}"
     assert on["push"] == {"branches": ["main"], "paths": ["mods/*/entry.json"]}, "on.push differs from the contract block"
 check("c25 every job is gated off on push; summary condition exact; on.push unchanged", c25)
@@ -291,6 +313,11 @@ mut("c26-drop-per-version-guard", [("        if: steps.guard.outputs.proceed == 
 mut("c7-blank-pin-in-dry-run", [('MINISIGN_TARBALL_SHA256: "9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73"\n', 'MINISIGN_TARBALL_SHA256: ""\n', 2)], "c7 ")
 mut("c7-blank-pin-in-sign", [('MINISIGN_TARBALL_SHA256: "9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73"\n', 'MINISIGN_TARBALL_SHA256: ""\n', "first")], "c7 ")
 
+mut("c14-remove-unset", [("          unset MINISIGN_SECRET_KEY\n", "", 1)], "c14 (d2)")
+mut("c17-expression-in-run", [('          echo "pipeline fault (exit 2) while building this version; see build.stderr"\n', '          echo "pipeline fault ${{ matrix.tag }}"\n', 1)], "c17 ")
+mut("c25-or-true-on-build", [("    if: github.event_name != 'push' && needs.plan.result == 'success' && needs.plan.outputs.has_build == 'true'\n", "    if: github.event_name != 'push' && needs.plan.result == 'success' && needs.plan.outputs.has_build == 'true' || true\n", 1)], "c25 ")
+mut("c25-or-true-on-plan", [(GATE, "    if: github.event_name != 'push' || true\n", "first")], "c25 ")
+
 
 def apply(text, edits):
     for old, new, nth in edits:
@@ -369,6 +396,10 @@ M = [
      ["test_e_every_sign_refusal_becomes_exit_code_2"]),
     ("F2 checkout assertion removed", HO, [("    if tracked and not os.path.isdir(os.path.join(repo, \"mods\")):\n", "    if False:\n"), ("    if missing:\n", "    if False:\n")],
      ["test_check_checkout_fails_closed_on_a_broken_or_sparse_checkout"]),
+    ("F4 result allow-list removed", SB, [('        raise SignRefused("result/shape", "result.json has keys outside 008a\'s result shape")\n', "        pass\n")],
+     ["test_result_json_with_unknown_keys_is_refused_at_every_level"]),
+    ("F5 reason takes everything after the REJECTED line", HO, [("            text = err[m.start():]\n", "            text = err[m.start():]\n        _ = 0\n")],
+     ["test_d_reason_is_the_single_rejected_line_only"]),
 ]
 failed = 0
 for name, rel, edits, tests in M:

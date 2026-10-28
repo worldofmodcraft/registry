@@ -218,6 +218,27 @@ class SignBuiltTests(NoSignBase):
         with self.assertRaises(sign_built.SignRefused):
             self.sign(d)
 
+    def test_result_json_with_unknown_keys_is_refused_at_every_level(self):
+        """F4: the build job is untrusted; nothing outside 008a's result shape may be copied into the signed result.json."""
+        _, _, d = self.built("sb10")
+        p = os.path.join(d, "result.json")
+        good = json.load(open(p))
+        self.assertEqual(set(good), {"id", "version", "tag", "assets", "built_at", "artifact", "signed", "scan"})
+        cases = {"top": lambda r: r.update(extra="x"), "artifact": lambda r: r["artifact"].update(extra="x"),
+                 "assets": lambda r: r["assets"].update(extra="x"), "scan": lambda r: r["scan"].update(extra="x"),
+                 "missing built_at": lambda r: r.pop("built_at"), "missing scan": lambda r: r.pop("scan")}
+        for name, edit in cases.items():
+            res = json.loads(json.dumps(good))
+            edit(res)
+            json.dump(res, open(p, "w"))
+            out = os.path.join(self.fresh("so"), "signed")
+            with self.assertRaises(sign_built.SignRefused, msg=name) as cm:
+                self.sign(d, out=out)
+            self.assertEqual(cm.exception.rule, "result/shape", name)
+            self.assertFalse(os.path.exists(out))
+        json.dump(good, open(p, "w"))
+        self.sign(d)   # the unmodified result still signs
+
     def run_sign_cli(self, d, key=None, pub=None, out=None):
         out = out or os.path.join(self.fresh("so"), "signed")
         argv = [sys.executable, SIGN_CLI, "--tarball", os.path.join(d, f"{TAG}.tar.gz"), "--result", os.path.join(d, "result.json"),
@@ -316,15 +337,26 @@ class HandoffTests(NoSignBase):
 
     def test_d_reason_from_stderr_else_from_the_log(self):
         d = self.fresh("rs")
-        open(os.path.join(d, "build.stderr"), "w").write("REJECTED [r/x]:  line one\n\tline  two -- remedy:   fix it \n")
+        open(os.path.join(d, "build.stderr"), "w").write("REJECTED [r/x]:  line  one   -- remedy:   fix it \n")
         open(os.path.join(d, "build.log"), "w").write("a\nresult: exit 1 REJECTED [other]: from the log -- remedy: x\n")
         o = handoff.write_outcome(d, VID, TAG, 1)
-        self.assertEqual(o["reason"], "[r/x]: line one line two -- remedy: fix it")
+        self.assertEqual(o["reason"], "[r/x]: line one -- remedy: fix it")
         self.assertEqual(json.load(open(os.path.join(d, "outcome.json"))), o)
         d = self.fresh("rl")
         open(os.path.join(d, "build.stderr"), "w").write("something else entirely\n")
-        open(os.path.join(d, "build.log"), "w").write("result: exit 1 REJECTED [old]: first -- remedy: a\nresult: exit 1 REJECTED [last]: from the log  here -- remedy: b\n")
+        open(os.path.join(d, "build.log"), "w").write("result: exit 1 REJECTED [old]: first -- remedy: a\nresult: exit 1 REJECTED [last]: from the log  here -- remedy: b\nlater line\n")
         self.assertEqual(handoff.write_outcome(d, VID, TAG, 1)["reason"], "[last]: from the log here -- remedy: b")
+
+    def test_d_reason_is_the_single_rejected_line_only(self):
+        """F5: only the one REJECTED line, never what follows it (warnings, a traceback)."""
+        d = self.fresh("r1")
+        open(os.path.join(d, "build.stderr"), "w").write(
+            "warning: noise before\nREJECTED [r/x]: msg -- remedy: fix\nWARNING: later\nTraceback (most recent call last):\n  File x\n")
+        self.assertEqual(handoff.write_outcome(d, VID, TAG, 1)["reason"], "[r/x]: msg -- remedy: fix")
+        d = self.fresh("r2")
+        open(os.path.join(d, "build.stderr"), "w").write("no rejected line here\n")
+        open(os.path.join(d, "build.log"), "w").write("result: exit 1 REJECTED [r/y]: m -- remedy: f\nTraceback follows\n  boom\n")
+        self.assertEqual(handoff.write_outcome(d, VID, TAG, 1)["reason"], "[r/y]: m -- remedy: f")
 
     def test_d_all_whitespace_reason_is_an_exit_2_fault(self):
         d = self.fresh("rw")
