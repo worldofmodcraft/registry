@@ -404,8 +404,9 @@ class Ac5SourceArchiveUrl(unittest.TestCase):
                     try:
                         u = wb.source_archive_url(ns, nm, v)
                     except wb.WriteBackRefused as e:
-                        if ns in ("con", "prn", "aux", "nul", "com0", "com9", "lpt0", "lpt9"):
-                            self.assertEqual(e.reason, "reserved-namespace" if re.fullmatch(r"\d+\.\d+\.\d+.*", v) else e.reason)
+                        self.assertIn(e.reason, ("reserved-namespace", "bad-version"))
+                        if v != "1-1.0.0":   # the one invalid semver in the set
+                            self.assertEqual(e.reason, "reserved-namespace", (ns, nm, v))
                         refused += 1
                         continue
                     built += 1
