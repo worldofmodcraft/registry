@@ -87,3 +87,7 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
 - 2026-10-28 qa-engineer: PIN commit `406e51f66b1948e0ba67c9236ab2fb4b32815e93` (089c-verify.sh only) wrote PIN_RED=`3b8db96...`, PIN_FIX=PIN_FINAL=`1564ad0731ea794bcd286f6dcd08ed5d7a77b509`,
   PIN_TIP=`2f4495902b7c71a89c2fa5d97cab302689819006`; BASE=`32c641b5f56139a86c820f0b16d522c0f991d207`. Phase 1 complete; branch pushed, no PR. Awaiting phase 2.
 
+- 2026-10-28 manager (session 14): phase 1 accepted for phase 2 (log check exit 0; head `b6c39ed`). Triage (★, overnight ruling; §8b 3a):
+  Q1 ★ A: for S1 the unfixed script's red is the silent skip (exit 0, "not evaluated", no AC5.3 verdict), asserted in AC1.b with control AC1.a;
+  criterion 5's non-zero-exit positive control does not apply to a defect whose symptom is a skip (same reasoning as 090's AC5 triage).
+  Q2 ★ A: absent `refs/remotes/origin/main` = FAIL; phase 2 runs in a fresh GitHub clone. Q3 ★ A: as built (matches 089b Q9).
