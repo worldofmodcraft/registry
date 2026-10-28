@@ -66,10 +66,10 @@ BRANCH_FULLREF=refs/remotes/origin/task/064-schema-check-end-anchor
 OLDREF="32c641b5f56139a86c820f0b16d522c0f991d207"
 # 089c's own commits (AC11). Filled in by the pin commit after the red and fix commits exist.
 PIN_BASE="32c641b5f56139a86c820f0b16d522c0f991d207"   # registry main when 089c was cut
-PIN_RED="__RED__"      # 089c-verify.sh + task file only
-PIN_FIX="__FIX__"      # 069-verify.sh
-PIN_FINAL="__FINAL__"  # last commit touching a source file of the part
-PIN_TIP="__TIP__"      # last commit of the branch before the pin commit (task file only after FINAL)
+PIN_RED="3b8db962327ea3f4dd82190551b0833e86e9df04"      # 089c-verify.sh + task file only
+PIN_FIX="1564ad0731ea794bcd286f6dcd08ed5d7a77b509"      # 069-verify.sh
+PIN_FINAL="1564ad0731ea794bcd286f6dcd08ed5d7a77b509"  # last commit touching a source file of the part
+PIN_TIP="2f4495902b7c71a89c2fa5d97cab302689819006"      # last commit of the branch before the pin commit (task file only after FINAL)
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
