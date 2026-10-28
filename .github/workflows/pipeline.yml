@@ -222,6 +222,7 @@ jobs:
         run: |
           umask 077
           printf '%s\n' "$MINISIGN_SECRET_KEY" > "$RUNNER_TEMP/signing.key"
+          unset MINISIGN_SECRET_KEY   # the python below parses untrusted build output: keep the key out of its environment
           rc=0
           python3 -I tools/pipeline/sign_built.py --tarball "build/$LEG_TAG.tar.gz" --result build/result.json \
             --key "$RUNNER_TEMP/signing.key" --pubkey "$RUNNER_TEMP/wom.pub" --out signed 2> "$RUNNER_TEMP/sign.stderr" || rc=$?

@@ -60,13 +60,13 @@ def rejection_reason(out_dir: str) -> str:
     if err is not None:
         m = re.search(r"^REJECTED \[", err, re.M)
         if m:
-            text = err[m.start():]
+            text = err[m.start():].split("\n", 1)[0]     # the one line, never what follows it
     if not normalize_reason(text):
         log = _read_text(os.path.join(out_dir, "build.log"))
         if log is not None:
             i = log.rfind("result: exit 1 ")
             if i >= 0:
-                text = log[i + len("result: exit 1 "):]
+                text = log[i + len("result: exit 1 "):].split("\n", 1)[0]
     text = normalize_reason(text)
     if text.startswith("REJECTED "):
         text = text[len("REJECTED "):]

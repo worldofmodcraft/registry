@@ -45,6 +45,18 @@ from pipeline_errors import PipelineError, Rejected  # noqa: E402
 _SHA_RE = re.compile(r"[0-9a-f]{64}")
 
 
+def _scan_keys() -> frozenset:
+    with open(os.path.join(os.path.dirname(HERE), "..", "contracts", "validation-report.schema.json"), "r", encoding="utf-8") as f:
+        return frozenset(json.load(f)["properties"])
+
+
+# The exact shape build_version.py --no-sign writes (docs/pipeline/build-pipeline.md); the build job is untrusted,
+# so nothing outside it is copied into the signed result.json.
+_RESULT_KEYS = frozenset({"id", "version", "tag", "assets", "built_at", "artifact", "signed", "scan"})
+_ASSET_KEYS = frozenset({"tarball", "signature"})
+_ARTIFACT_KEYS = frozenset({"source_sha256"})
+
+
 class SignRefused(Exception):
     """The built artefact failed re-verification: named, nothing signed (exit 1 of this tool)."""
 
@@ -82,6 +94,9 @@ def _read_result(path: str) -> dict:
         raise SignRefused("result/already-signed", "result.json does not say `signed: false`; only an unsigned build result is signed here")
     if "signature" in art or "key_id" in art:
         raise SignRefused("result/already-signed", "result.json already carries artifact.signature or artifact.key_id")
+    if (set(res) != _RESULT_KEYS or set(assets) != _ASSET_KEYS or set(art) != _ARTIFACT_KEYS
+            or not isinstance(res.get("scan"), dict) or set(res["scan"]) != _scan_keys()):
+        raise SignRefused("result/shape", "result.json has keys outside 008a's result shape")
     if not (isinstance(art.get("source_sha256"), str) and _SHA_RE.fullmatch(art["source_sha256"])):
         raise SignRefused("result/sha-format", "artifact.source_sha256 is not 64 lowercase hex characters")
     return res

@@ -313,7 +313,7 @@ mut("c26-drop-per-version-guard", [("        if: steps.guard.outputs.proceed == 
 mut("c7-blank-pin-in-dry-run", [('MINISIGN_TARBALL_SHA256: "9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73"\n', 'MINISIGN_TARBALL_SHA256: ""\n', 2)], "c7 ")
 mut("c7-blank-pin-in-sign", [('MINISIGN_TARBALL_SHA256: "9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73"\n', 'MINISIGN_TARBALL_SHA256: ""\n', "first")], "c7 ")
 
-mut("c14-remove-unset", [("          unset MINISIGN_SECRET_KEY\n", "", 1)], "c14 (d2)")
+mut("c14-remove-unset", [("          unset MINISIGN_SECRET_KEY   # the python below parses untrusted build output: keep the key out of its environment\n", "", 1)], "c14 (d2)")
 mut("c17-expression-in-run", [('          echo "pipeline fault (exit 2) while building this version; see build.stderr"\n', '          echo "pipeline fault ${{ matrix.tag }}"\n', 1)], "c17 ")
 mut("c25-or-true-on-build", [("    if: github.event_name != 'push' && needs.plan.result == 'success' && needs.plan.outputs.has_build == 'true'\n", "    if: github.event_name != 'push' && needs.plan.result == 'success' && needs.plan.outputs.has_build == 'true' || true\n", 1)], "c25 ")
 mut("c25-or-true-on-plan", [(GATE, "    if: github.event_name != 'push' || true\n", "first")], "c25 ")
@@ -398,7 +398,7 @@ M = [
      ["test_check_checkout_fails_closed_on_a_broken_or_sparse_checkout"]),
     ("F4 result allow-list removed", SB, [('        raise SignRefused("result/shape", "result.json has keys outside 008a\'s result shape")\n', "        pass\n")],
      ["test_result_json_with_unknown_keys_is_refused_at_every_level"]),
-    ("F5 reason takes everything after the REJECTED line", HO, [("            text = err[m.start():]\n", "            text = err[m.start():]\n        _ = 0\n")],
+    ("F5 reason takes everything after the REJECTED line", HO, [('            text = err[m.start():].split("\\n", 1)[0]     # the one line, never what follows it\n', "            text = err[m.start():]\n")],
      ["test_d_reason_is_the_single_rejected_line_only"]),
 ]
 failed = 0
