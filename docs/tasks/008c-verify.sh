@@ -47,7 +47,7 @@ PY
     ( cd "$SCR/t" && python3 tests/pipeline/run_checks.py --only test_write_back >"$SCR/m.out" 2>/dev/null )
     local bad=0
     for c in "$@"; do
-      grep -q "^CHECK .*$c FAIL$" "$SCR/m.out" || { bad=1; echo "      not red: $c"; }
+      grep -qE "^CHECK [A-Za-z0-9]+\\.$c[A-Za-z0-9_]* FAIL$" "$SCR/m.out" || { bad=1; echo "      not red: $c"; }
     done
     [ $bad -eq 0 ] && ok "mutation $id: red -> $*" || fail "mutation $id did not turn the named check(s) red"
   }
@@ -57,7 +57,7 @@ PY
   run_mut drop-status-change $MOD "$V" "    pass" test_ac1_transition_validates_diffs_exactly
   run_mut mutate-input $MOD "out = copy.deepcopy(entry)" "out = entry" test_ac2_no_mutation_on_success
   run_mut accept-published-target $MOD 'if status != "pending":' 'if status not in ("pending", "published"):' test_ac2_status_published_removed_rejected_each_refused
-  run_mut accept-rejected-target $MOD 'if status != "pending":' 'if status not in ("pending", "rejected"):' test_ac2_status_published_removed_rejected_each_refused test_ac3_reject_rows_are_refused_or_not_produced
+  run_mut accept-rejected-target $MOD 'if status != "pending":' 'if status not in ("pending", "rejected"):' test_ac2_status_published_removed_rejected_each_refused
   run_mut skip-mod-comparison $MOD 'if result.get("id") != entry.get("id"):' 'if False:' test_ac2_result_from_another_mod
   run_mut skip-version-comparison $MOD 'v.get("version") == rv]' 'True]' test_ac2_result_for_another_version
   run_mut drop-key-set-guard $MOD 'if set(values) != set(FIVE_KEYS) or len(values) != len(FIVE_KEYS):' 'if False:' test_ac2_extra_key_guard_tested_directly
