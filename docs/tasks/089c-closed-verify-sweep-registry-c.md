@@ -100,4 +100,4 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   PIN_TIP = the log commit that follows it; a final pin commit rewrites only PIN_FINAL and PIN_TIP.
   (3) Note for phase 2: step 2 (the RED commit run) is red BY PLACEHOLDERS (PIN_FIX etc. are `__FIX__`); it proves only that the script cannot pass unpinned.
   The S1 red-first evidence is AC1.b (OLD 069 with the branch deleted: exit 0, 'not evaluated', no AC5.3 verdict) against AC1.c (NEW passes AC5.3).
-
+- 2026-10-28 qa-engineer: re-pin commit `efd476fa62cbe54f920d54654f7c15a513ae9002` (089c-verify.sh PIN_FINAL=`7f30d95831678dc8da9f4a66f39e6325e35c3415`, PIN_TIP=`fc50c2389724caff1263c714278aad232c59953f` only). Fix round complete, pushed, awaiting phase 2.
