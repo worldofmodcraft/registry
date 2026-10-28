@@ -334,6 +334,29 @@ class ReviewFixes(unittest.TestCase):
             wb.source_archive_url("mc", "h" + self.ARABIC, "1.0.0")
         self.assertIn(cm.exception.reason, ("bad-id",))
 
+    def test_fix3_unicode_whitespace_in_source_archive_refused(self):
+        # Round 2: ECMA-262 `\S` excludes every WhiteSpace/LineTerminator code point; re.ASCII had made it accept these.
+        for ch in ("\u00a0", "\u2028", "\u2029", "\u3000", "\u2003"):
+            url = "https://a.example/x" + ch + "y"
+            with self.subTest(codepoint="U+%04X" % ord(ch)):
+                Ac2Refusals().refused("bad-value", entry_with(PEND), result_for(), url)
+
+    def test_fix3_non_whitespace_unicode_in_source_archive_still_accepted(self):
+        # Positive control: ECMA `\S` matches non-ASCII letters, so `\S` must not be narrowed to ASCII.
+        url = "https://a.example/caf\u00e9/\u4e2d"
+        out = wb.apply_write_back(entry_with(PEND), result_for(), url)
+        self.assertEqual(out["versions"][0]["source_archive"], url)
+
+    def test_fix3_digit_translation_leaves_escaped_backslash_alone(self):
+        # Expected strings typed literally. `\\d` is a literal backslash then a literal `d`: not mangled.
+        cases = [(r"^\d$", r"^[0-9]$"), (r"^\\d$", r"^\\d$"), (r"^\\\d$", r"^\\[0-9]$"),
+                 (r"^\\\\d$", r"^\\\\d$"), (r"[\d.]", r"[0-9.]"), (r"a\.b", r"a\.b")]
+        for src, want in cases:
+            with self.subTest(src=src):
+                self.assertEqual(wb._ecma_digits(src), want)
+        with self.assertRaises(NotImplementedError):
+            wb._ecma_digits(r"\D")
+
     def test_fix2_pending_shape_stray_and_preexisting_keys_refused(self):
         cases = {
             "stray reason": dict(PEND, reason="x"),

@@ -50,13 +50,50 @@ _SCHEMA = _load_schema()
 _VPROPS = _SCHEMA["properties"]["versions"]["items"]["properties"]
 _PAT_ID = _SCHEMA["properties"]["id"]["pattern"]
 _PAT_SEMVER = _VPROPS["version"]["pattern"]
-_PATTERNS = {k: _VPROPS[k]["pattern"] for k in ("source_archive", "source_sha256", "key_id", "published_at")}
+
+
+def _ecma_digits(pattern: str) -> str:
+    r"""The schema pattern with every unescaped `\d` replaced by `[0-9]` (`0-9` inside a character class).
+
+    Why: the schema patterns are ECMA-262 regexes (JSON Schema's dialect). ECMA `\d` is ASCII-only, but Python's
+    default `re` `\d` matches any Unicode decimal digit (Arabic-Indic, fullwidth, ...). ECMA `\s`/`\S` are
+    Unicode-aware (they cover NBSP, U+2028, ...) and Python's default `re` agrees, so `\s`/`\S` are left alone and
+    no global flag (`re.ASCII` would narrow `\S` too) is used. Escapes are consumed in pairs, so `\\d` (a literal
+    backslash, then `d`) is not mangled. `\D` would need its own translation; none of the schema's patterns has
+    one, so it raises rather than silently keeping Python's meaning."""
+    out, i, in_class = [], 0, False
+    while i < len(pattern):
+        c = pattern[i]
+        if c == "\\":
+            if i + 1 >= len(pattern):
+                raise NotImplementedError(f"pattern {pattern!r}: dangling backslash")
+            e = pattern[i + 1]
+            if e == "d":
+                out.append("0-9" if in_class else "[0-9]")
+            elif e == "D":
+                raise NotImplementedError(f"pattern {pattern!r}: \\D is not translated to ECMA-262 semantics")
+            else:
+                out.append(pattern[i:i + 2])
+            i += 2
+            continue
+        if c == "[":
+            in_class = True
+        elif c == "]":
+            in_class = False
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+_PATTERNS = {k: _ecma_digits(_VPROPS[k]["pattern"]) for k in ("source_archive", "source_sha256", "key_id", "published_at")}
+_PAT_ID = _ecma_digits(_PAT_ID)
+_PAT_SEMVER = _ecma_digits(_PAT_SEMVER)
 
 
 def _fullmatch(pattern: str, value) -> bool:
-    # fullmatch, not search: `$` would tolerate a trailing newline. re.ASCII: the schema patterns are
-    # ECMA-262 regexes, where `\d` is [0-9]; Python's default would accept non-ASCII Unicode digits.
-    return isinstance(value, str) and re.fullmatch(pattern, value, re.ASCII) is not None
+    # fullmatch, not search: `$` would tolerate a trailing newline. The pattern was translated by `_ecma_digits` when
+    # it was loaded (no re flag here; see that function for why).
+    return isinstance(value, str) and re.fullmatch(pattern, value) is not None
 
 
 def source_archive_url(namespace: str, name: str, version: str) -> str:
