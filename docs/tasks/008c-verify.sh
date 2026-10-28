@@ -146,7 +146,7 @@ import subprocess
   run_mut pending-shape-dropped $MOD 'if set(entry["versions"][idx]) != PENDING_KEYS:' 'if False:' test_fix2_pending_shape_stray_and_preexisting_keys_refused test_fix2_missing_pending_key_refused
   # finding 5: the scope check reverts to a fixed ancestor as its left side -> the self-test must go red
   mkdir "$SCR/s" && git show HEAD:docs/tasks/008c-verify.sh > "$SCR/s/v.sh"
-  if [ "$(grep -c 'if git rev-parse -q --verify "$r^{commit}" >/dev/null 2>&1; then git merge-base HEAD "$r"; return $?; fi' "$SCR/s/v.sh")" != 1 ]; then
+  if [ "$(sed -n '/^scope_base()/,/^}/p' "$SCR/s/v.sh" | grep -cF 'git merge-base HEAD "$r"; return $?;')" != 1 ]; then
     fail "mutation scope-fixed-base: anchor not found exactly once (broken search)"
   else
     sed 's#git merge-base HEAD "$r"; return $?;#git rev-list --max-parents=0 HEAD | tail -1; return 0;#' "$SCR/s/v.sh" > "$SCR/s/m.sh"
