@@ -91,3 +91,13 @@ bash docs/tasks/008c-verify.sh --scope-selftest            # 5. the self-test al
   Q1 ★ A (pins per scenario subshell; the real `scope_violations` is exercised). Q2 ★ A. Q3 ★ A: the umbrella copy is the manager's dispatch
   commit, the same shape as 089b; AC11 allowing it only as that single pre-fix copy-in is correct. The self-test replacement (no-main-ref ->
   bad-pin, `scope-fixed-base` -> two mutations) is accepted as equivalent-or-stronger; the reviewer is to confirm no assertion was lost.
+- 2026-10-28 qa-engineer (fix round after static review PASS, six LOW notes; phase 1, no verify script run, `bash -n` only): (1) AC5.0 no longer prints
+  PASS when E_FIX is not a full SHA (explicit FAIL branch first). (2) `others` now excludes only this script's PID, its descendants and its
+  ancestors, by PID/PPID (awk over `ps -eo pid=,ppid=,args=`), no longer every line mentioning 089e-verify.sh, so a second concurrent 089e run
+  makes the machine "not quiet"; the function was exercised alone on this machine (reads `ps` only; it listed the other driver's processes).
+  (3) AC2.6d now scans the live scope-check block as well (008c-verify.sh `for p in PIN_M ...` to the "scope pins unusable" line, 11 code lines,
+  0 HEAD/origin/main hits); positive control: the OLD blob's live block (`if SB=$(scope_base)` .. "cannot be checked", 6 lines) has 2 hits, and with the
+  OLD scope region the control total stays >= 2; new AC2.6a2 asserts both live blocks were extracted. (4) AC4.m3 also asserts both counts equal the
+  pinned literal 28. Notes 5 and 6 left as notes: phase 2 must show the AC3.4 skip-word count = 0 (with its positive control). Because this edit
+  changes 089e-verify.sh beyond its pin lines, E_TIP moves to this fix commit (E_FIX/E_FINAL stay at the only commit touching 008c-verify.sh,
+  `c68eec7b910a29be295b1944e826497d37cac326`, which is unchanged); AC11.5b still holds from the new TIP.

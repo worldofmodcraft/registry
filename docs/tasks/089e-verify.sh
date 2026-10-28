@@ -94,13 +94,21 @@ expect() {
 }
 
 # ---- AC9: the quiet machine. Other *-verify.sh processes (ancestors of this script and 089e itself excluded) block every child run.
-others() {
-    local anc=" $$ " p="$PPID" nxt
-    while [ -n "$p" ] && [ "$p" -gt 1 ] 2>/dev/null; do
-        anc="$anc$p "; nxt=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' '); [ "$nxt" = "$p" ] && break; p="$nxt"
-    done
-    ps -eo pid=,args= 2>/dev/null | grep -E '[0-9A-Za-z]+-verify\.sh' | grep -v '089e-verify[.]sh' | while read -r pid rest; do
-        case "$anc" in *" $pid "*) ;; *) printf '%s %s\n' "$pid" "$rest" ;; esac
+others() {   # every *-verify.sh process that is not this script's PID, a descendant of it, or an ancestor of it (a second 089e run counts)
+    ps -eo pid=,ppid=,args= 2>/dev/null | awk -v me="$$" '
+        { pid=$1; ppid[pid]=$2; line[pid]=$0; ord[++n]=pid }
+        END {
+            for (i = 1; i <= n; i++) { pid = ord[i]; skip = (pid == me)
+                for (q = pid; !skip && q != "" && q > 1; q = ppid[q]) { if (q == me) skip = 1 }
+                if (!skip && line[pid] ~ /[0-9A-Za-z]+-verify[.]sh/ && line[pid] !~ /awk -v me=/) { sub(/^ *[0-9]+ +[0-9]+ +/, "", line[pid]); print pid " " line[pid] }
+            }
+        }' | while read -r pid rest; do
+        anc=0; p=$$
+        while [ -n "$p" ] && [ "$p" -gt 1 ] 2>/dev/null; do
+            [ "$p" = "$pid" ] && { anc=1; break; }
+            nxt=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' '); [ "$nxt" = "$p" ] && break; p="$nxt"
+        done
+        [ "$anc" = 1 ] || printf '%s %s\n' "$pid" "$rest"
     done
 }
 wait_quiet() {   # wait_quiet LABEL : block until nothing else runs, logging ps; returns 1 after 6 hours (the caller marks a FAIL)
@@ -176,13 +184,17 @@ for pr in "$M008C:PIN_M" "$BASE008C:PIN_BASE" "$FINAL008C:PIN_FINAL"; do
 done
 # no own-change read of HEAD/origin/main remains in the scope check (non-zero counts, with a positive control on the OLD script)
 region() { awk '/^PIN_M=/{f=1} f{print} f&&/^}/{exit}' "$1" | grep -v '^[[:space:]]*#'; }
+liveregion() { awk '/^for p in PIN_M PIN_BASE PIN_FINAL/{f=1} f{print} f&&/scope pins unusable/{exit}' "$1" | grep -v '^[[:space:]]*#'; }
+oldliveregion() { awk '/^if SB=\$\(scope_base\); then/{f=1} f{print} f&&/cannot be checked/{exit}' "$1" | grep -v '^[[:space:]]*#'; }
 oldregion() { awk '/^scope_base\(\)/{f=1} f{print} /^scope_violations\(\)/{g=1} g&&/^}/{exit}' "$1" | grep -v '^[[:space:]]*#'; }
 nr="$(region "$NEWF" | wc -l)"; or="$(oldregion "$OLDF" | wc -l)"
 [ "$nr" -gt 5 ] && pass "AC2.6a the NEW scope region was extracted ($nr code lines)" || fail "AC2.6a the NEW scope region is empty or tiny ($nr lines): the markers moved"
 [ "$or" -gt 5 ] && pass "AC2.6b the OLD scope region was extracted ($or code lines)" || fail "AC2.6b the OLD scope region is empty or tiny ($or lines)"
-oh="$(oldregion "$OLDF" | grep -cE 'HEAD|origin/main|refs/heads/main')"; nh="$(region "$NEWF" | grep -cE 'HEAD|origin/main|refs/heads/main')"
-[ "$oh" -ge 2 ] && pass "AC2.6c positive control: the grep finds $oh HEAD/main reads in the OLD scope region" || fail "AC2.6c the HEAD/main grep is blind on the OLD scope region ($oh hits)"
-[ "$nh" = 0 ] && pass "AC2.6d the NEW scope region has 0 HEAD / origin/main / refs/heads/main reads" || fail "AC2.6d the NEW scope region still reads HEAD or main ($nh hit lines)"
+nl="$(liveregion "$NEWF" | wc -l)"; ol="$(oldliveregion "$OLDF" | wc -l)"
+[ "$nl" -gt 5 ] && [ "$ol" -gt 3 ] && pass "AC2.6a2 the live scope-check blocks were extracted (NEW $nl lines, OLD $ol lines)" || fail "AC2.6a2 a live scope-check block is empty or tiny (NEW $nl, OLD $ol): the markers moved"
+oh="$( { oldregion "$OLDF"; oldliveregion "$OLDF"; } | grep -cE 'HEAD|origin/main|refs/heads/main')"; nh="$( { region "$NEWF"; liveregion "$NEWF"; } | grep -cE 'HEAD|origin/main|refs/heads/main')"
+[ "$oh" -ge 2 ] && pass "AC2.6c positive control: the grep finds $oh HEAD/main reads in the OLD scope region and live block" || fail "AC2.6c the HEAD/main grep is blind on the OLD scope region ($oh hits)"
+[ "$nh" = 0 ] && pass "AC2.6d the NEW scope region and live check block have 0 HEAD / origin/main / refs/heads/main reads" || fail "AC2.6d the NEW scope region still reads HEAD or main ($nh hit lines)"
 live_new="$(grep -c 'git diff --name-only "\$PIN_BASE" "\$PIN_FINAL"' "$NEWF")"
 [ "$live_new" -ge 2 ] && pass "AC2.6e the NEW script diffs the pinned range in the function and in the live check ($live_new occurrences)" || fail "AC2.6e expected >= 2 pinned-range diffs, found $live_new"
 [ "$(grep -v '^[[:space:]]*#' "$NEWF" | grep -c 'scope_base')" = 0 ] && [ "$(grep -v '^[[:space:]]*#' "$OLDF" | grep -c 'scope_base')" -ge 2 ] \
@@ -219,7 +231,9 @@ hits=$(cat "$TMP"/d-PIN_*.out "$TMP"/n-f?.out 2>/dev/null | grep -Eic 'skip|not 
 [ "$hits" = 0 ] && pass "AC3.4 'skip' / 'not evaluated' occur 0 times in the outputs of the deadbee and NEW runs" || fail "AC3.4 $hits skip/not-evaluated line(s) in the run outputs"
 
 section "AC5 -- item-12 control: the fixed 008c-verify.sh as committed at HEAD exits 0 on HEAD and on a merge with a later synthetic branch"
-if full40 "$E_FIX" && ! G diff --quiet "$E_FIX" "$HEADREV" -- "$V008C" 2>/dev/null; then fail "AC5.0 008c-verify.sh at HEAD differs from the fix commit $E_FIX"; else pass "AC5.0 008c-verify.sh at HEAD equals the fix commit's (HEAD is the fixed script)"; fi
+if ! full40 "$E_FIX"; then fail "AC5.0 E_FIX='$E_FIX' is not a full SHA: cannot compare 008c-verify.sh at HEAD with the fix commit"
+elif G diff --quiet "$E_FIX" "$HEADREV" -- "$V008C" 2>/dev/null; then pass "AC5.0 008c-verify.sh at HEAD equals the fix commit's (HEAD is the fixed script)"
+else fail "AC5.0 008c-verify.sh at HEAD differs from the fix commit $E_FIX"; fi
 mk_frame "$TMP/h" "$HEADREV" "$HEADREV" || fail "AC5.0 cannot clone HEAD"
 rc=$(run008c "$TMP/h" "$TMP/h.out"); expect "AC5.1 the HEAD script on HEAD" green "$rc" "$TMP/h.out" '!^FAIL'
 if mk_frame "$TMP/hl" "$HEADREV" "$HEADREV" && lh=$(add_later "$TMP/hl" "$HEADREV"); then git -C "$TMP/hl" update-ref refs/remotes/origin/main "$lh"
@@ -291,7 +305,7 @@ mk_frame "$TMP/mh" "$HEADREV" "$HEADREV" || fail "AC4.0 cannot clone HEAD"
 exp_n=$(( $(grep -cE '^  (run_mut|scope_mut) [a-z]' "$TMP/mh/$V008C") + 1 ))
 rc=$(run008c "$TMP/mh" "$TMP/mh.out" "" --mutate)
 got_n=$(grep -c '^ok    mutation ' "$TMP/mh.out")
-[ "$rc" = 0 ] && [ "$exp_n" -gt 25 ] && [ "$got_n" = "$exp_n" ] && ! grep -q '^FAIL' "$TMP/mh.out" \
+[ "$rc" = 0 ] && [ "$exp_n" = 28 ] && [ "$got_n" = 28 ] && [ "$got_n" = "$exp_n" ] && ! grep -q '^FAIL' "$TMP/mh.out" \
     && grep -q '^ok    mutation scope-right-side-head: red -> scope scenario merge-from-main' "$TMP/mh.out" \
     && grep -q '^ok    mutation scope-unusable-pin-passes: red -> scope scenario bad-pin' "$TMP/mh.out" \
     && pass "AC4.m3 008c-verify.sh --mutate at HEAD: exit 0, all $got_n mutations red (expected $exp_n), both scope mutations named" \
