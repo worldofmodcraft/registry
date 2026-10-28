@@ -83,3 +83,8 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   12. Only then: mark criteria done, append the outputs, push; no PR from the agent.
 - 2026-10-28 qa-engineer: PIN COMMIT `7ff6fe792b03674b8969c3d28921b9fcb6b78fc9` (089a2-verify.sh only: PIN_RED=42d7d46c9081c11f217e50c4be21f93f3b5e022e, PIN_FIX=PIN_FINAL=672edcd971fdf74e0a827fa4255f87cfcbb02cbe, PIN_TIP=3d989b5b871032b44acf38eefe15a2d7f133dc41). Phase 1 ends here; phase 2 starts at step 1 of the command list above and must check that `git rev-parse HEAD` of the fresh clone equals the last pushed commit.
 - 2026-10-28 qa-engineer: found while re-reading (not run): AC11.12 would have failed on the script own grep patterns (they contained the literal path). Patterns now use a bracket (`/ho[m]e/`); the script is committed after the pin commit; its pins are unchanged (TIP stays 3d989b5, outside this commit).
+- 2026-10-28 manager (session 14): phase 1 accepted for phase 2 (log check exit 0; head `a4891ed`). Triage (★, overnight ruling; §8b 3a):
+  Q4 outcome B (fixture blob) accepted: registry history has no `docs/decisions`, so option A is impossible, which the task's ★ allowed for.
+  Q1 ★ inline (in scope). Q2 ★ excerpt: what 057 asserts is the ADR's title and Status line; the platform blob id `16064b5` is recorded beside it
+  for provenance. Q3 ★ as proposed. Q4 ★ leave (closed task records are history). Q5 ★ accept: the variable is set only on the OLD blob to
+  exhibit its defect; the NEW script must ignore it (asserted). Expect a fix round after phase 2 (agent's own warning).
