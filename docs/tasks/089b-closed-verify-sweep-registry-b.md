@@ -120,3 +120,8 @@ Criterion 9 (quiet machine) is mandatory: one script at a time, `ps` logged befo
   parent `089b-verify.sh` process as another running verify script (same class of defect as S4). The stub run now puts a `ps` shim on PATH for that one child that hides only `089b-verify.sh`; nothing else is hidden.
   Whole harness (default mode, real name, quiet machine: `ps` empty at 2026-10-28T10:23:33Z), 13 minutes: every check PASS (AC0 x13, AC1 x15, AC5 x3, AC3 x6, AC8 x9) except AC11.9 (hunk-limit regex too narrow for the
   replaced old lines of class_check and the sweep call: a harness bug, not a source finding), widened in commit 9ec482278f58eb94c0fe8e8a057f3fe752ea30ad. Mutation mode (`--mutate`) 5/5 PASS (above).
+- 2026-10-28 qa-engineer: pins re-set (FINAL `9ec482278f58eb94c0fe8e8a057f3fe752ea30ad`, TIP `7d195338ee6ad07df8db224e380a27ac48033808`; the re-pin commit follows TIP and changes only 089b-verify.sh);
+  `089b-verify.sh --own-only` ALL CHECKS PASSED (AC11.1-11.11). Branch pushed (no PR). LONG RUNS (criteria 9 and 10) started 2026-10-28T10:36:05Z by a sequential driver
+  (`/tmp/w089b/long-driver.sh`, not a *-verify.sh name; ps logged before each step in `/tmp/w089b/long/status.txt`; outputs `/tmp/w089b/long/*.out`), HEAD under test `2383177c00d0c4546979f08dd5f94310f3369b83`:
+  L1 065 unfixed then fixed on 039b's merge `e9091748...` (criterion 10); L2 whole `039a-verify.sh` on plain HEAD (every closed script one at a time); L3 whole `039a-verify.sh` on HEAD + four synthetic
+  later branches (ownership sentence, test_hardening test name, R11 configured, test added to test_ci_gate.py). Resume: `cat /tmp/w089b/long/status.txt`; a step missing its `exit` line has not finished.
