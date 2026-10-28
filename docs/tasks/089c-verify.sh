@@ -344,6 +344,12 @@ else
     npin=$(G diff -U0 "$PIN_RED" "$PIN_FIX" -- docs/tasks/069-verify.sh | grep -cE '^\+[^+].*PIN064')
     d069="$(nonc docs/tasks/069-verify.sh | grep -vE 'PIN064|AC5\.3|034\.real|c33_judge|origin/task/064|^[+-][[:space:]]*(else|fi)$' | wc -l)"
     [ "$d069" = 0 ] && [ "$npin" -ge 2 ] && pass "AC11.7 069-verify.sh changed only in the PIN064 pin and the AC5.3 check ($npin added PIN064 line(s), 0 other)" || fail "AC11.7 069-verify.sh changed outside AC5.3 and the pin ($d069 line(s)), or the pin is not added ($npin)"
+    # after TIP only the pin commit(s) and the log: 089c-verify.sh changes only its PIN_* lines, no other file but the task file
+    post_files="$(G diff --name-only "$PIN_TIP" HEAD 2>/dev/null | grep -vx docs/tasks/089c-closed-verify-sweep-registry-c.md | sort | tr '\n' ' ')"
+    [ -z "$post_files" ] || [ "$post_files" = "docs/tasks/089c-verify.sh " ] && pass "AC11.9a TIP..HEAD touches only 089c-verify.sh and the task file" || fail "AC11.9a TIP..HEAD touches: $post_files"
+    npost=$(G diff -U0 "$PIN_TIP" HEAD -- docs/tasks/089c-verify.sh | grep -E '^[+-][^+-]' | wc -l)
+    nother=$(G diff -U0 "$PIN_TIP" HEAD -- docs/tasks/089c-verify.sh | grep -E '^[+-][^+-]' | grep -vcE '^[+-]PIN_(RED|FIX|FINAL|TIP)=')
+    [ "$nother" = 0 ] && [ "$npost" -ge 1 ] && pass "AC11.9b TIP..HEAD changes only the PIN_* lines of 089c-verify.sh ($npost changed line(s), 0 other)" || fail "AC11.9b 089c-verify.sh changed after TIP outside the PIN_* lines ($nother line(s)) or the pins were not written ($npost)"
     bash -n <(G show "$PIN_FIX:docs/tasks/069-verify.sh") 2>/dev/null && pass "AC11.8 069-verify.sh at the fix commit passes bash -n" || fail "AC11.8 069-verify.sh at the fix commit does not parse"
 fi
 
@@ -373,15 +379,22 @@ else fail "AC4.m1c cannot build the frame"; fi
 if mk_later "$TMP/m2" "$HEADREV" deleted "$L_FILE" "$L_OLD" "$L_NEW"; then
     mut_run "AC4.m2 the pin widened to HEAD, on HEAD merged with a later branch editing 034-verify.sh" "$TMP/m2" "PIN064=\"$P064\"" 'PIN064="HEAD"' '^FAIL  AC5\.3 the actual 064 034-verify\.sh at HEAD is not accepted'
 else fail "AC4.m2 cannot build the later-branch merge"; fi
-# m3: the silent skip restored (the else branch prints instead of failing) with a bad pin: the AC3 detector must fire
-if mk_frame "$TMP/m3" "$HEADREV" deleted; then
-    cp "$NEWD/069.trunc.sh" "$TMP/m3/$TRUNC"
-    edit_file "$TMP/m3/$TRUNC" "PIN064=\"$P064\"" 'PIN064="deadbee"' \
-        && edit_file "$TMP/m3/$TRUNC" 'fail "AC5.3 pinned commit $PIN064 (task 064'"'"'s FINAL) or its docs/tasks/034-verify.sh cannot be read in this clone"' 'echo "  note: AC5.3 not evaluated"' \
-        && rc=$(run_in "$TMP/m3" "$TMP/m3.out" bash "$TRUNC")
-    if [ "${rc:-1}" = 0 ] && grep -Eiq "$PINSKIP" "$TMP/m3.out"; then pass "AC4.m3 the silent skip restored with PIN064=deadbee: exits 0 and the AC3 detector (skip / not evaluated) fires"
-    else fail "AC4.m3 the restored silent skip was not detected (exit ${rc:-unset}, or the mutation did not apply)"; fi
-else fail "AC4.m3 cannot build the frame"; fi
+# m3: the guard removed: AC5.3's `fail` line (the else branch) becomes a no-op. With each unreadable pin the expected `FAIL AC5.3` must then
+# be ABSENT (rc 0, no AC5.3 verdict): i.e. the AC3.1-3.3 detector set reddens when the guard is removed, so it does bite on 069's own line.
+GUARD='fail "AC5.3 pinned commit $PIN064 (task 064'"'"'s FINAL) or its docs/tasks/034-verify.sh cannot be read in this clone"'
+NOFILE_COMMIT="$(G rev-list --max-parents=0 "$OLDREF" 2>/dev/null | head -n1)"
+for bad in deadbee deadbeefdeadbeefdeadbeefdeadbeefdeadbeef "${NOFILE_COMMIT:-0}"; do
+    if mk_frame "$TMP/m3" "$HEADREV" deleted; then
+        rm -f "$TMP/m3.out"
+        cp "$NEWD/069.trunc.sh" "$TMP/m3/$TRUNC"
+        if edit_file "$TMP/m3/$TRUNC" "PIN064=\"$P064\"" "PIN064=\"$bad\"" && edit_file "$TMP/m3/$TRUNC" "$GUARD" ':'; then
+            rc=$(run_in "$TMP/m3" "$TMP/m3.out" bash "$TRUNC")
+            if [ "$rc" = 0 ] && ! grep -Eq '^FAIL  AC5\.3 ' "$TMP/m3.out" && ! grep -Eq '^PASS  AC5\.3 ' "$TMP/m3.out"; then
+                pass "AC4.m3 guard removed, PIN064=${bad:0:12}: exit 0 and the expected 'FAIL AC5.3' is absent (the AC3 detector would redden)"
+            else fail "AC4.m3 guard removed, PIN064=${bad:0:12}: the expected FAIL AC5.3 is still produced or the run is not silent (exit $rc): $(first_fail "$TMP/m3.out")"; fi
+        else fail "AC4.m3 the guard-removal mutation did not apply (pattern not found exactly once)"; fi
+    else fail "AC4.m3 cannot build the frame"; fi
+done
 # control: the unmutated NEW script on the later-branch merge stays green
 if mk_later "$TMP/m4" "$HEADREV" deleted "$L_FILE" "$L_OLD" "$L_NEW"; then
     place "$TMP/m4" "$NEWD/069.trunc.sh" "$TRUNC"; rc=$(run_in "$TMP/m4" "$TMP/m4.out" bash "$TRUNC")
