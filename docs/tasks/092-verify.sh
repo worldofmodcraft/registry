@@ -681,7 +681,9 @@ post_tip_check() {  # post_tip_check TIPREV HEADREV -> PASS/FAIL/NA line; return
     files="$(G log --first-parent --no-merges --no-renames --name-only --format= "$t..$h" 2>/dev/null)" || { fail "post-TIP: cannot list the commits after TIP"; return 1; }
     merges="$(G rev-list --first-parent --merges "$t..$h" 2>/dev/null)" || { fail "post-TIP: cannot list the merges after TIP"; return 1; }
     for c in $merges; do
-        np="$(G rev-list --parents -n 1 "$c" 2>/dev/null | wc -w)"
+        out="$(G rev-list --parents -n 1 "$c" 2>/dev/null)" || { fail "post-TIP: cannot read the parents of merge $c"; return 1; }
+        np="$(printf '%s\n' "$out" | wc -w)"
+        if [ "$np" -ne 3 ] && [ "$np" -le 3 ]; then fail "post-TIP: merge $c has an unexpected parent count (words $np)"; return 1; fi
         if [ "$np" -gt 3 ]; then fail "post-TIP: merge $c is an octopus merge (more than two parents); not accepted after TIP"; return 1; fi
         out="$(G diff-tree --cc --no-renames --name-only -r --no-commit-id "$c" 2>/dev/null)" || { fail "post-TIP: cannot read the combined diff of merge $c"; return 1; }
         files="$files"$'\n'"$out"
