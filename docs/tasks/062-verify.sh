@@ -493,9 +493,9 @@ expect_green "AC4.032" 032
 f=docs/tasks/057-verify.sh
 mutate $f '|docs/contracts/README\.md' '' one; applies $? "AC4.057.drop-path" && expect_red "AC4.057.drop-path (S1 declared-scope regex loses docs/contracts/README.md)" 057 "S1"
 restore $f
-mutate $f 'BASE_COMMIT="a50daac"' 'BASE_COMMIT="3ab8f43"' one && mutate $f 'FINAL_COMMIT="3ab8f43"' 'FINAL_COMMIT="a50daac"' one; applies $? "AC4.057.swap-pins" && expect_red "AC4.057.swap-pins (range reversed: T2 positive control, S2 additions-only and S4 all see the wrong side)" 057 "T2,S2,S4"
+mutate $f 'BASE_COMMIT="a50daacd7e26235d1acdeadc7d19265f1b2d04e3"' 'BASE_COMMIT="3ab8f43d96013889a48e2005c57a75731b3d655f"' one && mutate $f 'FINAL_COMMIT="3ab8f43d96013889a48e2005c57a75731b3d655f"' 'FINAL_COMMIT="a50daacd7e26235d1acdeadc7d19265f1b2d04e3"' one; applies $? "AC4.057.swap-pins" && expect_red "AC4.057.swap-pins (range reversed: T2 positive control, S2 additions-only and S4 all see the wrong side)" 057 "T2,S2,S4"
 restore $f
-mutate $f 'FINAL_COMMIT="3ab8f43"' 'FINAL_COMMIT="deadbee"' one; applies $? "AC4.057.bad-pin" && expect_red "AC4.057.bad-pin (unreachable pin must FAIL, never skip)" 057 "P0,T2"
+mutate $f 'FINAL_COMMIT="3ab8f43d96013889a48e2005c57a75731b3d655f"' 'FINAL_COMMIT="deadbee"' one; applies $? "AC4.057.bad-pin" && expect_red "AC4.057.bad-pin (unreachable pin must FAIL, never skip)" 057 "P0,T2"
 restore $f
 expect_green "AC4.057" 057
 
