@@ -51,4 +51,37 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   it saw (stderr). Criteria status: 1 (S1) written-not-run; 2 (pin = `M^2`, no branch read) written-not-run; 3 (deadbee FAIL, 0 skip words, positive
   control) written-not-run; 4 (mutate) written-not-run; 5 (item 12) written-not-run, see Q1; 6 (reachability, deleted branch passes, bad pin fails)
   written-not-run; 9 (quiet machine, complete 069 one at a time) written-not-run; 11 (scope) written-not-run. NOTHING IS DONE UNTIL PHASE 2.
+- 2026-10-28 qa-engineer: commits so far. RED `3b8db962327ea3f4dd82190551b0833e86e9df04` (089c-verify.sh + this file; its pins are still `__FIX__` etc.,
+  so it is red by construction: AC0.0 / AC11.0 FAIL). FIX `1564ad0731ea794bcd286f6dcd08ed5d7a77b509` (069-verify.sh only). Next: this log commit (TIP),
+  then the PIN commit that writes PIN_RED/PIN_FIX/PIN_FINAL/PIN_TIP into 089c-verify.sh (FINAL = the FIX commit: the last commit before the
+  pin commit that touches 069-verify.sh or 089c-verify.sh), then one log line with the resulting SHAs. Nothing is run.
+- 2026-10-28 qa-engineer: **PHASE-2 COMMANDS (exact, in order).** Fresh clone from GitHub, quiet machine, nothing else running. Paste each output into this log.
+  ```
+  # 0. fresh clone and branch (a new empty directory)
+  cd "$(mktemp -d)" && git clone https://github.com/worldofmodcraft/registry registry && cd registry
+  git checkout task/089c-closed-verify-sweep-registry-c && git log --oneline -3 && git --version
+  export PYTHONDONTWRITEBYTECODE=1
+  npm ci --prefix tools/dev
+  # 1. the machine must be quiet: this must print nothing (log the output; the script also logs ps itself before every child run)
+  ps -eo pid,ppid,args | grep -E '[0-9a-z]+-verify\.sh' | grep -v grep
+  # 2. red first for the script itself: at the RED commit it must FAIL (pins not set) -- expected exit != 0
+  git checkout -q 3b8db962327ea3f4dd82190551b0833e86e9df04 && bash docs/tasks/089c-verify.sh --own-only 2>&1 | tee /tmp/089c-0-red.log; git checkout -q task/089c-closed-verify-sweep-registry-c
+  # 3. AC11 only (fast)
+  bash docs/tasks/089c-verify.sh --own-only 2>&1 | tee /tmp/089c-1-own.log
+  # 4. AC0 / AC1 / AC3 / AC11 (default; truncated 069 runs, minutes)
+  bash docs/tasks/089c-verify.sh 2>&1 | tee /tmp/089c-2-default.log
+  # 5. AC4 mutations
+  bash docs/tasks/089c-verify.sh --mutate 2>&1 | tee /tmp/089c-3-mutate.log
+  # 6. AC9: complete NEW 069 on HEAD, on the later-branch merge, and 069 --mutate, one at a time (hours-scale; one script at a time)
+  bash docs/tasks/089c-verify.sh --full tools/dev/node_modules 2>&1 | tee /tmp/089c-4-full.log
+  # 7. nothing left over, nothing modified
+  git status --short; ps -eo pid,ppid,args | grep -E '[0-9a-z]+-verify\.sh' | grep -v grep
+  ```
+  Expected: step 2 exit != 0 with `FAIL  AC0.0` and `FAIL  AC11.0`; steps 3-6 end with `ALL CHECKS PASSED` and exit 0. If `FAIL  AC1.5` (062 inside 067) appears in
+  step 6, the script prints the full output: paste it and open S5 as a finding against 062. A failing step is a finding to report, not something to adjust.
+- 2026-10-28 qa-engineer: untested assumptions to watch in phase 2 (script written without being run): (1) `ps -eo pid=,ppid=,args=` and the awk filter in
+  `quiet_wait` behave as intended under WSL; (2) the truncated 069 copy (preamble + AC5) parses (checked with `bash -n` on a throw-away awk run over the
+  blobs: OLD 160 lines, NEW 163 lines, both parse); (3) `git clone` of the verifying clone carries HEAD's detached commit and the 034-verify.sh pattern
+  `C4.1 TRAVERSAL_PATHS contains` occurs once at HEAD (checked with grep: 1); (4) 069's AC5 output contains no "skip" word (069 prints
+  "never skip" only in --mutate labels, which the no-skip grep does not read).
 
