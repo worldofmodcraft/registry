@@ -79,3 +79,40 @@ Criterion 9 (quiet machine) is mandatory: one script at a time, `ps` logged befo
       FAIL  AC1.12c positive control: the NEW 039a-verify.sh still fails when a pinned test disappears from a counted class: wanted red, got exit 0 /^FAIL  AC4 identity source/: 
   Also in that run: AC1.8c/1.9c/1.10c/1.12b FAIL (NEW = unfixed: the same scripts redden on the merges), AC1.12c FAIL (the unfixed 039a stays GREEN when a pinned test is renamed: counts alone cannot see it), AC3.x FAIL
   (the unfixed 075/065 do not turn red on `deadbee`), AC8.3 FAIL (no `--no-closed`). Full text: the run is reproducible with `docs/tasks/089b-verify.sh` and PIN_FIX = e2f7fe383d7b2231e1d37a73e474bca7ed56af46.
+- 2026-10-28 qa-engineer: FIX commit `0f7f5b0bb9a54d6afcc519974dd4c1fe1dd1cc5e` (4 files, +60/-27: 065-verify.sh AC3.5 + FINAL pin; 075-verify.sh AC4 + full-SHA pins; 039a-verify.sh r11 config at FINAL, class_check from the
+  test names at FINAL, 039b called with `--no-closed`, header paragraph, full-SHA pins; test_ci_gate.py -6 lines: class AC9ProductionR11Unconfigured deleted, nothing added). Harness fixes: `979c3dfc5bbbe1fa91185a098e117649905d0ddf`.
+  Finding 11, the assertion is preserved: the deleted test asserted `json.loads(config/r11-identity.json) == {"schema_version": "1.0.0", "r11_identity": None}` on the live file; 039a-verify.sh now asserts
+  `d=={"schema_version":"1.0.0","r11_identity":None}` on `G show "$FINAL:config/r11-identity.json"` ("AC9 config/r11-identity.json at FINAL ... parses with r11_identity null"); AC0.12 asserts both halves.
+  Finding 12 outcome: FIXED (not recorded live): the unfixed 039a reddened when a later branch added a test to AC2PositiveControls (AC1.12a: `expected 7 ok tests, ran 8`); the fixed one stays green (AC1.12b), still
+  fails when a pinned test is renamed/removed (AC1.12c), and the widened-back-to-exact-counts mutation is red (AC4.m12). Q8 booked.
+  GREEN run of the harness (PIN_FIX = the fix commit; machine quiet, `ps` empty before; PYTHONDONTWRITEBYTECODE=1) after the fix, red/green per finding (AC0/AC1/AC3/AC5/AC8 lines):
+      PASS  AC1.8a the OLD 065-verify.sh on OLD + a later test_hardening.py edit: exit 1, FAIL  AC3.5 test_hardening split is not as specified
+      PASS  AC1.8b control: the OLD 065-verify.sh on plain OLD (the later branch is the cause): exit 0
+      PASS  AC1.8c the NEW 065-verify.sh on HEAD + the same later edit: exit 0
+      PASS  AC1.9a the OLD 075-verify.sh on OLD + a later ownership.md edit: exit 1, FAILMSG R3 does not state that R11 rejects (pattern '`R11` rejects it as well')
+      PASS  AC1.9b control: the OLD 075-verify.sh on plain OLD: exit 0
+      PASS  AC1.9c the NEW 075-verify.sh on HEAD + the same later edit: exit 0
+      PASS  AC1.10.00 positive control: both truncated copies are non-empty (176 / 203 lines)
+      PASS  AC1.10a the OLD 039a-verify.sh on OLD + R11 configured: exit 3, FAIL  test_ci_gate.py red (exit 1)
+      PASS  AC1.10b control: the OLD 039a-verify.sh (truncated) on plain OLD: exit 0
+      PASS  AC1.10c the NEW 039a-verify.sh on HEAD + R11 configured: exit 0
+      PASS  AC1.11 the moved assertion is red when config/r11-identity.json at the pin is non-null: exit 4, FAIL  FINAL is not an ancestor of TIP
+      PASS  AC1.12a the OLD 039a-verify.sh on OLD + a test added to AC2PositiveControls: exit 1, FAIL  AC2 positive controls: expected 7 ok tests, ran 8, ok 8
+      PASS  AC1.12b the NEW 039a-verify.sh on HEAD + the same added test: exit 0
+      PASS  AC1.12c positive control: the NEW 039a-verify.sh still fails when a pinned test disappears from a counted class: exit 1, FAIL  AC4 identity source: pinned test(s) not ok at HEAD: test_actor_env_and_commit
+      PASS  AC5.1 NEW 065-verify.sh --mutate on HEAD: exit 0
+      PASS  AC5.2 NEW 075-verify.sh on HEAD: exit 0
+      PASS  AC5.3 NEW 039a-verify.sh (truncated before AC12) on HEAD: exit 0
+      PASS  AC3.1 065 with FINAL=deadbee: exit 1, FAIL  AC3.5 test_hardening split is not as specified at FINAL deadbee (or the pin is unreadable)
+      PASS  AC3.2 075 with FINAL=deadbee: exit 4, FAIL  pin deadbee does not exist
+      PASS  AC3.3 039a with FINAL=deadbee: exit 17, FAIL  pin deadbee does not exist
+      PASS  AC3.4a positive control: the skip-word grep matches a sample line
+      PASS  AC3.4 'skip' / 'not evaluated' occur 0 times in the outputs of the deadbee and HEAD runs
+  MUTATIONS (--mutate, same conditions; each widened check red AND the only FAIL line of its run):
+      PASS  AC4.m8 065 AC3.5 widened back to the HEAD clone's test_hardening.py turns red, and only that check: exit 1, FAIL  AC3.5 test_hardening split is not as specified at FINAL e87498b47eced6fe388ec798ce31fbb6db
+      PASS  AC4.m9 075 AC4 widened back to the HEAD clone's ownership.md turns red, and only that check: exit 1, FAILMSG R3 does not state that R11 rejects (pattern '`R11` rejects it as well')
+      PASS  AC4.m10 039a r11-identity.json widened back to HEAD turns red, and only that check: exit 1, FAIL  AC9 config/r11-identity.json at FINAL ceb0458346ecf9f68454d1e3f2f1dafc1ea301c4 is not the null configurati
+      PASS  AC4.m11 039a moved AC9 assertion: the same line, widened (finding 11 is this check) turns red, and only that check: exit 1, FAIL  AC9 config/r11-identity.json at FINAL ceb0458346ecf9f68454d1e3f2f1dafc1ea3
+      PASS  AC4.m12 039a class_check widened back to exact counts at HEAD turns red, and only that check: exit 1, FAIL  AC2 positive controls: pinned test(s) not ok at HEAD: 
+  The remaining AC11 lines of that run (scope, hunk limits, ancestry) pass once the pins are committed (pin commit follows). Finding 8 is 065 AC3.5; 9 is 075 AC4; 10/11 are the 039a config line (m10/m11 are one line, mutated once
+  under two labels); 12 is class_check; S4 is the sweep call (AC8: NEW sweep invoked each of the 22 other scripts once, 039b with `--no-closed`; the OLD sweep ran 039b with no flag, whose predicate waits for a parent 039a: AC8.1/AC8.1b).
