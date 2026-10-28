@@ -20,7 +20,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
 import naming  # noqa: E402
-from pipeline_errors import PipelineError  # noqa: E402
+from pipeline_errors import PipelineError, Rejected  # noqa: E402
 
 # The one place the archive hostname is written. Its value is fixed by
 # contracts/artifact-naming.md, "The archived-source URL (`source_archive`)".
@@ -61,7 +61,12 @@ def source_archive_url(namespace: str, name: str, version: str) -> str:
         raise WriteBackRefused("bad-id", f"{namespace!r}:{name!r} does not match entry.schema.json's id pattern")
     if not _fullmatch(_PAT_SEMVER, version):
         raise WriteBackRefused("bad-version", f"{version!r} is not a semver string (entry.schema.json)")
-    naming.check_namespace(namespace)
+    try:
+        naming.check_namespace(namespace)
+    except Rejected as exc:
+        # 008a's check is a statement about a version; here the caller handed us an id that
+        # should never have passed validation, so it is a pipeline inconsistency (exit 2).
+        raise WriteBackRefused("reserved-namespace", exc.message) from exc
     tag = naming.release_tag(namespace, name, version)
     return f"https://{ARCHIVE_HOST}/{tag}/{tag}.tar.gz"
 
