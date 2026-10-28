@@ -65,8 +65,8 @@ OLDREF="e2f7fe383d7b2231e1d37a73e474bca7ed56af46"
 PIN_BASE="e2f7fe383d7b2231e1d37a73e474bca7ed56af46"   # registry main when 089b was cut
 PIN_RED="fcf2ac81ae38e5b53dbeaac425a199050fe52313"      # 089b-verify.sh + task file only
 PIN_FIX="0f7f5b0bb9a54d6afcc519974dd4c1fe1dd1cc5e"      # 065-verify.sh, 075-verify.sh, 039a-verify.sh, test_ci_gate.py
-PIN_FINAL="979c3dfc5bbbe1fa91185a098e117649905d0ddf"  # last commit touching a source file of the part
-PIN_TIP="dc338cdae0b2fe3b5e60eef53228a2cb66ea60c2"      # last commit of the branch before the pin commit (log/task-file only after FINAL)
+PIN_FINAL="9ec482278f58eb94c0fe8e8a057f3fe752ea30ad"  # last commit touching a source file of the part
+PIN_TIP="7d195338ee6ad07df8db224e380a27ac48033808"      # last commit of the branch before the pin commit (log/task-file only after FINAL)
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
