@@ -138,3 +138,15 @@ Workflow (without the write-back job, push-gated) + `sign_built.py` + `handoff.p
     ./docs/tasks/008b2-verify.sh --mutate 2>&1 | tee "$D/mutate.out"
     ```
     Expected: exit code 0 for both; paste both outputs into this log. Note that `scope` needs `origin/main` in the clone (the clone has it) and the 008b-1 commits are part of the branch base, so 008b-1 must have merged into `origin/main` or the scope check will list 008b-1's files as out of scope; in that case merge `origin/main` into the branch first (no rebase). The live criteria (7, 8, 10, 11, 25) are separate: first fill Q-S, then dispatch with `dry_run=true` per criterion 10.
+- 2026-10-28 manager (session 14): phase 1 accepted for phase 2 (log check exit 0; `6107b79`; 234 unit tests per the agent). Questions, answered by the
+  manager with evidence (§3.6c, unauthenticated reads only, empty credential helper):
+  **Q-S answered:** `minisign-0.12-linux.tar.gz` from the workflow's URL has SHA-256 `9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73`;
+  its `.minisig` verifies with the author's key from minisign's README line 161 (`RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3`):
+  "Signature and comment signature verified", trusted comment `timestamp:1737030580 file:minisign-0.12-linux.tar.gz hashed`; the archive holds
+  `minisign-linux/x86_64/minisign` (the path the workflow installs). Fill it in both `sign` and `dry-run`.
+  **Q-R answered:** `git ls-remote https://github.com/worldofmodcraft/archive HEAD` succeeds anonymously (`b640ff4`): the repo is public.
+  **Q-A answered:** anonymous `git ls-remote` of the tags: checkout v6.0.2 = `de0fac2e4500dabe0009e67214ff5f5447ce83dd`, upload-artifact v6.0.0 =
+  `b7c566a772e6b6bfb58ed0dc250532a479d7789f`, download-artifact v7.0.0 = `37930b1c2abaa49bbe596cd826c3c89aef350131` — all equal the workflow's pins.
+  **Q-D ★ A** (extra inputs `dry_run_id`/`dry_run_version`; reviewer to confirm against contracts/pipeline-trigger.md). **Q-K ★ A** (public key literal
+  in the `sign` job); booked: platform `docs/architecture/key-management.md` rotation procedure must name this literal as a place to update (platform
+  doc task, outside this task's scope).
