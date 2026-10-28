@@ -10,6 +10,9 @@
 #                                  only). The registry history never contained an ADR (asserted below), so Q4 option B applies:
 #                                  a fixture blob (the ADR's title and Status lines at platform commit 84064c9cf1c858844477701f32f42adea438bc6b,
 #                                  git blob 16064b511c422acca2d3f628bdfa7614c85440e6) embedded in 057-verify.sh. No path, no env var.
+#   F1 (fix round 1, scope extended by the manager, session 14): 062-verify.sh AC4 mutates 057-verify.sh with the literals
+#              'BASE_COMMIT="a50daac"' / 'FINAL_COMMIT="3ab8f43"'; widening 057's pins to 40 characters made them occur 0 times, so 062 went
+#              red. 062's 057-mutation literals (that block only) now name the full SHAs; AC1.X below cross-checks every literal against 057.
 #   S3         070-verify.sh header   said "ten closed scripts"; the script iterates twelve (derived from its CLOSED list, asserted).
 # Demonstrates acceptance criteria 1-5, 7, 9 (the mechanism) and 11 of docs/tasks/089a2-closed-verify-sweep-registry-a2.md (umbrella 089),
 # restricted to finding 6, S2 and S3. The long sequential runs (057-verify.sh whole, 070-verify.sh whole, one at a time on a quiet
@@ -68,8 +71,10 @@ OLDREF="32c641b5f56139a86c820f0b16d522c0f991d207"
 PIN_BASE="32c641b5f56139a86c820f0b16d522c0f991d207"   # registry main when 089a2 was cut
 PIN_RED="42d7d46c9081c11f217e50c4be21f93f3b5e022e"      # 089a2-verify.sh + task files only
 PIN_FIX="672edcd971fdf74e0a827fa4255f87cfcbb02cbe"      # 057-verify.sh, 057-textchecks.py, 070-verify.sh
-PIN_FINAL="672edcd971fdf74e0a827fa4255f87cfcbb02cbe"  # last commit touching a source file or script of the part (the NEW blobs are read here)
-PIN_TIP="3d989b5b871032b44acf38eefe15a2d7f133dc41"      # last commit of the branch before the pin commit (task-file only after FINAL)
+PIN_RED2="__RED2__"    # fix round 1, fixtures first: 089a2-verify.sh + task files only (the 062 cross-check, exact 057 hunk list)
+PIN_FIX2="__FIX2__"    # fix round 1: 062-verify.sh only (the 057 mutation literals)
+PIN_FINAL="__FINAL__"  # last commit touching a source file or script of the part (= PIN_FIX2; the NEW blobs are read here)
+PIN_TIP="__TIP__"      # last commit of the branch before the pin commit (task-file only after FINAL)
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
@@ -128,7 +133,7 @@ wait_quiet() {   # wait_quiet LABEL : log the ps reading; wait up to six hours; 
 
 # blobs of the scripts under test
 OLDD="$TMP/old"; NEWD="$TMP/new"; mkdir -p "$OLDD" "$NEWD"
-for s in 057 070; do
+for s in 057 070 062; do
     G show "$OLDREF:docs/tasks/$s-verify.sh" > "$OLDD/$s.sh" 2>/dev/null || fail "AC0.0 cannot read $s-verify.sh at OLD $OLDREF"
     if full40 "$PIN_FINAL"; then
         G show "$PIN_FINAL:docs/tasks/$s-verify.sh" > "$NEWD/$s.sh" 2>/dev/null || fail "AC0.0 cannot read $s-verify.sh at the final commit $PIN_FINAL"
@@ -181,6 +186,25 @@ if [ -n "$LATERDIR" ]; then
     exit 0
 fi
 
+# F1 cross-script check: every literal 062-verify.sh's AC4 block applies to 057-verify.sh must occur in the 057 blob (exactly once for the
+# "one" mutations of the block; at least once for the AC5 "all" mutation). cross062 FILE062 FILE057 : X_WHY describes, rc 0 good, 1 mismatch, 2 broken search
+cat > "$TMP/cross.py" <<'PYX'
+import re, sys
+t62 = open(sys.argv[1], encoding="utf-8").read()
+t57 = open(sys.argv[2], encoding="utf-8").read()
+m = re.search(r"(?m)^f=docs/tasks/057-verify\.sh$(.*?)^# ---- ", t62, re.S)
+if not m:
+    print("no 057 block found in 062-verify.sh"); sys.exit(2)
+lit = re.findall(r"mutate \$f '([^']*)'", m.group(1))
+allm = re.findall(r"(?m)^mutate docs/tasks/057-verify\.sh '([^']*)'", t62)
+if len(lit) < 4 or len(allm) < 1:
+    print("too few literals extracted (%d block, %d all): a search that finds nothing is broken" % (len(lit), len(allm))); sys.exit(2)
+bad = [l for l in lit if t57.count(l) != 1] + [l for l in allm if t57.count(l) < 1]
+print("%d block literal(s) + %d AC5 literal(s); not matching: %s" % (len(lit), len(allm), bad if bad else "none"))
+sys.exit(1 if bad else 0)
+PYX
+cross062() { X_WHY="$(python3 -I "$TMP/cross.py" "$1" "$2")"; return $?; }
+
 # S3 helper: s3_check FILE : the header of a 070-verify.sh blob names the number of closed scripts its CLOSED list holds (and iterates)
 num_word() { case "$1" in 10) echo ten ;; 11) echo eleven ;; 12) echo twelve ;; 13) echo thirteen ;; 14) echo fourteen ;; 15) echo fifteen ;; 16) echo sixteen ;; *) return 1 ;; esac; }
 S3_WHY=""
@@ -230,7 +254,7 @@ cnt() { grep -cF -- "$2" "$1"; }
 # Q4: option A needs a history the script can reach; the registry's never held an ADR, so option B (fixture) is the right one. A search that finds nothing is broken: the same command on docs/tasks must find commits.
 na=$(G log --all --format=%H -- 'docs/decisions' 'docs/decisions/0121-version-lifecycle-pending.md' | wc -l); nt=$(G log --all --format=%H -- docs/tasks | wc -l)
 [ "$na" = 0 ] && [ "$nt" -gt 0 ] && pass "AC0.9 Q4: no commit of any ref of this repository ever touched docs/decisions ($na); the same search on docs/tasks finds $nt commits (positive control): option B, fixture blob" || fail "AC0.9 Q4: docs/decisions history found ($na commits) or the control search is empty ($nt)"
-for s in 057 070; do bash -n "$NEWD/$s.sh" && pass "AC0.10 NEW $s-verify.sh passes bash -n" || fail "AC0.10 NEW $s-verify.sh has a syntax error"; done
+for s in 057 070 062; do bash -n "$NEWD/$s.sh" && pass "AC0.10 NEW $s-verify.sh passes bash -n" || fail "AC0.10 NEW $s-verify.sh has a syntax error"; done
 python3 -I -c 'import ast,sys; ast.parse(sys.stdin.read())' < "$NEWD/textchecks.py" && pass "AC0.11 NEW 057-textchecks.py parses" || fail "AC0.11 NEW 057-textchecks.py does not parse"
 bash -n "$NEWD/057.trunc.sh" && [ -s "$NEWD/057.trunc.sh" ] && [ -s "$OLDD/057.trunc.sh" ] \
     && pass "AC0.12 positive control: both truncated 057 copies are non-empty and the NEW one parses ($(wc -l < "$OLDD/057.trunc.sh") / $(wc -l < "$NEWD/057.trunc.sh") lines)" || fail "AC0.12 a truncated 057 copy is empty or does not parse"
@@ -273,6 +297,22 @@ maxl=$(printf '%s\n' "$d070" | sed -n 's/^@@ -\([0-9]*\).*/\1/p' | sort -n | tai
 [ "$nchg" -ge 2 ] && [ "$nonc" = 0 ] && [ "${maxl:-99}" -le 25 ] && pass "AC1.S3c git diff of 070-verify.sh OLD..FINAL: $nchg changed line(s), all '#' header comments (last hunk at line $maxl <= 25)" || fail "AC1.S3c 070-verify.sh changed outside its header ($nchg changed, $nonc not comments, last hunk at ${maxl:-?})"
 G diff -U0 "$OLDREF" "$PIN_FINAL" -- "$S070" | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' | grep -E 'ten closed|twelve closed' > "$TMP/s3lines.txt"
 [ "$(grep -c '^-.*ten closed' "$TMP/s3lines.txt")" -ge 1 ] && [ "$(grep -c '^+.*twelve closed' "$TMP/s3lines.txt")" -ge 1 ] && pass "AC1.S3d the diff replaces 'ten closed scripts' by 'twelve closed scripts'" || fail "AC1.S3d the diff does not replace ten by twelve"
+
+section "AC1.X -- F1: the literals 062-verify.sh mutates 057-verify.sh with must exist in the NEW 057 (red first: the OLD 062 against the NEW 057)"
+cross062 "$OLDD/062.sh" "$OLDD/057.sh"; rcx=$?
+[ "$rcx" = 0 ] && pass "AC1.Xa baseline: the OLD 062 literals all occur exactly once in the OLD 057 ($X_WHY)" || fail "AC1.Xa baseline broken: $X_WHY"
+cross062 "$OLDD/062.sh" "$NEWD/057.sh"; rcx=$?
+[ "$rcx" = 1 ] && pass "AC1.Xb red first: the OLD 062's 057 mutation literals do NOT all occur in the NEW 057, so 062 would print 'the mutation did not apply' ($X_WHY)" || fail "AC1.Xb the OLD 062 literals still fit the NEW 057 (rc $rcx): the finding is not reproduced: $X_WHY"
+cross062 "$NEWD/062.sh" "$NEWD/057.sh"; rcx=$?
+[ "$rcx" = 0 ] && pass "AC1.Xc the NEW 062's 057 mutation literals each occur exactly once in the NEW 057 ($X_WHY)" || fail "AC1.Xc the NEW 062 literals do not fit the NEW 057: $X_WHY"
+# no closed script at FINAL still names 057's short pins as a mutation literal (the grep must be able to match)
+printf 'x BASE_COMMIT="a50daac" y\n' > "$TMP/pinctl.txt"
+grep -q 'BASE_COMMIT="a50daac"' "$TMP/pinctl.txt" && pass "AC1.Xd positive control: the short-pin grep matches a sample line" || fail "AC1.Xd the short-pin grep cannot match"
+short=0
+for f in $(G ls-tree --name-only "$PIN_FINAL" docs/tasks/ | grep -E 'docs/tasks/[^/]*-verify\.sh$'); do
+    n=$(G show "$PIN_FINAL:$f" | grep -cE '(BASE|FINAL)_COMMIT="(a50daac|3ab8f43)"'); short=$((short + n))
+done
+[ "$short" = 0 ] && pass "AC1.Xe no closed verify script at FINAL still names 057's short pins as a literal (0 hits over every docs/tasks/*-verify.sh)" || fail "AC1.Xe $short script line(s) at FINAL still name 057's short pins"
 fi   # OWN = 0
 
 # ==================================================================================================
@@ -297,36 +337,73 @@ else fail "AC3.0 cannot clone HEAD"; fi
 fi   # OWN = 0
 
 section "AC11 -- 089a2's own change, measured on fixed SHAs (never HEAD)"
-if [ "$PIN_RED" = "__RED__" ] || [ "$PIN_FIX" = "__FIX__" ] || [ "$PIN_FINAL" = "__FINAL__" ] || [ "$PIN_TIP" = "__TIP__" ]; then
+if [ "$PIN_RED2" = "__RED2__" ] || [ "$PIN_FIX2" = "__FIX2__" ] || [ "$PIN_FINAL" = "__FINAL__" ] || [ "$PIN_TIP" = "__TIP__" ]; then
     fail "AC11.0 the 089a2 red/fix/final/tip SHAs are not pinned yet"
 else
-    for s in "$PIN_BASE" "$PIN_RED" "$PIN_FIX" "$PIN_FINAL" "$PIN_TIP"; do
+    for s in "$PIN_BASE" "$PIN_RED" "$PIN_FIX" "$PIN_RED2" "$PIN_FIX2" "$PIN_FINAL" "$PIN_TIP"; do
         full40 "$s" || fail "AC11.1 pin '$s' is not a full 40-character SHA"
         G cat-file -e "$s^{commit}" 2>/dev/null && pass "AC11.1 pin $s exists" || fail "AC11.1 pin $s does not exist"
     done
     G merge-base --is-ancestor "$PIN_BASE" "$PIN_RED" && G merge-base --is-ancestor "$PIN_RED" "$PIN_FIX" \
-        && G merge-base --is-ancestor "$PIN_FIX" "$PIN_FINAL" && G merge-base --is-ancestor "$PIN_FINAL" "$PIN_TIP" && G merge-base --is-ancestor "$PIN_TIP" HEAD \
-        && pass "AC11.2 BASE < RED < FIX <= FINAL <= TIP <= HEAD (ancestry)" || fail "AC11.2 the pins are not in ancestry order"
+        && G merge-base --is-ancestor "$PIN_FIX" "$PIN_RED2" && G merge-base --is-ancestor "$PIN_RED2" "$PIN_FIX2" && [ "$PIN_FIX2" = "$PIN_FINAL" ] && G merge-base --is-ancestor "$PIN_FINAL" "$PIN_TIP" && G merge-base --is-ancestor "$PIN_TIP" HEAD \
+        && pass "AC11.2 BASE < RED < FIX <= RED2 < FIX2 = FINAL <= TIP <= HEAD (ancestry)" || fail "AC11.2 the pins are not in ancestry order"
     TASKFILES='docs/tasks/089-closed-verify-sweep-registry.md|docs/tasks/089a2-closed-verify-sweep-registry-a2.md'
     red_files="$(G diff --name-only "$PIN_BASE" "$PIN_RED" 2>/dev/null | grep -vxE "$TASKFILES" | sort | tr '\n' ' ')"
     [ "$red_files" = "docs/tasks/089a2-verify.sh " ] && pass "AC11.3 the red commit touches only 089a2-verify.sh and the task files" || fail "AC11.3 the red commit touches: $red_files"
     fix_files="$(G diff --name-only "$PIN_RED" "$PIN_FIX" 2>/dev/null | grep -vxE "$TASKFILES" | sort | tr '\n' ' ')"
     [ "$fix_files" = "docs/tasks/057-textchecks.py docs/tasks/057-verify.sh docs/tasks/070-verify.sh " ] \
         && pass "AC11.4 the fix commit touches only 057-verify.sh, 057-textchecks.py and 070-verify.sh (and task files)" || fail "AC11.4 the fix commit touches: $fix_files"
+    rf2="$(G diff --name-only "$PIN_FIX" "$PIN_RED2" 2>/dev/null | grep -vxE "$TASKFILES" | sort | tr '\n' ' ')"
+    [ "$rf2" = "docs/tasks/089a2-verify.sh " ] && pass "AC11.3b fixtures first: FIX..RED2 touches only 089a2-verify.sh and the task files (the 062 cross-check exists before the 062 fix)" || fail "AC11.3b FIX..RED2 touches: $rf2"
+    ff2="$(G diff --name-only "$PIN_RED2" "$PIN_FIX2" 2>/dev/null | grep -vxE "$TASKFILES" | sort | tr '\n' ' ')"
+    [ "$ff2" = "docs/tasks/062-verify.sh " ] && pass "AC11.4b the second fix commit touches only 062-verify.sh (and task files)" || fail "AC11.4b RED2..FIX2 touches: $ff2"
     if ! scope_files="$(G diff --name-only "$PIN_BASE" "$PIN_TIP" 2>&1)"; then fail "AC11.5 cannot compute $PIN_BASE..$PIN_TIP"; else
-        extra="$(printf '%s\n' "$scope_files" | grep -vxE "docs/tasks/057-verify\.sh|docs/tasks/057-textchecks\.py|docs/tasks/070-verify\.sh|docs/tasks/089a2-verify\.sh|$TASKFILES" | tr '\n' ' ')"
+        extra="$(printf '%s\n' "$scope_files" | grep -vxE "docs/tasks/057-verify\.sh|docs/tasks/057-textchecks\.py|docs/tasks/070-verify\.sh|docs/tasks/062-verify\.sh|docs/tasks/089a2-verify\.sh|$TASKFILES" | tr '\n' ' ')"
         [ -n "$scope_files" ] && [ -z "$extra" ] && pass "AC11.5 BASE..TIP stays inside the declared file scope" || fail "AC11.5 out-of-scope files in BASE..TIP (or the range is empty): $extra"
     fi
-    last_src="$(G log -1 --format=%H "$PIN_BASE..$PIN_TIP" -- docs/tasks/057-verify.sh docs/tasks/057-textchecks.py docs/tasks/070-verify.sh docs/tasks/089a2-verify.sh 2>/dev/null)"
+    last_src="$(G log -1 --format=%H "$PIN_BASE..$PIN_TIP" -- docs/tasks/057-verify.sh docs/tasks/057-textchecks.py docs/tasks/070-verify.sh docs/tasks/062-verify.sh docs/tasks/089a2-verify.sh 2>/dev/null)"
     [ -n "$last_src" ] && [ "$last_src" = "$(G rev-parse "$PIN_FINAL^{commit}" 2>/dev/null)" ] && pass "AC11.6a FINAL is the last commit in BASE..TIP that touched a source or script file" || fail "AC11.6 FINAL ${PIN_FINAL:0:12} is not the last source-touching commit (that is ${last_src:0:12})"
     if ! tail_files="$(G diff --name-only "$PIN_FINAL" "$PIN_TIP" 2>&1)"; then fail "AC11.6 cannot compute FINAL..TIP"
     elif [ -z "$(printf '%s\n' "$tail_files" | grep -vE '^docs/tasks/089a2-closed-verify-sweep-registry-a2\.md$')" ]; then pass "AC11.6b FINAL..TIP touches only the 089a2 task file"
     else fail "AC11.6 FINAL..TIP touches: $(printf '%s' "$tail_files" | tr '\n' ' ')"; fi
     # hunk limits: each source file changes only where the finding says
     nonc() { G diff -U0 "$OLDREF" "$PIN_FINAL" -- "$1" | grep -E '^[+-][^+-]' | grep -vE '^[+-][[:space:]]*#' ; }
-    ALLOW057='PLATFORM_REPO|BASE_COMMIT=|FINAL_COMMIT=|ADR|README|textchecks|text check|passing text|^[+-][[:space:]]*(fi|else)$|/tmp/057-text|grep .\^FAIL. /tmp|^\+\)"$'
-    d057="$(nonc docs/tasks/057-verify.sh | grep -vcE "$ALLOW057")"
-    [ "$d057" = 0 ] && pass "AC11.7 057-verify.sh changed only in comments, the two pins, the A1 block and the T1 block" || fail "AC11.7 057-verify.sh changed outside A1/T1/pins ($d057 lines): $(nonc docs/tasks/057-verify.sh | head -n3 | cut -c1-90 | tr '\n' '|')"
+    # exact expected non-comment hunk text of 057-verify.sh (sorted, C locale): the pins, the A1 block, the T1 block; anything else is a finding
+    LC_ALL=C sort > "$TMP/exp057.txt" <<'EXP057'
++  $PY docs/tasks/057-textchecks.py --readme "$README_BLOB" > /tmp/057-text.$$ ; rc=$?
++  [ $rc -eq 0 ] && pass "T1 all text checks (old sentences gone, new sentences present, sections equal their full-text pins, README at $FINAL_COMMIT names task 057)" || fail "T1 $rc text check(s) failed"
++  fail "T1 cannot read docs/contracts/README.md at pinned FINAL_COMMIT $FINAL_COMMIT: the text checks cannot run"
++  grep '^FAIL' /tmp/057-text.$$
++  grep -c '^PASS' /tmp/057-text.$$ | sed 's/^/  passing text checks: /'
++  rm -f /tmp/057-text.$$
++)"
++ADR0121
++ADR="$(cat <<'ADR0121'
++BASE_COMMIT="a50daacd7e26235d1acdeadc7d19265f1b2d04e3"
++FINAL_COMMIT="3ab8f43d96013889a48e2005c57a75731b3d655f"
++README_BLOB="$(mktemp)"
++else
++fi
++if git show "$FINAL_COMMIT:docs/contracts/README.md" > "$README_BLOB" 2>/dev/null && [ -s "$README_BLOB" ]; then
++if printf '%s\n' "$ADR" | grep -q '^# ADR-0121:' && printf '%s\n' "$ADR" | grep -q 'Status:\*\* Accepted'; then pass "A1 ADR-0121 (fixture blob of platform commit 84064c9, ADR blob 16064b5) carries 'Status:** Accepted'"; else fail "A1 the ADR-0121 fixture does not carry 'Status:** Accepted'"; fi
++rm -f "$README_BLOB"
+-$PY docs/tasks/057-textchecks.py > /tmp/057-text.$$ ; rc=$?
+-ADR="$(git -C "$PLATFORM_REPO" show main:docs/decisions/0121-version-lifecycle-pending.md 2>/dev/null)"
+-BASE_COMMIT="a50daac"
+-FINAL_COMMIT="3ab8f43"
+-PLATFORM_REPO="${PLATFORM_REPO:-/home/ludwig/wom}"
+-[ $rc -eq 0 ] && pass "T1 all text checks (old sentences gone, new sentences present, sections equal their full-text pins)" || fail "T1 $rc text check(s) failed"
+-grep '^FAIL' /tmp/057-text.$$
+-grep -c '^PASS' /tmp/057-text.$$ | sed 's/^/  passing text checks: /'
+-if [ -n "$ADR" ] && printf '%s\n' "$ADR" | grep -q 'Status:\*\* Accepted'; then pass "A1 ADR-0121 on $PLATFORM_REPO main carries 'Status:** Accepted'"; else fail "A1 ADR-0121 not found or not Accepted on $PLATFORM_REPO main"; fi
+-rm -f /tmp/057-text.$$
+EXP057
+    nonc docs/tasks/057-verify.sh | LC_ALL=C sort > "$TMP/act057.txt"
+    d057="$(diff "$TMP/exp057.txt" "$TMP/act057.txt" | grep -c '^[<>]')"; [ -s "$TMP/act057.txt" ] || d057=999
+    [ "$d057" = 0 ] && pass "AC11.7 057-verify.sh non-comment hunks equal the recorded exact list (27 lines: the two pins, the A1 block, the T1 block)" || fail "AC11.7 057-verify.sh hunks differ from the recorded exact list ($d057 differing lines): $(diff "$TMP/exp057.txt" "$TMP/act057.txt" | head -n3 | cut -c1-90 | tr '\n' '|')"
+    d062="$(G diff -U0 "$OLDREF" "$PIN_FINAL" -- docs/tasks/062-verify.sh | grep -E '^[+-][^+-]')"
+    n062=$(printf '%s\n' "$d062" | grep -c .); b062=$(printf '%s\n' "$d062" | grep -vcE "^[+-]mutate \\\$f '(BASE|FINAL)_COMMIT=\"[0-9a-f]+\"' '(BASE|FINAL)_COMMIT=\"[0-9a-f]+\"' one")
+    [ "$n062" = 4 ] && [ "$b062" = 0 ] && pass "AC11.13 062-verify.sh changed in exactly 4 lines (2 removed, 2 added), each a 057 BASE/FINAL_COMMIT mutation line, nothing else" || fail "AC11.13 062-verify.sh changed outside the 057 pin-literal mutations ($n062 changed lines, $b062 not of that shape)"
     # 057-textchecks.py: the AST without its docstring is identical (only the docstring changed)
     G show "$OLDREF:$TXC" > "$TMP/tx.old.py"; G show "$PIN_FINAL:$TXC" > "$TMP/tx.new.py"
     cat > "$TMP/astcmp.py" <<'PY'
@@ -381,6 +458,19 @@ mutate_057 "AC4.m2 A1 fixture says Proposed (the check reads the fixture, so it 
 mutate_057 "AC4.m2b A1 fixture title line removed (an empty search is broken, not clean)" \
     "grep -q '^# ADR-0121:'" "grep -q '^# ADR-9999:'" \
     '^FAIL  A1 ' '^FAIL  A1 '
+# F1: a 057 whose pin literal changed shape reddens the cross-check; a 062 without the 057 block is an error, not green
+mutx() {   # mutx LABEL FILE062 FILE057 OLD NEW (the 057 edit)
+    cp "$3" "$TMP/x57.sh"; edit_file "$TMP/x57.sh" "$4" "$5" || { fail "AC4.$1: the mutation did not apply"; return; }
+    cross062 "$2" "$TMP/x57.sh"; local rc=$?
+    [ "$rc" = 1 ] && pass "AC4.$1 turns red: $X_WHY" || fail "AC4.$1 stayed green or errored (rc $rc): $X_WHY"
+}
+mutx "m-X1 057 BASE_COMMIT back to the short form" "$NEWD/062.sh" "$NEWD/057.sh" "BASE_COMMIT=\"$(pin_of "$NEWD/057.sh" BASE_COMMIT)\"" 'BASE_COMMIT="a50daac"'
+mutx "m-X2 057 FINAL_COMMIT assignment renamed" "$NEWD/062.sh" "$NEWD/057.sh" "FINAL_COMMIT=\"$(pin_of "$NEWD/057.sh" FINAL_COMMIT)\"" 'FINAL_PIN="x"'
+cp "$NEWD/062.sh" "$TMP/x62.sh"
+if edit_file "$TMP/x62.sh" 'f=docs/tasks/057-verify.sh' 'f=docs/tasks/057-verify.shX'; then
+    cross062 "$TMP/x62.sh" "$NEWD/057.sh"; rcx=$?
+    [ "$rcx" = 2 ] && pass "AC4.m-X3 a 062 without the 057 block is an error (rc 2), never green: $X_WHY" || fail "AC4.m-X3 a missing 057 block in 062 did not error (rc $rcx): $X_WHY"
+else fail "AC4.m-X3 the mutation did not apply"; fi
 # S3: the header count is derived from the CLOSED list; a list that grows, shrinks or disappears must redden the check
 mut_s3() {   # mut_s3 LABEL OLD NEW
     cp "$NEWD/070.sh" "$TMP/s3m.sh"
