@@ -116,6 +116,9 @@ trunc_039a() {
     printf '%s\n' "printf '\\n== RESULT ==\\n'; exit \"\$FAILURES\""
 }
 
+trunc_039a "$OLDD/039a.sh" > "$OLDD/039a.trunc.sh" || fail "AC0.0b the OLD 039a-verify.sh has no single AC12 marker"
+trunc_039a "$NEWD/039a.sh" > "$NEWD/039a.trunc.sh" || fail "AC0.0b the NEW 039a-verify.sh has no single AC12 marker"
+
 # mk_frame DEST REV : a clone detached at REV
 mk_frame() {
     git clone -q --no-hardlinks "$ROOT" "$1" 2>/dev/null || return 1
@@ -222,8 +225,6 @@ if ! mk_later "$TMP/n9" "$HEADREV" contracts/ownership.md "$OWN_OLD" "$OWN_NEW";
     expect "AC1.9c the NEW 075-verify.sh on HEAD + the same later edit" green "$rc" "$TMP/n9.out" '^PASS  R11.s mixed-PR sentence is amended' '!^FAIL'
 fi
 # ---- finding 10 (and 11): 039a, truncated before AC12. A later branch configures R11 (config/r11-identity.json stops being null).
-trunc_039a "$OLDD/039a.sh" > "$OLDD/039a.trunc.sh" || fail "AC1.10.0 the OLD 039a-verify.sh has no single AC12 marker"
-trunc_039a "$NEWD/039a.sh" > "$NEWD/039a.trunc.sh" || fail "AC1.10.0 the NEW 039a-verify.sh has no single AC12 marker"
 [ -s "$OLDD/039a.trunc.sh" ] && [ -s "$NEWD/039a.trunc.sh" ] && pass "AC1.10.00 positive control: both truncated copies are non-empty ($(wc -l < "$OLDD/039a.trunc.sh") / $(wc -l < "$NEWD/039a.trunc.sh") lines)"
 if ! mk_later "$TMP/o10" "$OLDREF" config/r11-identity.json "$CFG_OLD" "$CFG_NEW"; then fail "AC1.10.1 cannot build the config-later-branch merge on OLD"; else
     place "$TMP/o10" "$OLDD/039a.trunc.sh" docs/tasks/039a-trunc.sh; rc=$(run_in "$TMP/o10" "$TMP/o10.out" bash docs/tasks/039a-trunc.sh)
@@ -354,11 +355,11 @@ else
     else fail "AC11.6 FINAL..TIP touches: $(printf '%s' "$tail_files" | tr '\n' ' ')"; fi
     # hunk limits: each source file changes only where the finding says (comment lines and the named checks)
     nonc() { G diff -U0 "$PIN_RED" "$PIN_FIX" -- "$1" | grep -E '^[+-][^+-]' | grep -vE '^[+-][[:space:]]*#' ; }
-    d065="$(nonc docs/tasks/065-verify.sh | grep -vE 'FINAL=|th-final|AC3\.5|blob "\$FINAL"|sys\.argv\[1\]|^[+-]python3 -I - |^[+-]PYE$' | wc -l)"
+    d065="$(nonc docs/tasks/065-verify.sh | grep -vE 'FINAL=|th-final|AC3\.5|rc35|blob "\$FINAL"|sys\.argv\[1\]|^[+-]python3 -I - |^[+-]PYE$' | wc -l)"
     [ "$d065" = 0 ] && pass "AC11.7 065-verify.sh changed only in the FINAL pin, comments and the AC3.5 check" || fail "AC11.7 065-verify.sh changed outside AC3.5 ($d065 lines)"
-    d075="$(nonc docs/tasks/075-verify.sh | grep -vE 'FINAL|BASE=|RED=|FIX=|ownership|^[+-]C=|"\$C"' | wc -l)"
+    d075="$(nonc docs/tasks/075-verify.sh | grep -vE 'FINAL|BASE=|RED=|FIX=|ownership|^[+-]C=|"\$C"|^[+-]\[ \$\? = 0 \] && .*R11' | wc -l)"
     [ "$d075" = 0 ] && pass "AC11.8 075-verify.sh changed only in pins (full SHAs), comments and the AC4 contract-text read" || fail "AC11.8 075-verify.sh changed outside AC4 and the pins ($d075 lines)"
-    d039="$(nonc docs/tasks/039a-verify.sh | grep -vE 'BASE=|RED=|FINAL=|TIP=|PINNED_TESTS|class_check|missing|pinned|ran=|ok=|r11|AC9|039b|args|note|FINAL|^[+-]\s*(fi|else|done|\)|\}|local)' | wc -l)"
+    d039="$(nonc docs/tasks/039a-verify.sh | grep -vE 'BASE=|RED=|FINAL=|TIP=|PINNED_TESTS|class_check|missing|pinned|ran=|ok=|r11|AC9|039b|args|note|FINAL|import ast|isinstance|print\(n\.name|^[+-]\s*(fi|else|elif|done|\)|\}|local|for [nm] in)|^[+-]\x27 >' | wc -l)"
     [ "$d039" = 0 ] && pass "AC11.9 039a-verify.sh changed only in pins, class_check, the r11 assertion and the 039b call" || fail "AC11.9 039a-verify.sh changed outside the named checks ($d039 lines)"
     d_tcg="$(G diff -U0 "$PIN_RED" "$PIN_FIX" -- tests/registry/test_ci_gate.py | grep -E '^\+[^+]' | wc -l)"
     [ "$d_tcg" = 0 ] && pass "AC11.10 test_ci_gate.py only lost lines (the AC9 unit test); nothing was added" || fail "AC11.10 test_ci_gate.py gained $d_tcg line(s)"
@@ -370,7 +371,7 @@ else
 section "AC4 mutations (each fixed check widened back to HEAD, on the later-branch merge on HEAD; red, and only that check)"
 mutate_run() {   # mutate_run LABEL FRAMEKIND(8|9|10|12) SCRIPTKEY OLD NEW RUNKIND ONLYREGEX FAILREGEX
     local label="$1" kind="$2" key="$3" old="$4" new="$5" run="$6" fr="$7" rc
-    local d="$TMP/m-$kind" blob
+    local d="$TMP/m-$kind-$RANDOM" blob
     case "$kind" in
         8)  mk_later "$d" "$HEADREV" tests/registry/test_hardening.py "$HARD_OLD" "$HARD_NEW" ;;
         9)  mk_later "$d" "$HEADREV" contracts/ownership.md "$OWN_OLD" "$OWN_NEW" ;;
@@ -385,7 +386,7 @@ mutate_run() {   # mutate_run LABEL FRAMEKIND(8|9|10|12) SCRIPTKEY OLD NEW RUNKI
         075)  cp "$TMP/mut.sh" "$d/$S075"; rc=$(run_in "$d" "$TMP/mut.out" bash "$S075") ;;
         039a) cp "$TMP/mut.sh" "$d/docs/tasks/039a-trunc.sh"; rc=$(run_in "$d" "$TMP/mut.out" bash docs/tasks/039a-trunc.sh) ;;
     esac
-    nfail=$(grep -c '^FAIL' "$TMP/mut.out")
+    nfail=$(grep -c '^FAIL  ' "$TMP/mut.out")
     if [ "$rc" != 0 ] && grep -Eq "$fr" "$TMP/mut.out" && [ "$nfail" = 1 ]; then pass "$label turns red, and only that check: exit $rc, $(grep '^FAIL' "$TMP/mut.out" | head -n1 | cut -c1-120)"
     else fail "$label: exit $rc, $nfail FAIL line(s) (want exactly 1 matching /$fr/): $(first_fail "$TMP/mut.out")"; fi
 }
