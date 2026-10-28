@@ -654,12 +654,18 @@ own_change_checks() {  # own_change_checks FINALREV
     return "$n"
 }
 
-# AC9 post-TIP: the commits after TIP (first-parent chain, name-only) touch only docs/tasks/092-* files. Note: `git log --first-parent --name-only`
-# lists no files for merge commits, so a conflict-resolution edit inside a main-into-branch merge after TIP is not seen (mitigation: BASE..TIP is
-# pinned above and main is reviewed separately). If TIP is an ancestor of HEAD but not on its first-parent chain (the branch was merged into main),
-# the check prints a NA line, NOT a PASS: NOT-APPLICABLE (merged). If TIP is not an ancestor of HEAD at all (rewritten away), it is RED.
+# AC9 post-TIP: the commits after TIP (first-parent chain) touch only docs/tasks/092-* files. How files are listed (task 089d): a first-parent
+# `git log` with name-only output diffs a merge against its FIRST parent (git >= 2.31 makes --first-parent imply --diff-merges=first-parent), so
+# a merge of main INTO the branch (GitHub's "Update branch") lists all of main's files and would redden a correct branch. Therefore: non-merge
+# first-parent commits are listed as before; for every merge C on the chain the files of `git diff-tree --cc` (differing from ALL parents:
+# conflict resolutions and edits made inside the merge) are added; a merge whose second parent is NOT an ancestor of the local main ref
+# (refs/remotes/origin/main when a remote exists, else refs/heads/main; an absent ref means not from main) also adds every file of
+# `git diff C^1 C^2`; an octopus merge is RED. No merge is skipped. A stale clone whose main predates a merge from main therefore gives RED,
+# never a skip (accepted). Renames are not followed (--no-renames), so moving a file out of its place is seen. If TIP is an ancestor of HEAD but
+# not on its first-parent chain (the branch was merged into main), the check prints a NA line, NOT a PASS: NOT-APPLICABLE (merged). If TIP is
+# not an ancestor of HEAD at all (rewritten away), it is RED.
 post_tip_check() {  # post_tip_check TIPREV HEADREV -> PASS/FAIL/NA line; returns 0/1
-    local t="$1" h="$2" files bad
+    local t="$1" h="$2" files bad c merges np mref="" out
     G cat-file -e "$t^{commit}" 2>/dev/null && G cat-file -e "$h^{commit}" 2>/dev/null || { fail "post-TIP check: pin $t or $h does not exist"; return 1; }
     if ! G merge-base --is-ancestor "$t" "$h" 2>/dev/null; then
         fail "post-TIP: TIP $t is not an ancestor of $h (history rewritten away from the pin)"; return 1
@@ -667,7 +673,24 @@ post_tip_check() {  # post_tip_check TIPREV HEADREV -> PASS/FAIL/NA line; return
     if ! G rev-list --first-parent "$h" 2>/dev/null | grep -x -F "$t" >/dev/null; then
         printf 'NA    post-TIP NOT-APPLICABLE (merged): %s is an ancestor of %s but not on its first-parent chain (BASE..TIP pins above still apply)\n' "$t" "$h"; return 0
     fi
-    files="$(G log --first-parent --name-only --format= "$t..$h" 2>/dev/null | sort -u | sed '/^$/d')"
+    if [ -n "$(G remote 2>/dev/null)" ]; then
+        G rev-parse --verify -q "refs/remotes/origin/main^{commit}" >/dev/null 2>&1 && mref="refs/remotes/origin/main"
+    else
+        G rev-parse --verify -q "refs/heads/main^{commit}" >/dev/null 2>&1 && mref="refs/heads/main"
+    fi
+    files="$(G log --first-parent --no-merges --no-renames --name-only --format= "$t..$h" 2>/dev/null)" || { fail "post-TIP: cannot list the commits after TIP"; return 1; }
+    merges="$(G rev-list --first-parent --merges "$t..$h" 2>/dev/null)" || { fail "post-TIP: cannot list the merges after TIP"; return 1; }
+    for c in $merges; do
+        np="$(G rev-list --parents -n 1 "$c" 2>/dev/null | wc -w)"
+        if [ "$np" -gt 3 ]; then fail "post-TIP: merge $c is an octopus merge (more than two parents); not accepted after TIP"; return 1; fi
+        out="$(G diff-tree --cc --no-renames --name-only -r --no-commit-id "$c" 2>/dev/null)" || { fail "post-TIP: cannot read the combined diff of merge $c"; return 1; }
+        files="$files"$'\n'"$out"
+        if [ -z "$mref" ] || ! G merge-base --is-ancestor "$c^2" "$mref" 2>/dev/null; then
+            out="$(G diff --no-renames --name-only "$c^1" "$c^2" 2>/dev/null)" || { fail "post-TIP: cannot diff the parents of merge $c"; return 1; }
+            files="$files"$'\n'"$out"
+        fi
+    done
+    files="$(printf '%s\n' "$files" | sed '/^$/d' | sort -u)"
     bad="$(printf '%s\n' "$files" | sed '/^$/d' | grep -v -E '^docs/tasks/092-[^/]+$')"
     if [ -z "$bad" ]; then pass "post-TIP: commits after TIP touch only docs/tasks/092-* files ($(printf '%s\n' "$files" | sed '/^$/d' | wc -l) file name(s))"; return 0
     else fail "post-TIP: commits after TIP touch files outside docs/tasks/092-*: $(echo "$bad" | tr '\n' ' ')"; return 1; fi
