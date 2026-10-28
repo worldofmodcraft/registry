@@ -15,14 +15,25 @@
 # AC12 runs the whole registry suite and every closed verify script ONE AT A TIME, and waits while another *-verify.sh runs.
 # To satisfy AC12's "fresh clone" clause run this script from a fresh `git clone` of the pushed branch.
 # Exit code: the number of failed checks. Requires: git, python3, node (AC12).
+#
+# Task 089b (closed-verify sweep, part B; findings 10, 11, 12 and S4):
+#  - The checks of 039a's OWN change read the pinned FINAL, never HEAD: config/r11-identity.json must be the null configuration AT FINAL
+#    (so Ludwig configuring R11 later cannot redden this script), and the per-class test counts are taken from tests/registry/test_ci_gate.py
+#    AT FINAL (every test the file has at FINAL must be ok at HEAD; a test ADDED to a class later is allowed, a test REMOVED or RENAMED is a FAIL).
+#    An unreadable FINAL is a FAIL for each of these checks. The old unit test AC9ProductionR11Unconfigured (it read the live config) was
+#    deleted from test_ci_gate.py and its assertion lives here, at the pin ("AC9 config/r11-identity.json at FINAL").
+#  - S4 (the double run): the AC12 sweep below runs every other *-verify.sh, 039b-verify.sh included, ONCE, but with --no-closed. 039b's own
+#    AC12 sweeps the same scripts again (twice the hours) and its quiet-wait counts a parent 039a-verify.sh as "another script running", so
+#    run from here without the flag it would wait for 039a to finish. With --no-closed 039b runs all its own checks and prints
+#    "AC12 NOT RUN (--no-closed)": that sweep is this loop. 039b-verify.sh run standalone still sweeps by itself.
 
 set -u
 set -o pipefail
 
-BASE=4356583        # registry origin/main (task 075 merged) the branch was cut from
-RED=88c97ac         # tests + fixtures only; ci_gate.py does not exist yet
-FINAL=ceb0458       # last commit that changes the composer, config or tests (later commits: log and this script only)
-TIP=999b2b7         # last commit of the branch before the one that pinned TIP: BASE..TIP is the scope-checked range, so a later
+BASE=4356583fb2360592a680f40bee396f9f23df35a4   # registry origin/main (task 075 merged) the branch was cut from
+RED=88c97ac5e0f77e429e4905198612ce82b15db47b    # tests + fixtures only; ci_gate.py does not exist yet
+FINAL=ceb0458346ecf9f68454d1e3f2f1dafc1ea301c4  # last commit that changes the composer, config or tests (later commits: log and this script only)
+TIP=999b2b798adee2ce02271ca82e104a3909e45684    # last commit of the branch before the one that pinned TIP: BASE..TIP is the scope-checked range, so a later
                     # merge with registry main (other tasks' files in BASE..HEAD) cannot redden it. The one commit after TIP changes
                     # only this script (in scope), which no check can pin without a cycle.
 
@@ -108,11 +119,26 @@ sys.exit(0 if res.wasSuccessful() else 1)
 PY
 ( cd "$TMP/head" && CLEAN python3 -I -B "$TMP/runner.py" > "$TMP/ci.out" 2> "$TMP/ci.err" ); rc=$?
 [ "$rc" = 0 ] && pass "tests/registry/test_ci_gate.py: $(grep '^ran ' "$TMP/ci.out")" || { fail "test_ci_gate.py red (exit $rc)"; grep '^BAD' "$TMP/ci.out"; }
-class_check() {  # class_check CLASS EXPECTED_COUNT LABEL : the class ran exactly N tests and every one is ok (zero matches fail)
-    local ran ok
+# The test names of tests/registry/test_ci_gate.py AT FINAL (one "Class test_name" per line), parsed with ast: a count taken from HEAD would
+# redden when a later branch legitimately adds a test (task 089b, finding 12). An unreadable FINAL leaves the file empty: every class_check FAILs.
+PINNED_TESTS="$TMP/pinned-tests.txt"
+G show "$FINAL:tests/registry/test_ci_gate.py" 2>/dev/null | python3 -I -c '
+import ast, sys
+for n in ast.parse(sys.stdin.read()).body:
+    if isinstance(n, ast.ClassDef):
+        for m in n.body:
+            if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)) and m.name.startswith("test"):
+                print(n.name, m.name)
+' > "$PINNED_TESTS" 2>/dev/null
+class_check() {  # class_check CLASS EXPECTED_COUNT LABEL : the class has EXPECTED_COUNT tests at FINAL and every one of them is ok at HEAD
+    local pinned ran ok missing
+    pinned="$(awk -v c="$1" '$1 == c' "$PINNED_TESTS" | wc -l)"
     ran="$(grep -c -E "^(ok|BAD) $1 " "$TMP/ci.out")"
     ok="$(grep -c -E "^ok $1 " "$TMP/ci.out")"
-    [ "$ran" = "$2" ] && [ "$ok" = "$2" ] && pass "$3: $ok/$2 tests ok" || fail "$3: expected $2 ok tests, ran $ran, ok $ok"
+    missing="$(awk -v c="$1" '$1 == c {print $2}' "$PINNED_TESTS" | while read -r t; do grep -q -x "ok $1 $t" "$TMP/ci.out" || printf '%s ' "$t"; done)"
+    if [ "$pinned" != "$2" ] || [ "$2" -le 0 ]; then fail "$3: the test file at FINAL ($FINAL) has $pinned test(s) in $1, expected $2 (unreadable pin or wrong count)"
+    elif [ -n "$missing" ]; then fail "$3: pinned test(s) not ok at HEAD: $missing"
+    else pass "$3: all $2 tests the file has at FINAL are ok at HEAD (HEAD runs $ran in the class, $ok ok)"; fi
 }
 named() {  # named TEST LABEL : one specific test ran and is ok
     grep -q -E "^ok [A-Za-z0-9]+ $1$" "$TMP/ci.out" && pass "$2 ($1)" || fail "$2 ($1) did not run green"
@@ -145,9 +171,10 @@ named test_flag_named_files_are_unrecognised_paths_never_checker_options "AC6 fl
 named test_flag_named_file_alone_takes_the_infra_route_and_runs_no_checker "AC6 a flag-named file alone takes the infra route"
 class_check ClassifyOnlyPrePass 4 "--classify-only pre-pass"
 class_check AC8NoNetworkNoEnvNoShell 4 "AC8 no network, no environment, no shell (AST scan + mutations)"
-class_check AC9ProductionR11Unconfigured 1 "AC9 production R11 unconfigured"
-git -C "$TMP/head" show HEAD:config/r11-identity.json | python3 -I -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d=={"schema_version":"1.0.0","r11_identity":None} else 1)' \
-    && pass "AC9 config/r11-identity.json at HEAD parses with r11_identity null" || fail "AC9 config/r11-identity.json is not the null configuration"
+# AC9, moved here from the unit test AC9ProductionR11Unconfigured (task 089b, finding 11; it asserted the same condition on the live file):
+#   doc == {"schema_version": "1.0.0", "r11_identity": None}. Read at FINAL: configuring R11 later is Ludwig's decision, not a regression of 039a.
+G show "$FINAL:config/r11-identity.json" | python3 -I -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d=={"schema_version":"1.0.0","r11_identity":None} else 1)' \
+    && pass "AC9 config/r11-identity.json at FINAL $FINAL parses with r11_identity null" || fail "AC9 config/r11-identity.json at FINAL $FINAL is not the null configuration (or the pin is unreadable)"
 # AC8, independent of the unit test: the composer source itself
 python3 -I - "$TMP/head/tools/registry/ci_gate.py" <<'PY' && pass "AC8 independent scan: no network/env/shell/eval, argv[0] is git or sys.executable" || fail "AC8 independent scan found a violation"
 import ast, sys
@@ -191,8 +218,10 @@ if [ -d "$NM/ajv" ] && command -v node >/dev/null 2>&1; then
     for f in $(cd "$TMP/head" && ls docs/tasks/*-verify.sh | sort); do
         case "$f" in *039a-verify.sh) continue ;; esac
         wait_quiet || { fail "$f: another verify script kept running"; continue; }
-        ( cd "$TMP/head" && env -u WOM_NODE_MODULES -u NODE_MODULES_DIR bash "$f" > "$TMP/v.out" 2>&1 ); rc=$?
-        if [ "$rc" = 0 ]; then pass "$(basename "$f") exits 0 on HEAD"; else fail "$(basename "$f") exit $rc on HEAD: $(grep -m3 '^FAIL' "$TMP/v.out" | tr '\n' ' ')"; fi
+        args=(); note=""
+        case "$f" in *039b-verify.sh) args=(--no-closed); note=" (--no-closed: its AC12 sweep is this loop)" ;; esac
+        ( cd "$TMP/head" && env -u WOM_NODE_MODULES -u NODE_MODULES_DIR bash "$f" ${args[@]+"${args[@]}"} > "$TMP/v.out" 2>&1 ); rc=$?
+        if [ "$rc" = 0 ]; then pass "$(basename "$f") exits 0 on HEAD$note"; else fail "$(basename "$f") exit $rc on HEAD: $(grep -m3 '^FAIL' "$TMP/v.out" | tr '\n' ' ')"; fi
     done
 else
     fail "AC12 prerequisite: node and a node_modules directory with ajv are needed for the closed scripts (npm ci --prefix tools/dev, or pass NODE_MODULES_DIR)"

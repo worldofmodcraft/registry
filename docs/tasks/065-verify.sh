@@ -16,6 +16,9 @@
 # measured on the fixed range BASE..FIX below, never HEAD or origin/main; the LIVE guards (tests, validators,
 # closed scripts) run on HEAD. Everything runs on the COMMITTED state in temporary clones; the caller's worktree is
 # never modified. Deterministic, no network. Exit code: the number of failed checks.
+# Task 089b (finding 8): AC3.5 (the test_hardening.py split) is 065's OWN change, so it reads tests/registry/test_hardening.py at
+# 065's pinned FINAL (PR #19's last commit, git rev-parse 208c6d1^2), not from the HEAD clone: a later task that legitimately edits
+# test_hardening.py cannot redden it. An unreadable FINAL is a FAIL. The live guards (AC2, AC4, AC5) still run on HEAD.
 # Run it with no other registry suite running (AC4 runs the other closed scripts one after the other).
 # Requires: git, python3, node, plus everything the closed verify scripts require (minisign, ...).
 
@@ -37,6 +40,7 @@ ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)" || exit 99
 BASE="4356583"      # registry origin/main when task 065 was cut (merge of PR #18, task 075)
 RED="3b53628"       # the commit that adds the failing tests and nothing else (AC1)
 FIX="e9b121e"       # 065's fix commit; the own-change checks measure BASE..FIX (a fixed range), never HEAD
+FINAL=e87498b47eced6fe388ec798ce31fbb6db09c16f   # last commit of PR #19 (git rev-parse 208c6d1^2); AC3.5 reads test_hardening.py here (task 089b)
 NEWTESTS="tests/registry/test_key_id_format.py"
 GOOD="E7A1B2C3D4E5F607"
 FAILURES=0
@@ -205,16 +209,18 @@ for r in removed:
 sys.exit(0 if sorted(removed) == sorted(EXPECT) else 1)
 PYE
 [ $? = 0 ] && pass "AC3.4 the only removed lines under tests/ are: 3 key_id values, the old hardening test header+docstring+loop (split, objective item 2b), and the pattern count 15 -> 16" || fail "AC3.4 unexpected removed line(s) under tests/ (see above)"
-python3 -I - "$TMP/head" <<'PYE'
+blob "$FINAL" tests/registry/test_hardening.py > "$TMP/th-final.py" 2>/dev/null
+python3 -I - "$TMP/th-final.py" <<'PYE'
 import re, sys
-t = open(sys.argv[1] + "/tests/registry/test_hardening.py").read()
+t = open(sys.argv[1]).read()
 sig = re.search(r"def test_f1_signature_carries_no_pattern_so_a_trailing_newline_is_contract_valid.*?(?=\n    def )", t, re.S).group(0)
 key = re.search(r"def test_f1_key_id_with_trailing_newline_is_rejected_task_065.*?(?=\n    def )", t, re.S).group(0)
 ok = ('"signature", "c" * 62 + "\\n"' in sig and '"accepted"' in sig and "rejected" not in sig.split('"""')[2]
       and '"rejected"' in key and "signature-format.md" in key and "065" in key)
 sys.exit(0 if ok else 1)
 PYE
-[ $? = 0 ] && pass "AC3.5 test_hardening: signature keeps its 'accepted' assertion; key_id moved to a test asserting 'rejected' that cites task 065 and signature-format.md" || fail "AC3.5 test_hardening split is not as specified"
+rc35=$?
+[ "$rc35" = 0 ] && [ -s "$TMP/th-final.py" ] && pass "AC3.5 test_hardening at FINAL $FINAL: signature keeps its 'accepted' assertion; key_id moved to a test asserting 'rejected' that cites task 065 and signature-format.md" || fail "AC3.5 test_hardening split is not as specified at FINAL $FINAL (or the pin is unreadable)"
 
 if [ "$MUTATE" = 0 ]; then
 section "AC4 -- the repository's suites and every closed verify script on HEAD (one at a time)"

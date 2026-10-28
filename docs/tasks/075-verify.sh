@@ -12,16 +12,19 @@
 # Task 084: the declared-file-scope check measures 075's PR #18 range BASE..FINAL (BASE = git merge-base 4356583^1 4356583^2,
 # FINAL = 4356583^2), not BASE..HEAD, so a later task that legitimately edits contracts/append-only.rules.md or schema.py
 # cannot redden it. Every other check here is a live property of HEAD (the tests, the contract text, 032-verify.sh).
+# Task 089b (finding 9): the AC4 contract-text check is 075's OWN change (the R11 / R3 / R7 sentences), so it reads
+# contracts/ownership.md at 075's pinned FINAL (git show "$FINAL:..."), not from the HEAD clone: a later task that legitimately edits
+# those sentences (008b's ownership carve-out) cannot redden it. An unreadable FINAL is a FAIL. The pins below are full 40-character SHAs.
 # Behaviour checks (AC2-AC4) run on the COMMITTED HEAD in a temporary clone; the caller's worktree is not modified.
 # Network: none. Exit code: the number of failed checks. Requires: git, python3.
 
 set -u
 set -o pipefail
 
-BASE=79d5377   # registry origin/main containing task 064
-RED=45c5be9    # tests only
-FIX=067a45d    # the fix (contract + checker + mutation entries)
-FINAL=7d91a3d  # the last commit of PR #18 (git rev-parse 4356583^2); BASE above is its fork point (git merge-base 4356583^1 4356583^2)
+BASE=79d537779c9fe717657aed9c4c85f90ba71fcd14   # registry origin/main containing task 064
+RED=45c5be9ef2eadcb3e48b56e5fe3eb7a5c0f9546a    # tests only
+FIX=067a45d0f8a125e2a5a20e76afefdb25cbf4f932    # the fix (contract + checker + mutation entries)
+FINAL=7d91a3d54d19431f4e3eff2dbed409cf00320887  # the last commit of PR #18 (git rev-parse 4356583^2); BASE above is its fork point (git merge-base 4356583^1 4356583^2)
 
 ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)" || exit 99
 FAILURES=0
@@ -98,7 +101,8 @@ sed 's/^/      /' "$TMP/mut.out"
 grep -q 'b7-r11-mixed-pr-branch-removed' "$TMP/head/tests/registry/test_ownership_mutations.py" && pass "the mixed-PR mutation is in the mutation list" || fail "mutation missing from the list"
 
 section "AC4 -- contract text"
-C="$TMP/head/contracts/ownership.md"
+C="$TMP/ownership.final.md"
+G show "$FINAL:contracts/ownership.md" > "$C" 2>/dev/null
 python3 -I - "$C" <<'PY'
 import re, sys
 t = open(sys.argv[1]).read()
@@ -132,7 +136,7 @@ for f in fails:
     print("FAILMSG " + f)
 sys.exit(1 if fails else 0)
 PY
-[ $? = 0 ] && pass "R11's mixed-PR sentence is amended, R11 names ADR-0041 and Ludwig 2026-10-17, and R3/R7/R11/Attempt 8/Attempt 9/table row each state that R11 rejects" || fail "contract text check failed (FAILMSG lines above)"
+[ $? = 0 ] && [ -s "$C" ] && pass "R11's mixed-PR sentence is amended, R11 names ADR-0041 and Ludwig 2026-10-17, and R3/R7/R11/Attempt 8/Attempt 9/table row each state that R11 rejects (ownership.md at FINAL $FINAL)" || fail "contract text check failed (FAILMSG lines above; or ownership.md unreadable at FINAL $FINAL)"
 ( cd "$TMP/head" && bash docs/tasks/032-verify.sh > "$TMP/032.out" 2>&1 ); rc=$?
 [ "$rc" = 0 ] && pass "032-verify.sh (incl. T16, T17) exits 0 on HEAD" || { fail "032-verify.sh exits $rc"; grep '^FAIL' "$TMP/032.out"; }
 
