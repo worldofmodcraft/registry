@@ -74,10 +74,10 @@ PIN_FIX="672edcd971fdf74e0a827fa4255f87cfcbb02cbe"      # 057-verify.sh, 057-tex
 PIN_RED2="4b8151b4ac68ec6131217623561b827af800228b"    # fix round 1, fixtures first: 089a2-verify.sh + task files only (the 062 cross-check, exact 057 hunk list)
 PIN_FIX2="becccdedd9b5b6f9aed930fcb4018be79c086aea"    # fix round 1: 062-verify.sh only (the 057 mutation literals)
 PIN_PREV="790db479c6a6904b6755437c7ede6561cda01fb5"   # the script as it was before fix round 2 (the red-first cell reads its HEAD-dependent check from here)
-PIN_RED3="__RED3__"    # fix round 2 (Ludwig, 2026-10-29: fixed SHAs only), fixtures first: 089a2-verify.sh + task files only
-PIN_FIX3="__FIX3__"    # fix round 2: 089a2-verify.sh only (no --all / HEAD read in an own-change check)
-PIN_FINAL="__FINAL__"  # last commit touching a source file or script of the part (= PIN_FIX3; the NEW blobs are read here)
-PIN_TIP="__TIP__"      # last commit of the branch before the pin commit (task-file only after FINAL)
+PIN_RED3="fd9457fa97d3b631696f79976160a59bffc973db"    # fix round 2 (Ludwig, 2026-10-29: fixed SHAs only), fixtures first: 089a2-verify.sh + task files only
+PIN_FIX3="0ef8c07bf508d4bb499ecc99ec592d40ec640041"    # fix round 2: 089a2-verify.sh only (no --all / HEAD read in an own-change check)
+PIN_FINAL="0ef8c07bf508d4bb499ecc99ec592d40ec640041"  # last commit touching a source file or script of the part (= PIN_FIX3; the NEW blobs are read here)
+PIN_TIP="3f366219afb9bd4314d704f9693e7e8df1f2e08f"      # last commit of the branch before the pin commit (task-file only after FINAL)
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
