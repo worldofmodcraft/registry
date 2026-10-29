@@ -369,6 +369,35 @@ else
     G show "$PIN_FIX:$TCG" | python3 -I -c 'import ast,sys; ast.parse(sys.stdin.read())' && pass "AC11.11 test_ci_gate.py at the fix commit still parses" || fail "AC11.11 test_ci_gate.py does not parse"
 fi
 
+# ---- AC13 (REVIEW-CHECKLIST item 12): an own-change check must stay green after any later commit. The AC0 section of this script (before
+# its "AC1" section) is run, as the pre-fix-round script (PIN_PRE) and as the current script, on HEAD plus ONE more commit that re-adds a class
+# named AC9ProductionR11Unconfigured to test_ci_gate.py (a legitimate later change). The old AC0.12 asked HEAD whether that class is gone: red.
+section "AC13 -- stays green after a later commit: the AC0 checks on HEAD plus one more commit (old: red, current: green)"
+PIN_PRE="9ec482278f58eb94c0fe8e8a057f3fe752ea30ad"   # 089b-verify.sh before the fix round that added this section (AC0.12 read HEAD)
+trunc_ac0() {   # FILE : FILE up to (not including) its AC1 section, the open ifs closed, then exit with the failure count. Fails unless the marker occurs exactly once.
+    [ "$(grep -c '^section "AC1 -- ' "$1")" = 1 ] || return 1
+    awk '/^section "AC1 -- /{exit} {print}' "$1"
+    printf '%s\n' 'fi' 'fi' "printf '\\n== RESULT ==\\n'; exit \"\$FAILURES\""
+}
+if G show "$PIN_PRE:docs/tasks/089b-verify.sh" > "$TMP/pre.sh" 2>/dev/null && trunc_ac0 "$TMP/pre.sh" > "$TMP/pre.trunc.sh" && trunc_ac0 "$ROOT/docs/tasks/089b-verify.sh" > "$TMP/cur.trunc.sh" \
+    && [ -s "$TMP/pre.trunc.sh" ] && [ -s "$TMP/cur.trunc.sh" ] && bash -n "$TMP/pre.trunc.sh" && bash -n "$TMP/cur.trunc.sh"; then
+    pass "AC13.0 positive control: both AC0 extracts are non-empty and parse ($(wc -l < "$TMP/pre.trunc.sh") / $(wc -l < "$TMP/cur.trunc.sh") lines)"
+    if mk_frame "$TMP/a13" "$HEADREV" && printf '\n\nclass AC9ProductionR11Unconfigured(Base):\n    pass\n' >> "$TMP/a13/$TCG" \
+        && git -C "$TMP/a13" "${GITID[@]}" commit -q -am "synthetic later commit: a class named AC9ProductionR11Unconfigured comes back" \
+        && mk_frame "$TMP/a13p" "$HEADREV"; then
+        cp "$TMP/pre.trunc.sh" "$TMP/a13/docs/tasks/a13-pre.sh"; cp "$TMP/cur.trunc.sh" "$TMP/a13/docs/tasks/a13-cur.sh"; cp "$TMP/pre.trunc.sh" "$TMP/a13p/docs/tasks/a13-pre.sh"
+        rc=$(run_in "$TMP/a13p" "$TMP/a13p.out" bash docs/tasks/a13-pre.sh)
+        expect "AC13.1 control: the pre-fix-round AC0 on plain HEAD" green "$rc" "$TMP/a13p.out" '^PASS  AC0\.12 ' '!^FAIL'
+        rc=$(run_in "$TMP/a13" "$TMP/a13o.out" bash docs/tasks/a13-pre.sh)
+        expect "AC13.2 the pre-fix-round AC0 on HEAD + one later commit" red "$rc" "$TMP/a13o.out" '^FAIL  AC0\.12 '
+        rc=$(run_in "$TMP/a13" "$TMP/a13n.out" bash docs/tasks/a13-cur.sh)
+        expect "AC13.3 the current AC0 on HEAD + the same later commit" green "$rc" "$TMP/a13n.out" '^PASS  AC0\.12 ' '!^FAIL'
+    else fail "AC13.0b cannot build the HEAD + one later commit clone"; fi
+else fail "AC13.0 cannot extract the AC0 section of the pre-fix-round or the current script"; fi
+# the later-branch fixtures built on HEAD accept a HEAD that already contains the later edit (a real later branch that did it) and still refuse an anchor that matches nothing
+if mk_later "$TMP/t1" "$HEADREV" tests/registry/test_hardening.py "$HARD_NEW" "$HARD_OLD" >/dev/null; then pass "AC13.4 mk_later on HEAD accepts a frame that already contains the later edit"; else fail "AC13.4 mk_later on HEAD refuses a frame that already contains the later edit"; fi
+if mk_later "$TMP/t2" "$HEADREV" tests/registry/test_hardening.py "no such anchor text xyzzy" "no such replacement xyzzy" >/dev/null; then fail "AC13.5 mk_later accepted an anchor that is in neither the old nor the new form"; else pass "AC13.5 positive control: an anchor in neither form is still refused"; fi
+
 # ==================================================================================================
 else
 section "AC4 mutations (each fixed check widened back to HEAD, on the later-branch merge on HEAD; red, and only that check)"
