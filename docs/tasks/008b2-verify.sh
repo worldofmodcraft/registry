@@ -441,17 +441,23 @@ for name, rel, edits, tests in M:
 sys.exit(failed)
 PYEOF
 
-# own_change_report DIR BASE FINAL : prints one line per problem with the own-change checks (empty output = pass); rc 1 if the
-# range cannot be computed. (Round 3 of 008b-2, red-first step: this is still the OLD rule, merge-base of HEAD with the current
-# main; it ignores BASE and FINAL. The next commit replaces it with the fixed-SHA rule.)
+# own_change_report DIR BASE FINAL TIP : prints one line per problem with the own-change checks (empty output = pass); rc 1 if the
+# range cannot be computed (an unreachable or unrecorded pin is red, never a skip). It reads ONLY the fixed commits it is given,
+# never HEAD or the current main (round 3 of 008b-2: the old rule, merge-base of HEAD with the current main, went red on main
+# once the task was merged). BASE..FINAL is the task's change set; FINAL..TIP (the commits that only record the pin and the log)
+# may touch only the task file and this script.
 own_change_report() {
-  local d=$1 r b="" f
-  for r in origin/main refs/heads/main; do
-    if git -C "$d" rev-parse -q --verify "$r^{commit}" >/dev/null 2>&1; then b=$(git -C "$d" merge-base HEAD "$r"); break; fi
+  local d=$1 base=$2 final=$3 tip=$4 c
+  for c in "$base" "$final" "$tip"; do
+    case "$c" in __*__) echo "UNRECORDED: pin $c is not recorded"; return 1;; esac
+    git -C "$d" rev-parse -q --verify "$c^{commit}" >/dev/null 2>&1 || { echo "UNREACHABLE: $c (clone must not be shallow)"; return 1; }
   done
-  [ -n "$b" ] || { echo "NOBASE: no main ref to compute the base"; return 1; }
-  git -C "$d" diff --name-status "$b" HEAD -- tests/pipeline | grep -v '^A' | sed 's/^/MOD: /' || true
-  git -C "$d" diff --name-only "$b" HEAD | grep -vxE "$SCOPE_RE" | sed 's/^/VIOL: /' || true
+  git -C "$d" merge-base --is-ancestor "$base" "$final" && git -C "$d" merge-base --is-ancestor "$final" "$tip" \
+    || { echo "ORDER: BASE, FINAL, TIP are not in ancestry order"; return 1; }
+  [ -n "$(git -C "$d" diff --name-only "$base" "$final")" ] || { echo "EMPTY: no changes between BASE and FINAL"; return 1; }
+  git -C "$d" diff --name-status "$base" "$final" -- tests/pipeline | grep -v '^A' | sed 's/^/MOD: /' || true
+  git -C "$d" diff --name-only "$base" "$final" | grep -vxE "$SCOPE_RE" | sed 's/^/VIOL: /' || true
+  git -C "$d" diff --name-only "$final" "$tip" | grep -vxE 'docs/tasks/008b2-pipeline-build-sign\.md|docs/tasks/008b2-verify\.sh' | sed 's/^/TIPVIOL: /' || true
   return 0
 }
 
