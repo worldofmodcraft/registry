@@ -73,8 +73,11 @@ PIN_RED="42d7d46c9081c11f217e50c4be21f93f3b5e022e"      # 089a2-verify.sh + task
 PIN_FIX="672edcd971fdf74e0a827fa4255f87cfcbb02cbe"      # 057-verify.sh, 057-textchecks.py, 070-verify.sh
 PIN_RED2="4b8151b4ac68ec6131217623561b827af800228b"    # fix round 1, fixtures first: 089a2-verify.sh + task files only (the 062 cross-check, exact 057 hunk list)
 PIN_FIX2="becccdedd9b5b6f9aed930fcb4018be79c086aea"    # fix round 1: 062-verify.sh only (the 057 mutation literals)
-PIN_FINAL="becccdedd9b5b6f9aed930fcb4018be79c086aea"  # last commit touching a source file or script of the part (= PIN_FIX2; the NEW blobs are read here)
-PIN_TIP="919f59f77357033fa4645ccf285fa15ff7724d42"      # last commit of the branch before the pin commit (task-file only after FINAL)
+PIN_PREV="790db479c6a6904b6755437c7ede6561cda01fb5"   # the script as it was before fix round 2 (the red-first cell reads its HEAD-dependent check from here)
+PIN_RED3="__RED3__"    # fix round 2 (Ludwig, 2026-10-29: fixed SHAs only), fixtures first: 089a2-verify.sh + task files only
+PIN_FIX3="__FIX3__"    # fix round 2: 089a2-verify.sh only (no --all / HEAD read in an own-change check)
+PIN_FINAL="__FINAL__"  # last commit touching a source file or script of the part (= PIN_FIX3; the NEW blobs are read here)
+PIN_TIP="__TIP__"      # last commit of the branch before the pin commit (task-file only after FINAL)
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
@@ -298,6 +301,32 @@ maxl=$(printf '%s\n' "$d070" | sed -n 's/^@@ -\([0-9]*\).*/\1/p' | sort -n | tai
 G diff -U0 "$OLDREF" "$PIN_FINAL" -- "$S070" | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' | grep -E 'ten closed|twelve closed' > "$TMP/s3lines.txt"
 [ "$(grep -c '^-.*ten closed' "$TMP/s3lines.txt")" -ge 1 ] && [ "$(grep -c '^+.*twelve closed' "$TMP/s3lines.txt")" -ge 1 ] && pass "AC1.S3d the diff replaces 'ten closed scripts' by 'twelve closed scripts'" || fail "AC1.S3d the diff does not replace ten by twelve"
 
+section "AC1.H -- round 2: no own-change check reads a moving ref. Red first: one extra LATER commit on top of this branch's head reddens the previous script's check, not the fixed one"
+# The previous script (PIN_PREV) searched `git log --all` for a docs/decisions history (AC0.9): a later commit that adds docs/decisions/... makes it fail
+# although 089a2's own change did not move. The predicate line is read as text from each pinned script blob and evaluated against a clone.
+evalna() {   # evalna SCRIPTBLOBFILE CLONEDIR : print "na nt" as that script's AC0.9 line computes them in CLONEDIR
+    local line; line="$(grep -m1 '^na=' "$1")"
+    [ -n "$line" ] || { echo "? ?"; return; }
+    ( G() { git -C "$2" "$@"; }; eval "$line"; echo "$na $nt" )
+}
+G show "$PIN_PREV:docs/tasks/089a2-verify.sh" > "$TMP/prev.sh" 2>/dev/null || fail "AC1.H.0 cannot read the previous script at $PIN_PREV"
+G show "$PIN_FINAL:docs/tasks/089a2-verify.sh" > "$TMP/cur.sh" 2>/dev/null || fail "AC1.H.0 cannot read the script at FINAL $PIN_FINAL"
+if mk_frame "$TMP/hc" "$HEADREV" && mk_frame "$TMP/hx" "$HEADREV"; then
+    mkdir -p "$TMP/hx/docs/decisions" && printf '# a later ADR\n' > "$TMP/hx/docs/decisions/0001-later.md" \
+        && git -C "$TMP/hx" add docs/decisions/0001-later.md && git -C "$TMP/hx" "${GITID[@]}" commit -q -m "a later commit on top of the branch head" || fail "AC1.H.1 cannot build the later commit"
+    set -- $(evalna "$TMP/prev.sh" "$TMP/hc"); pna=$1; pnt=$2
+    [ "$pna" = 0 ] && [ "${pnt:-0}" -gt 0 ] 2>/dev/null && pass "AC1.Ha control: the previous AC0.9 line is green on the plain branch head (na=$pna, nt=$pnt)" || fail "AC1.Ha the previous AC0.9 line is not green on the plain head (na=$pna nt=$pnt): the cell cannot show the later commit is the cause"
+    set -- $(evalna "$TMP/prev.sh" "$TMP/hx"); xna=$1
+    [ "${xna:-0}" -ge 1 ] 2>/dev/null && pass "AC1.Hb RED FIRST: with one extra later commit the previous AC0.9 line finds $xna docs/decisions commit(s) and would FAIL its own-change check" || fail "AC1.Hb the previous AC0.9 line did not redden on a later commit (na=${xna:-?}): finding not reproduced"
+    set -- $(evalna "$TMP/cur.sh" "$TMP/hx"); cna=$1; cnt_=$2
+    [ "$cna" = 0 ] && [ "${cnt_:-0}" -gt 0 ] 2>/dev/null && pass "AC1.Hc the fixed AC0.9 line stays green with the extra later commit (na=$cna, nt=$cnt_ via the pinned FINAL)" || fail "AC1.Hc the fixed AC0.9 line reddened or is broken (na=${cna:-?} nt=${cnt_:-?})"
+else fail "AC1.H.2 cannot clone the branch head"; fi
+# no own-change check of this script reads --all, a bare HEAD range, origin/main or a merge-base with the current main (code lines of the script at FINAL; positive control on the previous script)
+badpat='log -[-]all|[.][.]HEAD|HEAD[.][.]|is-ancestor "[$]PIN_[A-Z0-9]*" HEAD|origin/mai[n]'
+nprev=$(grep -v '^[[:space:]]*#' "$TMP/prev.sh" | grep -cE "$badpat"); ncur=$(grep -v '^[[:space:]]*#' "$TMP/cur.sh" | grep -cE "$badpat")
+[ "$nprev" -ge 2 ] && pass "AC1.Hd positive control: the moving-ref grep finds $nprev line(s) in the previous script" || fail "AC1.Hd the moving-ref grep finds only $nprev line(s) in the previous script"
+[ "$ncur" = 0 ] && pass "AC1.He the script at FINAL has 0 moving-ref reads (all-refs log, ranges ending in HEAD, ancestry to HEAD, the remote main) in code lines" || fail "AC1.He the script at FINAL still has $ncur moving-ref line(s): $(grep -v '^[[:space:]]*#' "$TMP/cur.sh" | grep -E "$badpat" | head -n2 | cut -c1-90 | tr '\n' '|')"
+
 section "AC1.X -- F1: the literals 062-verify.sh mutates 057-verify.sh with must exist in the NEW 057 (red first: the OLD 062 against the NEW 057)"
 cross062 "$OLDD/062.sh" "$OLDD/057.sh"; rcx=$?
 [ "$rcx" = 0 ] && pass "AC1.Xa baseline: the OLD 062 literals all occur exactly once in the OLD 057 ($X_WHY)" || fail "AC1.Xa baseline broken: $X_WHY"
@@ -337,16 +366,16 @@ else fail "AC3.0 cannot clone HEAD"; fi
 fi   # OWN = 0
 
 section "AC11 -- 089a2's own change, measured on fixed SHAs (never HEAD)"
-if [ "$PIN_RED2" = "__RED2__" ] || [ "$PIN_FIX2" = "__FIX2__" ] || [ "$PIN_FINAL" = "__FINAL__" ] || [ "$PIN_TIP" = "__TIP__" ]; then
+if [ "$PIN_RED3" = "__RED3__" ] || [ "$PIN_FIX3" = "__FIX3__" ] || [ "$PIN_FINAL" = "__FINAL__" ] || [ "$PIN_TIP" = "__TIP__" ]; then
     fail "AC11.0 the 089a2 red/fix/final/tip SHAs are not pinned yet"
 else
-    for s in "$PIN_BASE" "$PIN_RED" "$PIN_FIX" "$PIN_RED2" "$PIN_FIX2" "$PIN_FINAL" "$PIN_TIP"; do
+    for s in "$PIN_BASE" "$PIN_RED" "$PIN_FIX" "$PIN_RED2" "$PIN_FIX2" "$PIN_PREV" "$PIN_RED3" "$PIN_FIX3" "$PIN_FINAL" "$PIN_TIP"; do
         full40 "$s" || fail "AC11.1 pin '$s' is not a full 40-character SHA"
         G cat-file -e "$s^{commit}" 2>/dev/null && pass "AC11.1 pin $s exists" || fail "AC11.1 pin $s does not exist"
     done
     G merge-base --is-ancestor "$PIN_BASE" "$PIN_RED" && G merge-base --is-ancestor "$PIN_RED" "$PIN_FIX" \
-        && G merge-base --is-ancestor "$PIN_FIX" "$PIN_RED2" && G merge-base --is-ancestor "$PIN_RED2" "$PIN_FIX2" && [ "$PIN_FIX2" = "$PIN_FINAL" ] && G merge-base --is-ancestor "$PIN_FINAL" "$PIN_TIP" && G merge-base --is-ancestor "$PIN_TIP" HEAD \
-        && pass "AC11.2 BASE < RED < FIX <= RED2 < FIX2 = FINAL <= TIP <= HEAD (ancestry)" || fail "AC11.2 the pins are not in ancestry order"
+        && G merge-base --is-ancestor "$PIN_FIX" "$PIN_RED2" && G merge-base --is-ancestor "$PIN_RED2" "$PIN_FIX2" && G merge-base --is-ancestor "$PIN_FIX2" "$PIN_PREV" && G merge-base --is-ancestor "$PIN_PREV" "$PIN_RED3" && G merge-base --is-ancestor "$PIN_RED3" "$PIN_FIX3" && [ "$PIN_FIX3" = "$PIN_FINAL" ] && G merge-base --is-ancestor "$PIN_FINAL" "$PIN_TIP" && G merge-base --is-ancestor "$PIN_TIP" HEAD \
+        && pass "AC11.2 BASE < RED < FIX <= RED2 < FIX2 <= PREV <= RED3 < FIX3 = FINAL <= TIP <= HEAD (ancestry)" || fail "AC11.2 the pins are not in ancestry order"
     TASKFILES='docs/tasks/089-closed-verify-sweep-registry.md|docs/tasks/089a2-closed-verify-sweep-registry-a2.md'
     red_files="$(G diff --name-only "$PIN_BASE" "$PIN_RED" 2>/dev/null | grep -vxE "$TASKFILES" | sort | tr '\n' ' ')"
     [ "$red_files" = "docs/tasks/089a2-verify.sh " ] && pass "AC11.3 the red commit touches only 089a2-verify.sh and the task files" || fail "AC11.3 the red commit touches: $red_files"
@@ -357,6 +386,10 @@ else
     [ "$rf2" = "docs/tasks/089a2-verify.sh " ] && pass "AC11.3b fixtures first: FIX..RED2 touches only 089a2-verify.sh and the task files (the 062 cross-check exists before the 062 fix)" || fail "AC11.3b FIX..RED2 touches: $rf2"
     ff2="$(G diff --name-only "$PIN_RED2" "$PIN_FIX2" 2>/dev/null | grep -vxE "$TASKFILES" | sort | tr '\n' ' ')"
     [ "$ff2" = "docs/tasks/062-verify.sh " ] && pass "AC11.4b the second fix commit touches only 062-verify.sh (and task files)" || fail "AC11.4b RED2..FIX2 touches: $ff2"
+    rf3="$(G diff --name-only "$PIN_PREV" "$PIN_RED3" 2>/dev/null | grep -vxE "$TASKFILES" | sort | tr '\n' ' ')"
+    [ "$rf3" = "docs/tasks/089a2-verify.sh " ] && pass "AC11.3c fixtures first (round 2): PREV..RED3 touches only 089a2-verify.sh and the task files" || fail "AC11.3c PREV..RED3 touches: $rf3"
+    ff3="$(G diff --name-only "$PIN_RED3" "$PIN_FIX3" 2>/dev/null | grep -vxE "$TASKFILES" | sort | tr '\n' ' ')"
+    [ "$ff3" = "docs/tasks/089a2-verify.sh " ] && pass "AC11.4c the round-2 fix commit touches only 089a2-verify.sh (and task files)" || fail "AC11.4c RED3..FIX3 touches: $ff3"
     if ! scope_files="$(G diff --name-only "$PIN_BASE" "$PIN_TIP" 2>&1)"; then fail "AC11.5 cannot compute $PIN_BASE..$PIN_TIP"; else
         extra="$(printf '%s\n' "$scope_files" | grep -vxE "docs/tasks/057-verify\.sh|docs/tasks/057-textchecks\.py|docs/tasks/070-verify\.sh|docs/tasks/062-verify\.sh|docs/tasks/089a2-verify\.sh|$TASKFILES" | tr '\n' ' ')"
         [ -n "$scope_files" ] && [ -z "$extra" ] && pass "AC11.5 BASE..TIP stays inside the declared file scope" || fail "AC11.5 out-of-scope files in BASE..TIP (or the range is empty): $extra"
