@@ -81,3 +81,8 @@ them). The reference implementation of exactly this change is task 089e for `008
 - 2026-10-29 qa-engineer: final pins: OLD101 = `0c67d6eb7eae922fbc6b4d9304fda82feea771f4`; E_FIX = E_FINAL = `fbd384c8ee0edc5da50038ab8f74d2c988333c81`; E_SCRIPT = `ca6ddad3efd3924fec37fddfec6fd26d5e42cf9e`; E_TIP = `8afd7215d15a4370e288e343cf29d5a74bdb7afa`.
 - 2026-10-29 qa-engineer (re-run of the follow-up): fresh non-shallow clone at `1138d7bf9a3b144fc1f915069c818f8dd1336ee5`, PYTHONDONTWRITEBYTECODE=1, `ps` printed nothing before each run, 0 non-quiet wait lines:
   `101-verify.sh --own-only` rc=0; default rc=0 (AC5.0-5.2 green on blob@E_FIX, AC12: OLD101 + a later new file green, OLD101 + a later 008b1-verify.sh edit exit 1 "FAIL  AC11.5d ...", fixed head green on both); `--mutate` rc=0 (m1, m2, m3 with 27 mutations red). No unexpected red.
+- 2026-10-29 qa-engineer (review PASS-WITH-AMENDMENTS, applied; nothing was run, `bash -n` only): (1) MEDIUM: AC2.2 searched the merge on HEAD's first-parent chain; it now searches from the fixed E_BASE (= M),
+  so no own-change check reads HEAD. (2)/(3) LOW: header comments now say the only HEAD uses are AC11.2 (ancestry) and the AC12 fixtures, and AC5 runs the blob at E_FIX on the pinned E_TIP; the E_SCRIPT comment no longer names
+  the old AC3.4 repair. (4) INFO noted: AC12's red-first demonstrates AC11.5d only (the only removed HEAD read under `--own-only`); the removed AC5.0/5.1/5.2 and AC4.m3 HEAD reads are not
+  under `--own-only` and were verified by reading the code (they use only E_FIX and E_TIP). (5) INFO: the scope-lines-only skip grep stays; AC3's exact FAIL line plus non-zero exit is the binding check.
+  E_SCRIPT/E_TIP re-pinned (below); the manager re-runs in a fresh clone.
