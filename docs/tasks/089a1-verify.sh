@@ -70,6 +70,10 @@ PIN_RED="55c00bc056a93bce8752db022da971ca558f410a"      # 089a1-verify.sh + task
 PIN_FIX="1cd84e70bbbfb43a1dfffed4614938fd8978c4d6"      # 007a-verify.sh, 007b-verify.sh, 008a-verify.sh, test_hardening.py, test_classify.py
 PIN_FINAL="1cd84e70bbbfb43a1dfffed4614938fd8978c4d6"  # last commit in BASE..TIP touching a source file or script of the part
 PIN_TIP="b6e08bfb4ed7218c399e673aacf595de5b7e608d"      # last commit of the branch before the pin commit (task-file/log only after FINAL)
+# Ludwig 2026-10-29 ("fixed SHAs only"): the frames of AC1, AC3, AC4, AC5 are built from the FIX commit (the state that contains the fixed
+# scripts and tests), not from the moving HEAD, so this script stays green on registry main after the merge and after any later commit.
+# "on HEAD" in the labels below means this frame. AC12 is the one cell that deliberately uses the moving HEAD (a later commit on top).
+FRAMEREV="$PIN_FIX"
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
@@ -268,7 +272,7 @@ if ! mk_lb "$TMP/o1" "$OLDREF" lb_007a; then fail "AC1.1.0 cannot build the late
 fi
 rc=$(mk_frame "$TMP/c1" "$OLDREF" && place "$TMP/c1" "$OLDD/$b007a" "$S007A" && run_in "$TMP/c1" "$TMP/c1.out" bash "$S007A")
 expect "AC1.1b control: the OLD 007a-verify.sh on plain OLD (the later branch is the cause)" green "$rc" "$TMP/c1.out" '^ok    criterion 12: docs/contracts/README.md updated' '^ok    README no longer says task 007 builds the gates'
-if ! mk_lb "$TMP/n1" "$HEADREV" lb_007a; then fail "AC1.1.1 cannot build the later-branch merge on HEAD"; else
+if ! mk_lb "$TMP/n1" "$FRAMEREV" lb_007a; then fail "AC1.1.1 cannot build the later-branch merge on HEAD"; else
     place "$TMP/n1" "$NEWD/$b007a" "$S007A"; rc=$(run_in "$TMP/n1" "$TMP/n1.out" bash "$S007A")
     expect "AC1.1c the NEW 007a-verify.sh on HEAD + the same later edit" green "$rc" "$TMP/n1.out" '^ok    criterion 12: docs/contracts/README.md at [0-9a-f]{40} updated' '^ok    README at [0-9a-f]{40} no longer says task 007 builds the gates' '!^FAIL'
 fi
@@ -279,7 +283,7 @@ if ! mk_lb "$TMP/o3" "$OLDREF" lb_007b; then fail "AC1.3.0 cannot build the late
 fi
 rc=$(mk_frame "$TMP/c3" "$OLDREF" && place "$TMP/c3" "$OLDD/$b007b" "$S007B" && run_in "$TMP/c3" "$TMP/c3.out" bash "$S007B")
 expect "AC1.3b control: the OLD 007b-verify.sh on plain OLD (the later branch is the cause)" green "$rc" "$TMP/c3.out" '^ok    criterion 12: docs/contracts/README.md names the ownership checker' '^ok    README no longer lists the ownership checker as still to come'
-if ! mk_lb "$TMP/n3" "$HEADREV" lb_007b; then fail "AC1.3.1 cannot build the later-branch merge on HEAD"; else
+if ! mk_lb "$TMP/n3" "$FRAMEREV" lb_007b; then fail "AC1.3.1 cannot build the later-branch merge on HEAD"; else
     place "$TMP/n3" "$NEWD/$b007b" "$S007B"; rc=$(run_in "$TMP/n3" "$TMP/n3.out" bash "$S007B")
     expect "AC1.3c the NEW 007b-verify.sh on HEAD + the same later edit" green "$rc" "$TMP/n3.out" '^ok    criterion 12: docs/contracts/README.md at [0-9a-f]{40} names the ownership checker' '^ok    README at [0-9a-f]{40} lists the ownership checker as built' '!^FAIL'
 fi
@@ -291,13 +295,13 @@ G show "$OLDREF:$README" | sed 's/\*\*built\*\* (task 007b) is the ownership che
 if grep -n "ownership checker (task 007b" "$TMP/readme-notbuilt.md" | grep -qi "still to come"; then fail "AC1.4a the old condition fired on the not-built README (the vacuity premise is wrong)"
 else pass "AC1.4a defect shown: the OLD finding-4 condition does not fire on a README that no longer says the checker is built, so the old check would print ok (vacuous)"; fi
 mk_pin_variant() {   # mk_pin_variant DEST SEDEXPR : clone of HEAD + merge of a synthetic commit X on top of 007b's pin whose README is edited; echoes nothing, sets X
-    mk_frame "$1" "$HEADREV" || return 1
+    mk_frame "$1" "$FRAMEREV" || return 1
     local pin; pin=$(pin_of "$NEWD/$b007b" FINAL007B)
     git -C "$1" checkout -q -b at-pin "$pin" || return 1
     sed -i "$2" "$1/$README" || return 1
     git -C "$1" "${GITID[@]}" commit -q -am "synthetic: README at 007b's pin edited" || return 1
     X=$(git -C "$1" rev-parse HEAD) || return 1
-    git -C "$1" checkout -q --detach "$HEADREV" || return 1
+    git -C "$1" checkout -q --detach "$FRAMEREV" || return 1
     git -C "$1" "${GITID[@]}" merge --no-ff -q -m "merge the synthetic pin variant" at-pin >/dev/null 2>&1 || return 1
 }
 X=""
@@ -323,7 +327,7 @@ if ! mk_lb "$TMP/o5" "$OLDREF" lb_008a; then fail "AC1.5.0 cannot build the late
 fi
 rc=$(mk_frame "$TMP/c5" "$OLDREF" && place "$TMP/c5" "$OLDD/$b008a" "$S008A" && run_in "$TMP/c5" "$TMP/c5.out" bash "$S008A")
 expect "AC1.5b control: the OLD 008a-verify.sh on plain OLD (the later branch is the cause)" green "$rc" "$TMP/c5.out" '^ok    docs/contracts/README.md points at the pipeline doc'
-if ! mk_lb "$TMP/n5" "$HEADREV" lb_008a; then fail "AC1.5.1 cannot build the later-branch merge on HEAD"; else
+if ! mk_lb "$TMP/n5" "$FRAMEREV" lb_008a; then fail "AC1.5.1 cannot build the later-branch merge on HEAD"; else
     place "$TMP/n5" "$NEWD/$b008a" "$S008A"; rc=$(run_in "$TMP/n5" "$TMP/n5.out" bash "$S008A")
     expect "AC1.5c the NEW 008a-verify.sh on HEAD + the same later edit" green "$rc" "$TMP/n5.out" '^ok    docs/contracts/README.md at 008a.s pinned FINAL [0-9a-f]{40} points at the pipeline doc' '!^FAIL'
 fi
@@ -334,7 +338,7 @@ if ! mk_lb "$TMP/o7" "$OLDREF" lb_hard; then fail "AC1.7.0 cannot build the late
 fi
 rc=$(mk_frame "$TMP/c7" "$OLDREF" && place "$TMP/c7" "$OLDD/$bhard" "$T_HARD" && run_test "$TMP/c7" "$TMP/c7.out" test_hardening.py)
 expect "AC1.7b control: the OLD test_hardening.py on plain OLD (the later branch is the cause)" green "$rc" "$TMP/c7.out" '^OK$'
-if ! mk_lb "$TMP/n7" "$HEADREV" lb_hard; then fail "AC1.7.1 cannot build the later-branch merge on HEAD"; else
+if ! mk_lb "$TMP/n7" "$FRAMEREV" lb_hard; then fail "AC1.7.1 cannot build the later-branch merge on HEAD"; else
     place "$TMP/n7" "$NEWD/$bhard" "$T_HARD"; rc=$(run_test "$TMP/n7" "$TMP/n7.out" test_hardening.py)
     expect "AC1.7c the NEW test_hardening.py on HEAD + the same later edit" green "$rc" "$TMP/n7.out" '^OK$' '!^(FAIL|ERROR)'
 fi
@@ -345,7 +349,7 @@ if ! mk_lb "$TMP/o13" "$OLDREF" lb_cls; then fail "AC1.13.0 cannot build the lat
 fi
 rc=$(mk_frame "$TMP/c13" "$OLDREF" && place "$TMP/c13" "$OLDD/$bcls" "$T_CLS" && run_test "$TMP/c13" "$TMP/c13.out" test_classify.py)
 expect "AC1.13b control: the OLD test_classify.py on plain OLD (the later branch is the cause)" green "$rc" "$TMP/c13.out" '^OK$'
-if ! mk_lb "$TMP/n13" "$HEADREV" lb_cls; then fail "AC1.13.1 cannot build the later-branch merge on HEAD"; else
+if ! mk_lb "$TMP/n13" "$FRAMEREV" lb_cls; then fail "AC1.13.1 cannot build the later-branch merge on HEAD"; else
     place "$TMP/n13" "$NEWD/$bcls" "$T_CLS"; rc=$(run_test "$TMP/n13" "$TMP/n13.out" test_classify.py)
     expect "AC1.13c the NEW test_classify.py on HEAD + the same later edit (Q3 A consequence: it no longer guards the live list)" green "$rc" "$TMP/n13.out" '^OK$' '!^(FAIL|ERROR)'
 fi
@@ -354,7 +358,7 @@ fi   # OWN = 0
 # ==================================================================================================
 if [ "$OWN" = 0 ]; then
 section "AC5 -- the NEW scripts and tests on plain HEAD exit 0 (the unmerged state)"
-if mk_frame "$TMP/h" "$HEADREV"; then
+if mk_frame "$TMP/h" "$FRAMEREV"; then
     place "$TMP/h" "$NEWD/$b007a" "$S007A"; place "$TMP/h" "$NEWD/$b007b" "$S007B"; place "$TMP/h" "$NEWD/$b008a" "$S008A"
     place "$TMP/h" "$NEWD/$bhard" "$T_HARD"; place "$TMP/h" "$NEWD/$bcls" "$T_CLS"
     rc=$(run_in "$TMP/h" "$TMP/h007a.out" bash "$S007A"); expect "AC5.1 NEW 007a-verify.sh on HEAD" green "$rc" "$TMP/h007a.out" '^ok    criterion 12: docs/contracts/README.md at [0-9a-f]{40} updated'
@@ -365,7 +369,7 @@ if mk_frame "$TMP/h" "$HEADREV"; then
 else fail "AC5.0 cannot clone HEAD"; fi
 
 section "AC3 -- an unreachable pin (deadbee) is a FAIL naming the check; nothing is skipped"
-if mk_frame "$TMP/d" "$HEADREV"; then
+if mk_frame "$TMP/d" "$FRAMEREV"; then
     pa=$(pin_of "$NEWD/$b007a" FINAL); pb=$(pin_of "$NEWD/$b007b" FINAL007B); pc=$(pin_of "$NEWD/$b008a" FINAL)
     ph=$(pin_py "$NEWD/$bhard" README_PIN_FINAL); pk=$(pin_py "$NEWD/$bcls" RESERVED_PIN_FINAL)
     place "$TMP/d" "$NEWD/$b007a" "$S007A" && edit_file "$TMP/d/$S007A" "FINAL=$pa" "FINAL=deadbee" && rc=$(run_in "$TMP/d" "$TMP/d007a.out" bash "$S007A")
@@ -397,8 +401,8 @@ else
         G cat-file -e "$s^{commit}" 2>/dev/null && pass "AC11.1 pin $s exists" || fail "AC11.1 pin $s does not exist"
     done
     [ "$(G rev-parse "$PIN_RED^" 2>/dev/null)" != "" ] && G merge-base --is-ancestor "$PIN_BASE" "$PIN_RED" && G merge-base --is-ancestor "$PIN_RED" "$PIN_FIX" \
-        && G merge-base --is-ancestor "$PIN_FIX" "$PIN_FINAL" && G merge-base --is-ancestor "$PIN_FINAL" "$PIN_TIP" && G merge-base --is-ancestor "$PIN_TIP" HEAD \
-        && pass "AC11.2 BASE < RED < FIX <= FINAL <= TIP <= HEAD (ancestry)" || fail "AC11.2 the pins are not in ancestry order"
+        && G merge-base --is-ancestor "$PIN_FIX" "$PIN_FINAL" && G merge-base --is-ancestor "$PIN_FINAL" "$PIN_TIP" \
+        && pass "AC11.2 BASE < RED < FIX <= FINAL <= TIP (ancestry among the fixed pins; HEAD is not consulted)" || fail "AC11.2 the pins are not in ancestry order"
     task_md=docs/tasks/089a1-closed-verify-sweep-registry-a1.md
     red_files="$(G diff --name-only "$PIN_BASE" "$PIN_RED" 2>/dev/null | grep -vx -e docs/tasks/089-closed-verify-sweep-registry.md -e "$task_md" | sort | tr '\n' ' ')"
     [ "$red_files" = "docs/tasks/089a1-verify.sh " ] && pass "AC11.3 the red commit touches only 089a1-verify.sh and the task files" || fail "AC11.3 the red commit touches: $red_files"
@@ -469,7 +473,7 @@ else
 section "AC4 mutations (each fixed check widened back to the worktree, on the later-branch merge on HEAD; red, and only that check)"
 mutate_run() {   # mutate_run LABEL KIND KEY OLD NEW RUN FAILREGEX   (KIND = lb_ function suffix; RUN = script|test)
     local label="$1" kind="$2" key="$3" old="$4" new="$5" run="$6" fr="$7" rc nfail d="$TMP/m-$2-$RANDOM" dest
-    mk_lb "$d" "$HEADREV" "lb_$kind" || { fail "$label cannot build the frame"; return; }
+    mk_lb "$d" "$FRAMEREV" "lb_$kind" || { fail "$label cannot build the frame"; return; }
     cp "$NEWD/$key" "$TMP/mut.src"
     edit_file "$TMP/mut.src" "$old" "$new" || { fail "$label: the mutation did not apply (pattern not found exactly once)"; return; }
     case "$key" in
