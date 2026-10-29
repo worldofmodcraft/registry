@@ -121,3 +121,10 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   `|| fail` guards and by the existing unreachable-pin controls only. Booked as a possible follow-up, no decision needed.
   Pins re-derived next (PIN_FIX above; PIN_TIP by the pin commit that follows this entry).
 - 2026-10-28 qa-engineer: re-pinned: PIN_FIX=becb41802d95fc776000f381a45728d08826b3b2, PIN_TIP=8a8eb472f9fc6d61434b1ca23cc00c245bae3084 (pin commit 7c658c97146d031cfe9d3c38723e47420bc5f4b5 touches only 089d-verify.sh). `git diff --name-only PIN_START PIN_TIP` = the three own files (plain git). Phase-2 commands unchanged. Still written-but-not-run.
+- 2026-10-29 qa-engineer (phase 2, first run, head 70c3ead, fresh clone, git 2.53.0): `ps` before the run listed 22 shells whose args contain `pgrep` (started 2026-10-19,
+  the stale `while pgrep ... 070-verify.sh` loops; the coordinator expected ten) plus my own current shell; no verify script was running. Run 1 of
+  `089d-verify.sh` (default) exit 36: **defect in my script, not in 092**: `run_cases` is called twice (unfixed, then fixed) and built each scenario in the same
+  directory name, so the second build failed (`fatal: destination path ... already exists`; 12 "scenario could not be built" plus 24 dependent FAILs; the 41 PASS lines
+  before that, pins/extraction/positive controls, were fine). My phase-1 harness built each scenario once, so it never saw this. Fix: a per-build sequence number in the
+  scenario directory name (`SC_SEQ`). This is a fix to a verification script's own harness, not a weakening: no assertion was changed. Run 1's output is discarded; all
+  steps are re-run from a fresh clone of the new head.

@@ -72,7 +72,7 @@ GITID=(-c user.name=verify089d -c user.email=verify089d@invalid -c commit.gpgsig
 
 # BEGIN-LIB (functions only; a development harness may source exactly this block, which runs nothing by itself)
 sg() { local d="$1"; shift; git -C "$d" "${GITID[@]}" "$@"; }
-SC_BAD=0
+SC_BAD=0; SC_SEQ=0
 must() { "$@" </dev/null >/dev/null 2>&1 || { echo "scenario step failed: $*" >&2; SC_BAD=1; }; }
 cfile() {  # cfile DIR PATH CONTENT MSG: append a line to PATH and commit
     mkdir -p "$(dirname "$1/$2")"; printf '%s\n' "$3" >> "$1/$2"; must sg "$1" add -A; must sg "$1" commit -q -m "$4"
@@ -104,31 +104,31 @@ scn_norem() {  # scn_norem NAME: single repository, NO remote; main advances aft
     must sg "$SC_ROOT" checkout -q task
 }
 scn_build() {  # scn_build ID -> sets SC_ROOT SC_TIP SC_HEAD
-    local id="$1"
+    local id="$1"; SC_SEQ=$((SC_SEQ + 1))
     case "$id" in
-        g0)  scn_remote "$id" ;;
-        a1)  scn_remote "$id"; scn_adv; must sg "$SC_ROOT" merge -q --no-ff -m "merge main into the branch" origin/main ;;
-        a2)  scn_remote "$id"; scn_adv; must sg "$SC_ROOT" merge -q --no-commit --no-ff origin/main
+        g0)  scn_remote "$id.$SC_SEQ" ;;
+        a1)  scn_remote "$id.$SC_SEQ"; scn_adv; must sg "$SC_ROOT" merge -q --no-ff -m "merge main into the branch" origin/main ;;
+        a2)  scn_remote "$id.$SC_SEQ"; scn_adv; must sg "$SC_ROOT" merge -q --no-commit --no-ff origin/main
              must sg "$SC_ROOT" checkout origin/main -- other.txt; must sg "$SC_ROOT" commit -q -m "merge main, resolved to main's version" ;;
-        a2b) scn_remote "$id"; scn_adv; must sg "$SC_ROOT" merge -q --no-commit --no-ff origin/main
+        a2b) scn_remote "$id.$SC_SEQ"; scn_adv; must sg "$SC_ROOT" merge -q --no-commit --no-ff origin/main
              printf 'evil\n' >> "$SC_ROOT/other.txt"; must sg "$SC_ROOT" add -A   # edit the merge ...
              must sg "$SC_ROOT" checkout origin/main -- other.txt; must sg "$SC_ROOT" commit -q -m "merge main, edited, then restored to main's version" ;;
-        a3)  scn_norem "$id"; must sg "$SC_ROOT" merge -q --no-ff -m "merge main into the branch (no remote)" main ;;
-        b1)  scn_remote "$id"; cfile "$SC_ROOT" other.txt x "branch commit touching a non-092 file" ;;
-        b2i) scn_remote "$id"; scn_adv; must sg "$SC_ROOT" merge -q --no-commit --no-ff origin/main
+        a3)  scn_norem "$id.$SC_SEQ"; must sg "$SC_ROOT" merge -q --no-ff -m "merge main into the branch (no remote)" main ;;
+        b1)  scn_remote "$id.$SC_SEQ"; cfile "$SC_ROOT" other.txt x "branch commit touching a non-092 file" ;;
+        b2i) scn_remote "$id.$SC_SEQ"; scn_adv; must sg "$SC_ROOT" merge -q --no-commit --no-ff origin/main
              printf 'evil\n' >> "$SC_ROOT/other.txt"; must sg "$SC_ROOT" add -A; must sg "$SC_ROOT" commit -q -m "merge main, then edit a main-supplied file" ;;
-        b2ii) scn_remote "$id"; scn_adv; must sg "$SC_ROOT" merge -q --no-commit --no-ff origin/main
+        b2ii) scn_remote "$id.$SC_SEQ"; scn_adv; must sg "$SC_ROOT" merge -q --no-commit --no-ff origin/main
              printf 'evil\n' > "$SC_ROOT/evil.txt"; must sg "$SC_ROOT" add -A; must sg "$SC_ROOT" commit -q -m "merge main, adding a new file" ;;
-        b3)  scn_remote "$id"; must sg "$SC_ROOT" checkout -q -b side task; cfile "$SC_ROOT" side.txt s "side branch change"
+        b3)  scn_remote "$id.$SC_SEQ"; must sg "$SC_ROOT" checkout -q -b side task; cfile "$SC_ROOT" side.txt s "side branch change"
              must sg "$SC_ROOT" checkout -q task; must sg "$SC_ROOT" merge -q --no-ff -m "merge a side branch" side ;;
-        b4)  scn_remote "$id"; must sg "$SC_ROOT" branch s1 task; must sg "$SC_ROOT" branch s2 task
+        b4)  scn_remote "$id.$SC_SEQ"; must sg "$SC_ROOT" branch s1 task; must sg "$SC_ROOT" branch s2 task
              must sg "$SC_ROOT" checkout -q s1; cfile "$SC_ROOT" side1.txt 1 "s1"
              must sg "$SC_ROOT" checkout -q s2; cfile "$SC_ROOT" docs/tasks/092-s2.md 2 "s2"
              must sg "$SC_ROOT" checkout -q task; must sg "$SC_ROOT" merge -q --no-ff -m "octopus" s1 s2 ;;
-        b5)  scn_remote "$id"; scn_adv; must sg "$SC_ROOT" merge -q --no-ff -m "merge main" origin/main
+        b5)  scn_remote "$id.$SC_SEQ"; scn_adv; must sg "$SC_ROOT" merge -q --no-ff -m "merge main" origin/main
              must sg "$SC_ROOT" branch -f main origin/main   # a LOCAL main that would accept the merge, if it were wrongly used as a fallback
              must sg "$SC_ROOT" update-ref -d refs/remotes/origin/main ;;
-        b5b) scn_norem "$id"; must sg "$SC_ROOT" merge -q --no-ff -m "merge main (no remote)" main; must sg "$SC_ROOT" branch -D main ;;
+        b5b) scn_norem "$id.$SC_SEQ"; must sg "$SC_ROOT" merge -q --no-ff -m "merge main (no remote)" main; must sg "$SC_ROOT" branch -D main ;;
         *)   echo "unknown scenario $id" >&2; SC_BAD=1 ;;
     esac
     SC_HEAD="$(git -C "$SC_ROOT" rev-parse HEAD 2>/dev/null)"
