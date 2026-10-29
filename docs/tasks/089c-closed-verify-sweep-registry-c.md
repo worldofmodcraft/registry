@@ -110,3 +110,5 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   - Pins: PIN_FINAL moves to `d7b0edde5dc58d6797249d0c2ec2033d08719246` (this content commit); PIN_TIP = the log commit after it; PIN_RED and PIN_FIX unchanged; a pin commit rewrites only PIN_FINAL and PIN_TIP.
   - Phase-2 command list gains no step: AC12 runs inside the default step 4. Note step 3 (`--own-only`) now needs only fixed SHAs.
 
+
+- 2026-10-29 qa-engineer: re-pin commit `88a2d51aafb12651f25707f11dc7d66dbbe810e2` (PIN_FINAL=`d7b0edde5dc58d6797249d0c2ec2033d08719246`, PIN_TIP=`d74b745e23fcd61ebf608593c916d1f47770277e` only). Pushed; awaiting phase 2.
