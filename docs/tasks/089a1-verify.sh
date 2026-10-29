@@ -434,6 +434,36 @@ else
     [ "$(G ls-tree "$PIN_FIX" docs/tasks/007a-verify.sh docs/tasks/007b-verify.sh docs/tasks/008a-verify.sh | grep -c '^100755 ')" = 3 ] && pass "AC11.10 the three scripts are still executable (mode 100755) at the fix commit" || fail "AC11.10 a script lost its executable bit"
 fi
 
+if [ "$OWN" = 0 ]; then
+section "AC12 -- stays green on main after the merge and after any later commit (Ludwig 2026-10-29: fixed SHAs only)"
+# The own-change checks (AC11) read only fixed commits. Cells, each a clone of this branch's head (run with --own-only, no other script):
+#   (a) a squash-style main: HEAD is a NEW commit with this branch's tree whose only parent is the cut base, so the branch's commits exist
+#       as objects but are NOT ancestors of HEAD. The script at OLD089 (the version that required PIN_TIP <= HEAD) must FAIL there; this
+#       script (the clone's own copy) must pass.
+#   (b) control: one ordinary extra commit on top of the head: both pass.
+OLD089="47eb0558a55c28430b4ce9a2502b1ea7ce196a55"
+S089=docs/tasks/089a1-verify.sh
+G show "$OLD089:$S089" > "$TMP/old089.sh" 2>/dev/null && [ -s "$TMP/old089.sh" ] && pass "AC12.0 the pre-fix script is readable at $OLD089" || fail "AC12.0 cannot read $S089 at $OLD089"
+if mk_frame "$TMP/sq" "$HEADREV"; then
+    sqc=$(git -C "$TMP/sq" "${GITID[@]}" commit-tree "$HEADREV^{tree}" -p "$OLDREF" -m "squash-style main: this branch's tree on the cut base") \
+        && git -C "$TMP/sq" checkout -q --detach "$sqc" && pass "AC12.1 squash-style clone built: HEAD $(git -C "$TMP/sq" rev-parse --short HEAD), PIN_TIP is not its ancestor" || fail "AC12.1 cannot build the squash-style clone"
+    git -C "$TMP/sq" merge-base --is-ancestor "$PIN_TIP" HEAD 2>/dev/null && fail "AC12.1b the squash-style clone still has PIN_TIP as an ancestor (premise broken)" || pass "AC12.1b premise: PIN_TIP is not an ancestor of the squash-style HEAD"
+    cp "$TMP/old089.sh" "$TMP/sq/$S089" && chmod +x "$TMP/sq/$S089"
+    rc=$(run_in "$TMP/sq" "$TMP/sq-old.out" bash "$S089" --own-only)
+    expect "AC12.2 the PRE-FIX script on the squash-style clone: its own-change check goes red (red first)" red "$rc" "$TMP/sq-old.out" '^FAIL  AC11\.2 '
+    git -C "$TMP/sq" checkout -q -- "$S089"
+    rc=$(run_in "$TMP/sq" "$TMP/sq-new.out" bash "$S089" --own-only)
+    expect "AC12.3 this script on the same squash-style clone" green "$rc" "$TMP/sq-new.out" '^PASS  AC11\.2 ' '!^FAIL'
+fi
+if mk_frame "$TMP/ex" "$HEADREV"; then
+    printf 'later\n' > "$TMP/ex/LATER.txt" && git -C "$TMP/ex" add LATER.txt && git -C "$TMP/ex" "${GITID[@]}" commit -q -m "one extra later commit"
+    cp "$TMP/old089.sh" "$TMP/ex/$S089" && chmod +x "$TMP/ex/$S089"
+    rc=$(run_in "$TMP/ex" "$TMP/ex-old.out" bash "$S089" --own-only); expect "AC12.4 control: the pre-fix script with one ordinary later commit on top" green "$rc" "$TMP/ex-old.out" '!^FAIL'
+    git -C "$TMP/ex" checkout -q -- "$S089"
+    rc=$(run_in "$TMP/ex" "$TMP/ex-new.out" bash "$S089" --own-only); expect "AC12.5 this script with one ordinary later commit on top" green "$rc" "$TMP/ex-new.out" '!^FAIL'
+else fail "AC12.6 cannot clone HEAD"; fi
+fi   # OWN = 0
+
 # ==================================================================================================
 else
 section "AC4 mutations (each fixed check widened back to the worktree, on the later-branch merge on HEAD; red, and only that check)"
