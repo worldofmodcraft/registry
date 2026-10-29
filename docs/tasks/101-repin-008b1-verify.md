@@ -72,3 +72,6 @@ them). The reference implementation of exactly this change is task 089e for `008
   (HEAD's copy of the script, run on HEAD) read HEAD for an own-change property and redden the day a later task edits 008b1-verify.sh. RED FIRST commit: AC12 added (pin OLD101 = that head): a clone of
   OLD101 plus ONE later commit appending a comment to 008b1-verify.sh must make the OLD `--own-only` FAIL `AC11.5d` (a later new file must stay green), and the same later commit on the current HEAD must be green.
   Until the fix commit follows, AC12 is red on the fixed side by construction.
+- 2026-10-29 qa-engineer: FIX of the finding above. AC11.5d is now `blob(E_FIX:008b1-verify.sh) == blob(E_FINAL:008b1-verify.sh)` (fixed SHAs); AC5.0 the same; AC5.1/5.2 run the 008b1-verify.sh BLOB AT E_FIX
+  (copied into the clone) on a clone of the pinned E_TIP and on E_TIP + a later branch, as 089e's AC5 does (E_TIP rather than live HEAD: a behaviour test on a tree a later task cannot change; this is
+  the one deliberate difference from "a clone of HEAD"). The only remaining HEAD read is ancestry (`E_TIP` is an ancestor of HEAD, AC11.2), which a later edit cannot redden. E_SCRIPT/E_TIP re-pinned below.

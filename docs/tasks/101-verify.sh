@@ -64,8 +64,8 @@ E_BASE="dd7da2d79fc278597762cce862b48cc48434f816"     # registry main when 101 w
 E_FIX="fbd384c8ee0edc5da50038ab8f74d2c988333c81"     # first commit touching 008b1-verify.sh
 E_FINAL="fbd384c8ee0edc5da50038ab8f74d2c988333c81"   # last commit touching 008b1-verify.sh
 OLD101="0c67d6eb7eae922fbc6b4d9304fda82feea771f4"   # the head of this script that still read HEAD (AC11.5d, AC5.0); AC12 proves one later commit reddens it
-E_SCRIPT="8dc4f9bd597b4d05d7aa78830a55e613c3d04608"  # the last commit changing 101-verify.sh other than by pin lines (AC3.4 repair, below in the task log)
-E_TIP="8952591f671894d4009e9ebf20a3c4dc521e1fe4"     # the pin commit; nothing is range-checked after it (see the task log)
+E_SCRIPT="unpinned"  # the last commit changing 101-verify.sh other than by pin lines (AC3.4 repair, below in the task log)
+E_TIP="unpinned"     # the pin commit; nothing is range-checked after it (see the task log)
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
@@ -237,15 +237,16 @@ printf 'scope pin PIN_M skipped\n' > "$TMP/skipctl.txt"; printf 'ok    [criterio
 hits=$(cat "$TMP"/d-PIN_*.out "$TMP"/n-f?.out 2>/dev/null | skipwords)
 [ "$hits" = 0 ] && pass "AC3.4 'skip' / 'not evaluated' occur 0 times on scope-check lines of the deadbee and NEW runs" || fail "AC3.4 $hits skip/not-evaluated scope line(s) in the run outputs"
 
-section "AC5 -- item-12 control: the fixed 008b1-verify.sh as committed at HEAD exits 0 on HEAD and on a merge with a later synthetic branch"
-if ! full40 "$E_FIX"; then fail "AC5.0 E_FIX='$E_FIX' is not a full SHA: cannot compare 008b1-verify.sh at HEAD with the fix commit"
-elif G diff --quiet "$E_FIX" "$HEADREV" -- "$V008B1" 2>/dev/null; then pass "AC5.0 008b1-verify.sh at HEAD equals the fix commit's (HEAD is the fixed script)"
-else fail "AC5.0 008b1-verify.sh at HEAD differs from the fix commit $E_FIX"; fi
-mk_frame "$TMP/h" "$HEADREV" "$HEADREV" || fail "AC5.0 cannot clone HEAD"
-rc=$(run008b1 "$TMP/h" "$TMP/h.out"); expect "AC5.1 the HEAD script on HEAD" green "$rc" "$TMP/h.out" '!^FAIL'
-if mk_frame "$TMP/hl" "$HEADREV" "$HEADREV" && lh=$(add_later "$TMP/hl" "$HEADREV"); then git -C "$TMP/hl" update-ref refs/remotes/origin/main "$lh"
-else fail "AC5.0 cannot build the HEAD + later-branch frame"; fi
-rc=$(run008b1 "$TMP/hl" "$TMP/hl.out"); expect "AC5.2 the HEAD script on HEAD merged with a later branch (main moved)" green "$rc" "$TMP/hl.out" '!^FAIL'
+section "AC5 -- item-12 control: the fixed 008b1-verify.sh (blob at the fix commit) exits 0 on the pinned TIP and on a merge with a later synthetic branch"
+# A behaviour test on fixed inputs: the script is the blob at E_FIX and the tree is the pinned TIP (never HEAD), so a later commit on main cannot change this control.
+if ! full40 "$E_FIX" || ! full40 "$E_FINAL"; then fail "AC5.0 E_FIX/E_FINAL are not full SHAs: cannot compare the fix commit's 008b1-verify.sh with FINAL's"
+elif [ "$(G rev-parse "$E_FIX:$V008B1" 2>/dev/null)" = "$(G rev-parse "$E_FINAL:$V008B1" 2>/dev/null)" ] && [ -n "$(G rev-parse "$E_FIX:$V008B1" 2>/dev/null)" ]; then pass "AC5.0 008b1-verify.sh at the fix commit and at FINAL are the same blob"
+else fail "AC5.0 008b1-verify.sh differs between the fix commit $E_FIX and FINAL $E_FINAL"; fi
+mk_frame "$TMP/h" "$E_TIP" "$E_TIP" || fail "AC5.0 cannot clone the pinned TIP"
+rc=$(run008b1 "$TMP/h" "$TMP/h.out" "$NEWF"); expect "AC5.1 the fixed script on the pinned TIP" green "$rc" "$TMP/h.out" '!^FAIL'
+if mk_frame "$TMP/hl" "$E_TIP" "$E_TIP" && lh=$(add_later "$TMP/hl" "$E_TIP"); then git -C "$TMP/hl" update-ref refs/remotes/origin/main "$lh"
+else fail "AC5.0 cannot build the TIP + later-branch frame"; fi
+rc=$(run008b1 "$TMP/hl" "$TMP/hl.out" "$NEWF"); expect "AC5.2 the fixed script on the pinned TIP merged with a later branch (main moved)" green "$rc" "$TMP/hl.out" '!^FAIL'
 fi   # OWN = 0
 
 section "AC11 -- 101's own change, measured on fixed SHAs only (never HEAD, never main)"
@@ -272,7 +273,7 @@ else
     nonpin="$(G diff "$E_SCRIPT" "$E_TIP" -- "$SELF" | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' | grep -vE '^[+-]E_(FIX|FINAL|SCRIPT)=' || true)"
     [ -z "$nonpin" ] && pass "AC11.5b SCRIPT..TIP changes only the E_FIX/E_FINAL/E_SCRIPT pin lines of this script" || fail "AC11.5b SCRIPT..TIP changes this script beyond its pin lines: $(printf '%s' "$nonpin" | head -n3 | tr '\n' '|')"
     G diff --quiet "$E_FINAL" "$E_TIP" -- "$V008B1" && pass "AC11.5c 008b1-verify.sh at TIP equals FINAL" || fail "AC11.5c 008b1-verify.sh changed between FINAL and TIP"
-    G diff --quiet "$E_FINAL" "$HEADREV" -- "$V008B1" && pass "AC11.5d 008b1-verify.sh at HEAD equals FINAL (blob equality against the fixed pin; not a range scope check)" || fail "AC11.5d 008b1-verify.sh at HEAD differs from FINAL"
+    [ "$(G rev-parse "$E_FIX:$V008B1" 2>/dev/null)" = "$(G rev-parse "$E_FINAL:$V008B1" 2>/dev/null)" ] && [ -n "$(G rev-parse "$E_FIX:$V008B1" 2>/dev/null)" ] && pass "AC11.5d 008b1-verify.sh at FIX and at FINAL are the same blob (fixed SHAs; what happens after TIP is deliberately not measured)" || fail "AC11.5d 008b1-verify.sh differs between FIX and FINAL"
     # the other 008b1 checks are untouched: five regions of the script are byte-identical OLD (at M) vs NEW (at FIX)
     cut_head() { awk '/^set -u/{f=1} /^SCOPE_RE=/{f=0} f{print}' "$1"; }
     cut_tools() { awk '/^for tool in git python3/{f=1} /^# -+ scope self-test/{f=0} f{print}' "$1"; }
