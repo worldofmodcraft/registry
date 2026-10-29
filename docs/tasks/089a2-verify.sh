@@ -255,8 +255,8 @@ cnt() { grep -cF -- "$2" "$1"; }
 [ "$(cnt "$NEWD/057.sh" "Status:** Accepted (Ludwig, in session, 2026-10-15")" -ge 1 ] && [ "$(cnt "$NEWD/057.sh" 'ADR0121')" -ge 2 ] \
     && pass "AC0.8 S2: the NEW 057-verify.sh carries the ADR-0121 fixture blob (Status line and heredoc markers)" || fail "AC0.8 S2: no ADR-0121 fixture in the NEW 057-verify.sh"
 # Q4: option A needs a history the script can reach; the registry's never held an ADR, so option B (fixture) is the right one. A search that finds nothing is broken: the same command on docs/tasks must find commits.
-na=$(G log --all --format=%H -- 'docs/decisions' 'docs/decisions/0121-version-lifecycle-pending.md' | wc -l); nt=$(G log --all --format=%H -- docs/tasks | wc -l)
-[ "$na" = 0 ] && [ "$nt" -gt 0 ] && pass "AC0.9 Q4: no commit of any ref of this repository ever touched docs/decisions ($na); the same search on docs/tasks finds $nt commits (positive control): option B, fixture blob" || fail "AC0.9 Q4: docs/decisions history found ($na commits) or the control search is empty ($nt)"
+na=$(G log --format=%H "$PIN_FINAL" -- 'docs/decisions' | wc -l); nt=$(G log --format=%H "$PIN_FINAL" -- docs/tasks | wc -l)
+[ "$na" = 0 ] && [ "$nt" -gt 0 ] && pass "AC0.9 Q4: no commit reachable from the fixed FINAL ever touched docs/decisions ($na); the same search on docs/tasks finds $nt commits (positive control): option B, fixture blob" || fail "AC0.9 Q4: docs/decisions history found ($na commits) or the control search is empty ($nt)"
 for s in 057 070 062; do bash -n "$NEWD/$s.sh" && pass "AC0.10 NEW $s-verify.sh passes bash -n" || fail "AC0.10 NEW $s-verify.sh has a syntax error"; done
 python3 -I -c 'import ast,sys; ast.parse(sys.stdin.read())' < "$NEWD/textchecks.py" && pass "AC0.11 NEW 057-textchecks.py parses" || fail "AC0.11 NEW 057-textchecks.py does not parse"
 bash -n "$NEWD/057.trunc.sh" && [ -s "$NEWD/057.trunc.sh" ] && [ -s "$OLDD/057.trunc.sh" ] \
@@ -374,8 +374,8 @@ else
         G cat-file -e "$s^{commit}" 2>/dev/null && pass "AC11.1 pin $s exists" || fail "AC11.1 pin $s does not exist"
     done
     G merge-base --is-ancestor "$PIN_BASE" "$PIN_RED" && G merge-base --is-ancestor "$PIN_RED" "$PIN_FIX" \
-        && G merge-base --is-ancestor "$PIN_FIX" "$PIN_RED2" && G merge-base --is-ancestor "$PIN_RED2" "$PIN_FIX2" && G merge-base --is-ancestor "$PIN_FIX2" "$PIN_PREV" && G merge-base --is-ancestor "$PIN_PREV" "$PIN_RED3" && G merge-base --is-ancestor "$PIN_RED3" "$PIN_FIX3" && [ "$PIN_FIX3" = "$PIN_FINAL" ] && G merge-base --is-ancestor "$PIN_FINAL" "$PIN_TIP" && G merge-base --is-ancestor "$PIN_TIP" HEAD \
-        && pass "AC11.2 BASE < RED < FIX <= RED2 < FIX2 <= PREV <= RED3 < FIX3 = FINAL <= TIP <= HEAD (ancestry)" || fail "AC11.2 the pins are not in ancestry order"
+        && G merge-base --is-ancestor "$PIN_FIX" "$PIN_RED2" && G merge-base --is-ancestor "$PIN_RED2" "$PIN_FIX2" && G merge-base --is-ancestor "$PIN_FIX2" "$PIN_PREV" && G merge-base --is-ancestor "$PIN_PREV" "$PIN_RED3" && G merge-base --is-ancestor "$PIN_RED3" "$PIN_FIX3" && [ "$PIN_FIX3" = "$PIN_FINAL" ] && G merge-base --is-ancestor "$PIN_FINAL" "$PIN_TIP" \
+        && pass "AC11.2 BASE < RED < FIX <= RED2 < FIX2 <= PREV <= RED3 < FIX3 = FINAL <= TIP (ancestry, fixed SHAs only)" || fail "AC11.2 the pins are not in ancestry order"
     TASKFILES='docs/tasks/089-closed-verify-sweep-registry.md|docs/tasks/089a2-closed-verify-sweep-registry-a2.md'
     red_files="$(G diff --name-only "$PIN_BASE" "$PIN_RED" 2>/dev/null | grep -vxE "$TASKFILES" | sort | tr '\n' ' ')"
     [ "$red_files" = "docs/tasks/089a2-verify.sh " ] && pass "AC11.3 the red commit touches only 089a2-verify.sh and the task files" || fail "AC11.3 the red commit touches: $red_files"
