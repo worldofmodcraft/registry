@@ -195,8 +195,31 @@ scope_checks() {
     if [ "$bad" = 0 ]; then pass "(f) outside the post-TIP comment/function/controls region the two blobs are identical (diff lines 0)"
     else fail "(f) $bad diff line(s) outside the region"; fi
 }
+# Later-commit stability (decision 2026-10-29, "fixed SHAs only"): a green script must stay green on main after the merge and after any later commit.
+# (1) a clone with one extra later commit on top gives the same own-change answer, because the range is PIN_START..PIN_TIP, never ..HEAD;
+# (2) positive control: the HEAD-relative form of the same check WOULD change on that clone (so the control can tell the two apart);
+# (3) a grep over this script's own-change code (scope_checks and extract) finds no HEAD / origin/main / merge-base (non-zero count of pins required).
+later_commit_checks() {
+    local L="$TMP/later" names exp head_names body
+    exp="$(printf '%s\n' "$OWN_FILES" | sort)"
+    if git clone -q --no-hardlinks "$REAL" "$L" 2>/dev/null && git -C "$L" checkout -q --detach "$PIN_TIP" 2>/dev/null \
+        && printf 'later\n' > "$L/zz-later-commit.txt" && git -C "$L" add zz-later-commit.txt \
+        && git -C "$L" "${GITID[@]}" commit -q -m "a later commit on top of the pinned tip" >/dev/null 2>&1; then
+        names="$(git -C "$L" diff --name-only "$PIN_START" "$PIN_TIP" 2>/dev/null | sort)"
+        [ -n "$names" ] && [ "$names" = "$exp" ] && pass "(f) with a later commit on top, PIN_START..PIN_TIP is still exactly the three own files" \
+            || fail "(f) a later commit changed the fixed-range answer: $(printf '%s' "$names" | tr '\n' ' ')"
+        head_names="$(git -C "$L" diff --name-only "$PIN_START" HEAD 2>/dev/null | sort)"
+        [ -n "$head_names" ] && [ "$head_names" != "$exp" ] && pass "(f) positive control: the HEAD-relative form of the check WOULD be red on that clone ($(printf '%s' "$head_names" | wc -l) files)" \
+            || fail "(f) positive control failed: the HEAD-relative form is not distinguishable on the later-commit clone"
+    else fail "(f) could not build the later-commit clone at PIN_TIP"; fi
+    body="$(sed -n '/^scope_checks() {/,/^}/p; /^extract() {/,/^}/p' "$0")"
+    if [ "$(printf '%s\n' "$body" | grep -c -E 'PIN_START|PIN_TIP|PIN_RED|PIN_FIX')" -gt 0 ] \
+        && [ "$(printf '%s\n' "$body" | grep -c -E 'HEAD|origin/main|merge-base')" = 0 ]; then
+        pass "(f) the own-change code (scope_checks, extract) names pins and reads no HEAD, origin/main or merge-base"
+    else fail "(f) the own-change code reads HEAD/origin/main/merge-base, or the pin grep found nothing"; fi
+}
 if [ "$OWN" = 1 ]; then
-    section "(f) scope"; scope_checks
+    section "(f) scope"; scope_checks; later_commit_checks
     echo; echo "SUMMARY failed=$FAILURES"; exit "$FAILURES"
 fi
 
@@ -300,7 +323,7 @@ if [ "$MUTATE" = 0 ]; then
         else fail "(c) merged case wrong (rc $RC: $(printf '%s' "$OUT" | head -c 200))"; fi
     else fail "(c) could not build the synthetic merged clone"; fi
 
-    section "(f) scope"; scope_checks
+    section "(f) scope"; scope_checks; later_commit_checks
 else
     section "(e) mutation: the old first-parent name-only pattern restored in a temp copy of the FIXED function"
     MUT_FN="$TMP/mut.fn"
