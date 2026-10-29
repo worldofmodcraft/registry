@@ -63,7 +63,7 @@ FINAL008B1="2f179d08a9786ba94cb2f6c6fc2da4bf0ba5ffca"  # M^2
 E_BASE="dd7da2d79fc278597762cce862b48cc48434f816"     # registry main when 101 was cut (= M008B1)
 E_FIX="fbd384c8ee0edc5da50038ab8f74d2c988333c81"     # first commit touching 008b1-verify.sh
 E_FINAL="fbd384c8ee0edc5da50038ab8f74d2c988333c81"   # last commit touching 008b1-verify.sh
-E_SCRIPT="unpinned"  # the last commit changing 101-verify.sh other than by pin lines (AC3.4 repair, below in the task log)
+E_SCRIPT="8dc4f9bd597b4d05d7aa78830a55e613c3d04608"  # the last commit changing 101-verify.sh other than by pin lines (AC3.4 repair, below in the task log)
 E_TIP="unpinned"     # the pin commit; nothing is range-checked after it (see the task log)
 
 TMP="$(mktemp -d)" || exit 99
