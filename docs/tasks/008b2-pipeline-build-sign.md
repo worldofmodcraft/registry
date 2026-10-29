@@ -1,6 +1,6 @@
 # Task 008b-2: Pipeline workflow — plan, build, sign and dry-run jobs
 
-- **Mission:** SITE-V1, deliverable **D2** (umbrella `docs/tasks/008b-pipeline-workflow.md`, which keeps the decisions, design and history; design numbers below refer to it) — **Status:** review (phase 2 [script] green 2026-10-29; [live] criteria 7, 8, 10, 11 and the 25 live clause pending)
+- **Mission:** SITE-V1, deliverable **D2** (umbrella `docs/tasks/008b-pipeline-workflow.md`, which keeps the decisions, design and history; design numbers below refer to it) — **Status:** review (phase 2 [script] green 2026-10-29 incl. fix rounds 1-2; [live] criteria 7, 8, 10, 11 and the 25 live clause pending)
 - **Agent / model:** implementer / sonnet
 - **Budget:** medium
 - **Branch / worktree:** `task/008b2-pipeline-build-sign` / `~/wt/registry-task-008b2` — **registry** repo
@@ -166,3 +166,7 @@ Workflow (without the write-back job, push-gated) + `sign_built.py` + `handoff.p
   - (2) Check `c14 (d2)` also asserts the lines before the `unset` are exactly `umask 077` and the key-write `printf`; mutation `c14-python-before-unset` inserts a python call before the unset.
   - (3) Residual documented in `docs/pipeline/build-pipeline.md` ("Accepted residual"). **Follow-up booked: "verify before key write"** — restructure the signing step so the tarball checks (`verify_built`) run before the key file is written, then write the key, unset, and sign (needs a split of `sign_built` into check and sign phases; own task).
   - (4) Docs: Q-S/Q-R/Q-A replaced by the manager-verified facts; the unset and the allow-list (keys and values) are described.
+- 2026-10-29 phase 2 re-run after fix round 2 (implementer). Manager's reproduction of the round-2 unit red/green (238 tests): `FAILED (failures=2)` at `2f32c80` (the two new value tests), `OK` at `2595c09`. Fresh non-shallow clone of https://github.com/worldofmodcraft/registry at `task/008b2-pipeline-build-sign` head `2595c09` (`is-shallow-repository` false), `PYTHONDONTWRITEBYTECODE=1`, outputs in `/tmp/w008b2-p2b.lqbGYf`; `ps` before each run showed no verify or unittest process.
+  - `./docs/tasks/008b2-verify.sh`: **exit 0**, `SUMMARY failed=0`; `ok c14 (d2) signing step unsets the secret from the environment before the python call` (now with the exact-lines assertion); `Ran 238 tests ... OK`.
+  - `./docs/tasks/008b2-verify.sh --mutate`: **exit 0**, `SUMMARY mutate failed=0`; 41 mutation lines all "red as required", including `c14-python-before-unset` and `values: scan and built_at value checks removed (2 named test(s) failed)`.
+  - [script] criteria stay done; [live] 7, 8, 10, 11 and the 25 live clause stay pending. Status: review.
