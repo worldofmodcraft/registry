@@ -283,7 +283,7 @@ requested id). This document is internal to node N5 and adds no edge to the depe
   a malformed id, an absent entry, or a version that is absent or not `pending` exits 1. In that mode only
   that entry is read, so a fault in another entry does not matter.
 - **Schema fault (C15, PT9).** An entry that fails `contracts/entry.schema.json` (also: not JSON, duplicate
-  keys, `NaN`, an `id` that does not belong to its directory `mods/<namespace>.<name>/`, the same version
+  keys, `NaN`, a file nested too deeply to parse (reason `nested too deeply to parse`), an `id` that does not belong to its directory `mods/<namespace>.<name>/`, the same version
   twice, a `mods/<dir>/` without `entry.json`) is one `fault` entry naming the file. Nothing is built for
   any version of it and no T3 is opened. Other entries continue. Patterns are matched through
   `write_back`'s helpers (full match, ASCII-only `\d`); task 094 will move the pipeline to
