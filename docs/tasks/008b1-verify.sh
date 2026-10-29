@@ -267,7 +267,13 @@ grep -q '^## The planner (task 008b-1)' docs/pipeline/build-pipeline.md && ok "b
 for h in '### The plan document' '### Planner rules' '### Recovering a skipped version'; do
   grep -qF "$h" docs/pipeline/build-pipeline.md && ok "docs heading present: $h" || fail "docs heading missing: $h"
 done
-grep -qF 'delete its `pipeline/` branch' docs/pipeline/build-pipeline.md && ok "manual recovery for a skipped version documented" || fail "recovery text missing"
+# a phrase may wrap across lines in the prose: match it whitespace-insensitively in the normalised text
+doc_has() { tr '\n\t' '  ' < "$2" | tr -s ' ' | grep -qF -- "$1"; }
+REC='delete its `pipeline/` branch'
+doc_has "$REC" docs/pipeline/build-pipeline.md && ok "manual recovery for a skipped version documented (phrase may wrap lines)" || fail "recovery text missing"
+PCD=$(mktemp -d); grep -vF 'its `pipeline/` branch' docs/pipeline/build-pipeline.md | grep -v 'close its PR, delete' > "$PCD/b.md"
+doc_has "$REC" "$PCD/b.md" && fail "positive control: the recovery check passes on a copy with the sentence removed (blind)" || ok "positive control: the recovery check fails on a copy with the recovery sentence removed"
+rm -r "$PCD"
 
 # hygiene and scope (left side = merge-base with the current main; see scope_base)
 [ -x $SELF ] && ok "verify script executable" || fail "verify script not executable"
