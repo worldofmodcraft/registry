@@ -1,6 +1,6 @@
 # Task 089e: registry closed scripts — part E (008c-verify.sh own-change scope check re-pinned to 008c's merged range)
 
-- **Mission:** SITE-V1 (verification integrity) — **Status:** review 2026-10-29 (fixed-SHA version, phase 2 green on the merged head; earlier phase 2 green at d50e7d8, was in-progress 2026-10-28 (cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A; part E cut by the manager in session 14 from the finding booked in the umbrella log (094 spec review), spec-approved solo under MANAGER.md §2b as a small, mechanical one-file task of the umbrella pattern)
+- **Mission:** SITE-V1 (verification integrity) — **Status:** done 2026-10-29 (fixed-SHA version, phase 2 green on the merged head; earlier phase 2 green at d50e7d8, was in-progress 2026-10-28 (cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A; part E cut by the manager in session 14 from the finding booked in the umbrella log (094 spec review), spec-approved solo under MANAGER.md §2b as a small, mechanical one-file task of the umbrella pattern)
 - **Agent / model:** qa-engineer (model per frontmatter) — **Budget:** small (one agent-session)
 - **Branch / worktree:** `task/089e-closed-verify-sweep-registry-e` / `~/wt/registry-task-089e`, from registry main `32c641b`
 - **Umbrella (authoritative for findings, pins, criteria, forbidden list, Q1-Q6):** `docs/tasks/089-closed-verify-sweep-registry.md` (copied
@@ -136,3 +136,8 @@ bash docs/tasks/008c-verify.sh --scope-selftest            # 5. the self-test al
   008c-verify.sh exit 2 (AC11.5 red); the fixed script exit 0 on both later commits. (3) `--mutate` rc=0: control green; m1 exit 1 (one FAIL, out of scope); m2 exit 2 (scope check + self-test only);
   m3 exit 0, all 28 mutations red (expected 28), both scope mutations named. (4) plain `008c-verify.sh` rc=0, 0 FAIL lines, "changed files in e2f7fe3..7810e70: 5", SUMMARY failed=0.
   (5) `008c-verify.sh --scope-selftest` rc=0 (bad-pin scenario ok). No unexpected red, no finding. Criteria 1-5, 9, 11 plus AC12: DONE. Status: review.
+- 2026-10-29 manager (session 14): manager fresh-clone re-run at `7c13d79` (main merged in): 089e default + `--mutate` exit 0 ALL CHECKS PASSED; plain 008c SUMMARY
+  failed=0. Delta review 2 (fixed-SHA round) PASS-WITH-AMENDMENTS, 4 LOW: (1) AC5.0 blob(E_FIX)==blob(E_FINAL) is true by construction on its own (meaningful only
+  with AC11.5c); (2) AC12's OLD leg should require every FAIL line to be AC11.5; (3) note: the fixed leg of AC12 reads HEAD by design; (4) cosmetic Status paren and
+  usage header. **Booked as a follow-up, not applied** (none affects behaviour on main; 089e unblocks every other 089 part's 039a). Status done; merged on the
+  manager's authority (§7; registry `gate` required).
