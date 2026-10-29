@@ -35,3 +35,12 @@ them). The reference implementation of exactly this change is task 089e for `008
   (3) pin commit (E_FIX/E_FINAL lines only), (4) E_TIP line + log. AC11.3c asserts (1) precedes the fix. Commits after TIP (the E_TIP line, log entries)
   are not range-checked by this script (a TIP..HEAD check is forbidden by the decision); the only HEAD read besides the item-12 controls is blob
   equality `008b1-verify.sh at HEAD == FINAL` (a fixed-pin comparison, not a scope diff). The reviewer's diff covers the tail.
+- 2026-10-29 qa-engineer: EDIT `docs/tasks/008b1-verify.sh` (scope check, pins and scope self-test only; diff +68/-48, identical in size to the 089e re-pin of 008c).
+  Removed `scope_base`; added PIN_M/PIN_BASE/PIN_FINAL (full SHAs, unconditional, no env override), `pin_full`, and `scope_violations` = `git diff --name-only
+  PIN_BASE PIN_FINAL` minus SCOPE_RE (returns 1 on an unusable pin or non-ancestor). Live check: three pin_full FAILs, BASE/FINAL re-derived from M, non-empty
+  range, no violations; unusable pins -> FAIL. SELF-TEST MAP old -> new (no assertion dropped; PIN_BASE/PIN_FINAL assigned inside each scenario subshell):
+  A merge-from-main: new check green (kept, now with a pinned range; the sensitivity proof `git diff first...HEAD` became `git diff first HEAD`, the HEAD-ended formula);
+  B stray-commit: unchanged intent, the stray commit is the pinned FINAL; C stray-plus-merge: unchanged intent, main merged AFTER the pin, flags only stray.txt;
+  D no-main-ref -> bad-pin (no main ref exists in the design; "cannot compute the base must FAIL" is now: 7-char, `deadbee`, nonexistent full SHA, reversed pins all FAIL, plus a valid-pin control).
+  `--mutate`: old `scope-fixed-base` replaced by `scope-right-side-head` (-> merge-from-main red) and `scope-unusable-pin-passes` (-> bad-pin red); all 24 `run_mut`
+  and the c12 mutation untouched (byte-identical, asserted by 101-verify.sh AC11.6). Expected `ok mutation` count 24+2+1 = 27 (was 26).
