@@ -12,21 +12,22 @@ fail() { echo "FAIL  $*"; FAILS=$((FAILS + 1)); }
 ok()   { echo "ok    $*"; }
 SCOPE_RE='tools/pipeline/write_back.py|tests/pipeline/test_write_back.py|docs/pipeline/build-pipeline.md|docs/tasks/008c-pipeline-write-back.md|docs/tasks/008c-verify.sh'
 
-# The left side of the scope diff is the merge-base with the CURRENT main, so a merge of main into the
-# branch does not drag main's files into the diff. A fixed ancestor commit would. If no main ref
-# exists the check cannot run: that is a FAIL, never a skip.
-scope_base() {
-  local r
-  for r in origin/main refs/heads/main; do
-    if git rev-parse -q --verify "$r^{commit}" >/dev/null 2>&1; then git merge-base HEAD "$r"; return $?; fi
-  done
-  return 1
-}
-# Prints out-of-scope changed files (one per line); returns 1 if the base cannot be computed.
+# Task 089e: the own-change scope check reads 008c's MERGED range, fixed by three pins (full 40-character SHAs), never HEAD
+# and never the current main: a later merge of main into any branch cannot change what this range contains (REVIEW-CHECKLIST
+# item 12). M = the merge of registry PR #27; BASE = git merge-base M^1 M^2; FINAL = M^2. The pins are re-derived from M below
+# (check "scope pins re-derived from the merge commit") and 089e-verify.sh recomputes them independently. There is no
+# environment override. A pin that is not a full SHA, does not resolve, or is not BASE <= FINAL is a FAIL, never a skip.
+PIN_M="32c641b5f56139a86c820f0b16d522c0f991d207"
+PIN_BASE="e2f7fe383d7b2231e1d37a73e474bca7ed56af46"
+PIN_FINAL="7810e70af50d7e2ebae1e53dccba37be1095afe7"
+pin_full() { [[ "$1" =~ ^[0-9a-f]{40}$ ]] && git cat-file -e "$1^{commit}" 2>/dev/null; }
+# Prints out-of-scope files changed in PIN_BASE..PIN_FINAL (one per line); returns 1 if the range cannot be computed.
 scope_violations() {
-  local b; b=$(scope_base) || return 1
-  [ -n "$b" ] || return 1
-  git diff --name-only "$b" HEAD | grep -vxE "$SCOPE_RE" || true
+  local d
+  pin_full "$PIN_BASE" && pin_full "$PIN_FINAL" || return 1
+  git merge-base --is-ancestor "$PIN_BASE" "$PIN_FINAL" || return 1
+  d=$(git diff --name-only "$PIN_BASE" "$PIN_FINAL") || return 1
+  [ -z "$d" ] || printf '%s\n' "$d" | grep -vxE "$SCOPE_RE" || true
 }
 
 for tool in git python3 grep; do
@@ -39,9 +40,10 @@ MOD=tools/pipeline/write_back.py
 TST=tests/pipeline/test_write_back.py
 
 
-# ---------------------------------------------------------------- scope self-test (finding 5)
-# Scenarios in throw-away repos, each judged by scope_violations (the real function) and, to prove
-# the scenario is sensitive, by the OLD formula (diff against a fixed ancestor).
+# ---------------------------------------------------------------- scope self-test (finding 5, re-pinned by task 089e)
+# Scenarios in throw-away repos. Each is judged by scope_violations (the real function, with PIN_BASE/PIN_FINAL assigned
+# inside the scenario's subshell to that repo's commits) and, to prove the scenario is sensitive, by the OLD formula
+# (a diff that ends at HEAD, which a merge of main into the branch drags out-of-scope files into).
 scope_selftest() {
   local T rc=0 first old
   T=$(mktemp -d "${TMPDIR:-/tmp}/w008c-scope.XXXXXX")
@@ -51,30 +53,39 @@ scope_selftest() {
     mkdir "$1" && cd "$1" && g init -q && echo base > README && g add README && g commit -q -m base
     first=$(git rev-parse HEAD)
   }
-  # A: main advances with an OUT-of-scope file, then is merged into the branch: must be GREEN
+  # A: the branch's range is pinned, then main advances with an OUT-of-scope file and is merged into the branch: must be GREEN
   ( mkrepo "$T/a" && g checkout -q -b task && mkdir -p tools/pipeline && echo x > tools/pipeline/write_back.py \
-      && g add . && g commit -q -m work && g checkout -q main && echo m > main-only.txt && g add . && g commit -q -m "main moves" \
+      && g add . && g commit -q -m work && PIN_FINAL=$(git rev-parse HEAD) && PIN_BASE=$first \
+      && g checkout -q main && echo m > main-only.txt && g add . && g commit -q -m "main moves" \
       && g checkout -q task && g merge -q --no-edit main
-    new=$(scope_violations; echo "rc=$?"); old=$(git diff --name-only "$first...HEAD" | grep -vxE "$SCOPE_RE" || true)
-    [ "$new" = "rc=0" ] && echo "ok    scope scenario merge-from-main: new check green" || { echo "FAIL  scope scenario merge-from-main: new check red: $new"; exit 1; }
-    [ -n "$old" ] && echo "ok    scope scenario merge-from-main: old fixed-base formula is red (flags: $old), scenario is sensitive" || { echo "FAIL  scope scenario merge-from-main: old formula not red, scenario is not sensitive"; exit 1; }
+    new=$(scope_violations; echo "rc=$?"); old=$(git diff --name-only "$first" HEAD | grep -vxE "$SCOPE_RE" || true)
+    [ "$new" = "rc=0" ] && echo "ok    scope scenario merge-from-main: pinned-range check green" || { echo "FAIL  scope scenario merge-from-main: pinned-range check red: $new"; exit 1; }
+    [ -n "$old" ] && echo "ok    scope scenario merge-from-main: old HEAD-ended formula is red (flags: $old), scenario is sensitive" || { echo "FAIL  scope scenario merge-from-main: old formula not red, scenario is not sensitive"; exit 1; }
   ) || rc=1
-  # B: control, a stray out-of-scope commit on the branch: must be RED
-  ( mkrepo "$T/b" && g checkout -q -b task && echo x > stray.txt && g add . && g commit -q -m stray
+  # B: control, a stray out-of-scope commit inside the pinned range: must be RED
+  ( mkrepo "$T/b" && g checkout -q -b task && echo x > stray.txt && g add . && g commit -q -m stray && PIN_FINAL=$(git rev-parse HEAD) && PIN_BASE=$first
     new=$(scope_violations; echo "rc=$?")
     [ "$new" = "stray.txt
-rc=0" ] && echo "ok    scope scenario stray-commit: new check red as it must be (flags stray.txt)" || { echo "FAIL  scope scenario stray-commit: not flagged: $new"; exit 1; }
+rc=0" ] && echo "ok    scope scenario stray-commit: check red as it must be (flags stray.txt)" || { echo "FAIL  scope scenario stray-commit: not flagged: $new"; exit 1; }
   ) || rc=1
-  # C: control, a stray commit on the branch AND a merge from main: still RED, and only for the stray file
-  ( mkrepo "$T/c" && g checkout -q -b task && echo x > stray.txt && g add . && g commit -q -m stray && g checkout -q main \
-      && echo m > main-only.txt && g add . && g commit -q -m "main moves" && g checkout -q task && g merge -q --no-edit main
+  # C: control, a stray commit inside the range AND a later merge from main: still RED, and only for the stray file
+  ( mkrepo "$T/c" && g checkout -q -b task && echo x > stray.txt && g add . && g commit -q -m stray && PIN_FINAL=$(git rev-parse HEAD) && PIN_BASE=$first \
+      && g checkout -q main && echo m > main-only.txt && g add . && g commit -q -m "main moves" && g checkout -q task && g merge -q --no-edit main
     new=$(scope_violations; echo "rc=$?")
     [ "$new" = "stray.txt
 rc=0" ] && echo "ok    scope scenario stray-plus-merge: flags only stray.txt" || { echo "FAIL  scope scenario stray-plus-merge: $new"; exit 1; }
   ) || rc=1
-  # D: no main ref at all: the base cannot be computed, which must FAIL (never skip)
-  ( mkrepo "$T/d" && g branch -m side && echo x > stray.txt && g add . && g commit -q -m x
-    if scope_violations >/dev/null 2>&1; then echo "FAIL  scope scenario no-main-ref: check passed without a base"; exit 1; else echo "ok    scope scenario no-main-ref: check fails (no skip)"; fi
+  # D: pins that cannot be used must FAIL (never skip): not a full SHA, a full SHA that does not exist, FINAL not a descendant of BASE
+  ( mkrepo "$T/d" && echo x > stray.txt && g add . && g commit -q -m x
+    head=$(git rev-parse HEAD); bad=0
+    PIN_BASE=${first:0:7} PIN_FINAL=$head; scope_violations >/dev/null 2>&1 && { echo "FAIL  scope scenario bad-pin: a 7-character BASE passed"; bad=1; }
+    PIN_BASE=deadbee PIN_FINAL=$head; scope_violations >/dev/null 2>&1 && { echo "FAIL  scope scenario bad-pin: BASE deadbee passed"; bad=1; }
+    PIN_BASE=$first PIN_FINAL=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef; scope_violations >/dev/null 2>&1 && { echo "FAIL  scope scenario bad-pin: a nonexistent full-SHA FINAL passed"; bad=1; }
+    PIN_BASE=$head PIN_FINAL=$first; scope_violations >/dev/null 2>&1 && { echo "FAIL  scope scenario bad-pin: FINAL not a descendant of BASE passed"; bad=1; }
+    PIN_BASE=$first PIN_FINAL=$head; v=$(scope_violations; echo "rc=$?")
+    [ "$v" = "stray.txt
+rc=0" ] || { echo "FAIL  scope scenario bad-pin: the valid control pins did not flag stray.txt: $v"; bad=1; }
+    [ $bad -eq 0 ] && echo "ok    scope scenario bad-pin: 7-char, nonexistent, deadbee and reversed pins all fail (fail, never pass); valid pins still flag" || exit 1
   ) || rc=1
   rm -r "$T"
   return $rc
@@ -147,17 +158,21 @@ import subprocess
   run_mut digit-translation-dropped-published-at $MOD '_PATTERNS = {k: _ecma_digits(_VPROPS[k]["pattern"])' '_PATTERNS = {k: (_VPROPS[k]["pattern"])' test_fix1_non_ascii_digit_in_published_at_refused
   run_mut digit-translation-mangles-escaped-backslash $MOD '            if e == "d":' '            if e in "d\\":' test_fix3_digit_translation_leaves_escaped_backslash_alone
   run_mut pending-shape-dropped $MOD 'if set(entry["versions"][idx]) != PENDING_KEYS:' 'if False:' test_fix2_pending_shape_stray_and_preexisting_keys_refused test_fix2_missing_pending_key_refused
-  # finding 5: the scope check reverts to a fixed ancestor as its left side -> the self-test must go red
+  # finding 5 / task 089e: (m1) the pinned range's right side is widened back to HEAD -> scenario merge-from-main must go red;
+  # (m2) an unusable pin is skipped instead of failed -> scenario bad-pin must go red
   mkdir "$SCR/s" && git show HEAD:docs/tasks/008c-verify.sh > "$SCR/s/v.sh"
-  if [ "$(sed -n '/^scope_base()/,/^}/p' "$SCR/s/v.sh" | grep -cF 'git merge-base HEAD "$r"; return $?;')" != 1 ]; then
-    fail "mutation scope-fixed-base: anchor not found exactly once (broken search)"
-  else
-    sed 's#git merge-base HEAD "$r"; return $?;#git rev-list --max-parents=0 HEAD | tail -1; return 0;#' "$SCR/s/v.sh" > "$SCR/s/m.sh"
-    cmp -s "$SCR/s/v.sh" "$SCR/s/m.sh" && fail "mutation scope-fixed-base: sed changed nothing" || {
-      ( cd "$SCR" && bash "$SCR/s/m.sh" --scope-selftest >"$SCR/s/out" 2>&1 )
-      grep -q "^FAIL  scope scenario merge-from-main" "$SCR/s/out" && ok "mutation scope-fixed-base: red -> scope scenario merge-from-main" || { fail "mutation scope-fixed-base not red"; cat "$SCR/s/out"; }
-    }
-  fi
+  scope_mut() { # id | exact anchor line (must occur once) | replacement | scenario label that must be FAIL
+    local id="$1" anchor="$2" repl="$3" want="$4"
+    if [ "$(grep -cxF -- "$anchor" "$SCR/s/v.sh")" != 1 ]; then fail "mutation $id: anchor not found exactly once (broken search)"; return; fi
+    SRC="$SCR/s/v.sh" DST="$SCR/s/m.sh" ANCHOR="$anchor" REPL="$repl" python3 -I -c '
+import os
+s=open(os.environ["SRC"]).read(); open(os.environ["DST"],"w").write(s.replace(os.environ["ANCHOR"],os.environ["REPL"],1))'
+    if cmp -s "$SCR/s/v.sh" "$SCR/s/m.sh"; then fail "mutation $id: nothing changed"; return; fi
+    ( cd "$SCR" && bash "$SCR/s/m.sh" --scope-selftest >"$SCR/s/out" 2>&1 )
+    grep -q "^FAIL  scope scenario $want" "$SCR/s/out" && ok "mutation $id: red -> scope scenario $want" || { fail "mutation $id not red"; cat "$SCR/s/out"; }
+  }
+  scope_mut scope-right-side-head '  d=$(git diff --name-only "$PIN_BASE" "$PIN_FINAL") || return 1' '  d=$(git diff --name-only "$PIN_BASE" HEAD) || return 1' merge-from-main
+  scope_mut scope-unusable-pin-passes '  pin_full "$PIN_BASE" && pin_full "$PIN_FINAL" || return 1' '  pin_full "$PIN_BASE" && pin_full "$PIN_FINAL" || return 0' bad-pin
   # file-adding mutation: a second module hard-codes the host
   fresh_t; git archive HEAD | tar -x -C "$SCR/t"
   echo 'U = "https://archive.worldofmodcraft.com/x"' > "$SCR/t/tools/pipeline/other_hardcode.py"
@@ -215,16 +230,21 @@ grep -qE '^\s*(import|from)\s+(subprocess|socket|ssl|urllib|http|requests|httpx|
 grep -q '^## Write-back (task 008c)' docs/pipeline/build-pipeline.md && ok "build-pipeline.md has the write-back section" || fail "write-back section missing"
 grep -q '\[unverified\] Nothing here checks a hash against a tarball' docs/pipeline/build-pipeline.md && ok "[unverified] hash note recorded" || fail "[unverified] note missing"
 
-# hygiene and scope (left side = merge-base with the current main; see scope_base)
+# hygiene and scope (own-change scope = 008c's merged range, fixed pins; see PIN_M above)
 [ -x docs/tasks/008c-verify.sh ] && ok "verify script executable" || fail "verify script not executable"
 git ls-files | grep -E '(__pycache__|\.pyc$)' >/dev/null && fail "bytecode tracked" || ok "no bytecode tracked"
-scope_selftest >"/tmp/w008c-scope.$$" 2>&1 && ok "scope check self-test (merge-from-main green, stray commit red, no main ref fails)" || { fail "scope self-test failed"; cat "/tmp/w008c-scope.$$"; }
+scope_selftest >"/tmp/w008c-scope.$$" 2>&1 && ok "scope check self-test (merge-from-main green, stray commit red, unusable pins fail)" || { fail "scope self-test failed"; cat "/tmp/w008c-scope.$$"; }
 grep '^ok' "/tmp/w008c-scope.$$" | sed 's/^/        /'; rm -f "/tmp/w008c-scope.$$"
-if SB=$(scope_base); then
-  CH=$(git diff --name-only "$SB" HEAD)
-  [ -n "$CH" ] && ok "changed files since merge-base ${SB:0:7} with main: $(echo $CH | wc -w)" || fail "no changes since base (broken search)"
+for p in PIN_M PIN_BASE PIN_FINAL; do
+  pin_full "${!p}" && ok "scope pin $p is a full SHA and resolves" || fail "scope pin $p='${!p}' is not a full 40-character SHA that resolves (FAIL, never a pass)"
+done
+if pin_full "$PIN_M" && pin_full "$PIN_BASE" && pin_full "$PIN_FINAL"; then
+  DB=$(git merge-base "$PIN_M^1" "$PIN_M^2" 2>/dev/null); DF=$(git rev-parse "$PIN_M^2" 2>/dev/null)
+  [ "$DB" = "$PIN_BASE" ] && [ "$DF" = "$PIN_FINAL" ] && ok "scope pins re-derived from the merge commit: BASE=merge-base(M^1,M^2), FINAL=M^2" || fail "scope pins differ from the merge commit's range (derived BASE=$DB FINAL=$DF)"
+  CH=$(git diff --name-only "$PIN_BASE" "$PIN_FINAL")
+  [ -n "$CH" ] && ok "changed files in ${PIN_BASE:0:7}..${PIN_FINAL:0:7}: $(echo $CH | wc -w)" || fail "no changes in the pinned range (broken search)"
   BAD=$(scope_violations || echo "BASE-ERROR")
-  [ -z "$BAD" ] && ok "all changes inside the declared file scope" || fail "out of scope: $BAD"
-else fail "no origin/main or refs/heads/main: scope cannot be checked (never skipped)"; fi
+  [ -z "$BAD" ] && ok "all changes of 008c's merged range inside the declared file scope" || fail "out of scope: $BAD"
+else fail "scope pins unusable: scope cannot be checked (FAIL, never a pass)"; fi
 
 echo "SUMMARY failed=$FAILS"; exit "$FAILS"
