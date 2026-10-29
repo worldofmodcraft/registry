@@ -384,14 +384,29 @@ Exit 0 signed; 1 refused (`REFUSED [rule]: ...`); 2 pipeline error. The handoff 
 | sign step refuses or errors | `signed-<tag>` with `exit_code` 2, no signature; the leg and the summary are red |
 | entry fails the schema, branch exists, plan skip | no leg; `plan` artifact; the summary is non-green (008b-1) |
 | plan job fails (bad inputs, broken checkout, archive clone fails) | everything else is skipped; the summary fails first |
-| minisign download pin empty | the install step fails closed (question Q-S) |
+| minisign download pin emptied or wrong | the install step fails closed (the pin is verified, see below) |
 
 **Broken or sparse checkout (008b-1 review F2).** The planner reads `mods/*/entry.json`; a checkout that lost them
 would look like an empty registry. `handoff.py check-checkout` fails the plan job if `mods/` is missing while git
 tracks files under it, or any tracked file under `mods/` is absent on disk.
 
-**Not verified (no workflow has run here):** the pinned `upload-artifact` and `download-artifact` SHAs match their
-tags (copied from other files on the dev machine); multi-path uploads land at the artifact root (least common
+**Signing-step hardening.** The key is read in one step only: it is written to a `0600` file under `$RUNNER_TEMP`,
+`unset MINISIGN_SECRET_KEY` follows immediately, and only then does `sign_built.py` (which parses untrusted build
+output with `tarfile`) run, so the key is not in that process's environment; the verify script asserts that the lines
+before the `unset` are exactly the umask and the key write. The build job is untrusted, so `sign_built.py` also
+allow-lists `result.json`: the key set of 008a's `--no-sign` result at every level, `scan` validated against
+`validation-report.schema.json` with 008a's own validator, `built_at` against the `published_at` pattern. Anything
+else is refused (`result/shape`, `result/scan`, `result/built-at`), which the handoff turns into outcome `exit_code` 2.
+
+**Accepted residual.** While `sign_built.py` parses the tarball, the `0600` key file exists on the runner's disk
+(and the process runs as the same user). The checks that precede signing therefore run with the key present on
+disk. Closing this means verifying the tarball before the key file is written (a follow-up booked in the task log).
+
+**Verified by the manager (task log, 2026-10-28):** the minisign 0.12 tarball SHA-256 pinned in the `sign` and
+`dry-run` jobs (checked against the author's signature); the `worldofmodcraft/archive` repository is public (anonymous
+`git ls-remote` works); the pinned `checkout`, `upload-artifact` and `download-artifact` SHAs equal the tags' commits.
+
+**Not verified (no workflow has run here):** multi-path uploads land at the artifact root (least common
 ancestor); a `pattern:` download with no match does not fail; `matrix` from `fromJSON` with only `include`;
-`ubuntu-latest` can run the minisign 0.12 static binary; the `signing` environment mechanics (runbook M11);
-that the archive repository is public for the anonymous clone in `plan`.
+`ubuntu-latest` can run the minisign 0.12 static binary (the checksum is verified, running it there is not); the
+`signing` environment mechanics (runbook M11).

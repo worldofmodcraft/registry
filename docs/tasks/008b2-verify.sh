@@ -404,6 +404,8 @@ M = [
      ["test_result_json_with_unknown_keys_is_refused_at_every_level"]),
     ("F5 reason takes everything after the REJECTED line", HO, [('            text = err[m.start():].split("\\n", 1)[0]     # the one line, never what follows it\n', "            text = err[m.start():]\n")],
      ["test_d_reason_is_the_single_rejected_line_only"]),
+    ("values: scan and built_at value checks removed", SB, [('    if not build_version._fullmatch(build_version._PAT_PUBLISHED_AT, res["built_at"]):\n', "    if False:\n"), ('    except sc.SchemaValidationError as exc:\n        raise SignRefused("result/scan"', '    except ZeroDivisionError as exc:\n        raise SignRefused("result/scan"')],
+     ["test_result_json_with_a_bad_scan_value_is_refused", "test_result_json_with_a_bad_built_at_is_refused"]),
 ]
 failed = 0
 for name, rel, edits, tests in M:

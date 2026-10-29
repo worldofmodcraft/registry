@@ -37,6 +37,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import archive  # noqa: E402
+import build_version  # noqa: E402  (008a's patterns and schema validator are reused, not re-implemented)
 import naming  # noqa: E402
 import reference_verify  # noqa: E402
 import signing  # noqa: E402
@@ -97,6 +98,13 @@ def _read_result(path: str) -> dict:
     if (set(res) != _RESULT_KEYS or set(assets) != _ASSET_KEYS or set(art) != _ARTIFACT_KEYS
             or not isinstance(res.get("scan"), dict) or set(res["scan"]) != _scan_keys()):
         raise SignRefused("result/shape", "result.json has keys outside 008a's result shape")
+    if not build_version._fullmatch(build_version._PAT_PUBLISHED_AT, res["built_at"]):
+        raise SignRefused("result/built-at", "built_at is not an RFC 3339 UTC timestamp (entry.schema.json published_at pattern)")
+    sc = build_version._load_schema_check()
+    try:
+        sc.validate(res["scan"], build_version._load_schema("validation-report.schema.json"))
+    except sc.SchemaValidationError as exc:
+        raise SignRefused("result/scan", f"scan does not satisfy validation-report.schema.json: {exc}")
     if not (isinstance(art.get("source_sha256"), str) and _SHA_RE.fullmatch(art["source_sha256"])):
         raise SignRefused("result/sha-format", "artifact.source_sha256 is not 64 lowercase hex characters")
     return res
