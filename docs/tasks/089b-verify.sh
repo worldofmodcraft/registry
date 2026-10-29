@@ -125,8 +125,13 @@ mk_frame() {
     git -C "$1" checkout -q --detach "$2" || return 1
 }
 # mk_later DEST REV FILE OLD NEW : a clone at REV plus a --no-ff merge of a synthetic later branch that edits FILE (OLD -> NEW, exactly once)
+has_text() { python3 -I -c 'import sys; sys.exit(0 if sys.argv[2] in open(sys.argv[1]).read() else 1)' "$1" "$2"; }   # has_text FILE TEXT
 mk_later() {
     mk_frame "$1" "$2" || return 1
+    # a frame other than OLD (i.e. HEAD) that ALREADY contains the later edit (a real later branch made it): use it as it is. An anchor in neither form is still refused.
+    if [ "$2" != "$OLDREF" ] && ! has_text "$1/$3" "$4" && has_text "$1/$3" "$5"; then
+        printf '  note: %s at %s already contains the later edit; the frame is used as it is\n' "$3" "${2:0:7}"; return 0
+    fi
     git -C "$1" checkout -q -b later-branch || return 1
     edit_file "$1/$3" "$4" "$5" || return 1
     git -C "$1" "${GITID[@]}" commit -q -am "synthetic later branch: edit $3" || return 1
@@ -197,7 +202,7 @@ cnt() { grep -cF -- "$2" "$1"; }
     && pass "AC0.11 039a takes the per-class test names from the test file at \$FINAL; the AC9 unit-test class_check is gone (moved, finding 11)" || fail "AC0.11 039a does not read the test file at \$FINAL, or still counts the AC9 class"
 # finding 11: the unit test is deleted; the assertion it made is made, in the same words, in 039a-verify.sh at the pin
 if G show "$OLDREF:$TCG" | grep -qF 'self.assertEqual(doc, {"schema_version": "1.0.0", "r11_identity": None})' \
-    && ! G show "$HEADREV:$TCG" | grep -qF 'AC9ProductionR11Unconfigured' && grep -qF '{"schema_version":"1.0.0","r11_identity":None}' "$NEWD/039a.sh"; then
+    && ! G show "$PIN_FIX:$TCG" | grep -qF 'AC9ProductionR11Unconfigured' && grep -qF '{"schema_version":"1.0.0","r11_identity":None}' "$NEWD/039a.sh"; then
     pass "AC0.12 the old unit test's condition (doc == {schema_version 1.0.0, r11_identity None}) is asserted in 039a-verify.sh; the test class is deleted from $TCG"
 else fail "AC0.12 the AC9 unit test is still in $TCG, or its condition is not asserted in 039a-verify.sh"; fi
 
@@ -340,8 +345,8 @@ else
         G cat-file -e "$s^{commit}" 2>/dev/null && pass "AC11.1 pin $s exists" || fail "AC11.1 pin $s does not exist"
     done
     [ "$(G rev-parse "$PIN_RED^" 2>/dev/null)" != "" ] && G merge-base --is-ancestor "$PIN_BASE" "$PIN_RED" && G merge-base --is-ancestor "$PIN_RED" "$PIN_FIX" \
-        && G merge-base --is-ancestor "$PIN_FIX" "$PIN_FINAL" && G merge-base --is-ancestor "$PIN_FINAL" "$PIN_TIP" && G merge-base --is-ancestor "$PIN_TIP" HEAD \
-        && pass "AC11.2 BASE < RED < FIX <= FINAL <= TIP <= HEAD (ancestry)" || fail "AC11.2 the pins are not in ancestry order"
+        && G merge-base --is-ancestor "$PIN_FIX" "$PIN_FINAL" && G merge-base --is-ancestor "$PIN_FINAL" "$PIN_TIP" \
+        && pass "AC11.2 BASE < RED < FIX <= FINAL <= TIP (ancestry among fixed SHAs; HEAD is never consulted)" || fail "AC11.2 the pins are not in ancestry order"
     red_files="$(G diff --name-only "$PIN_BASE" "$PIN_RED" 2>/dev/null | grep -vx -e docs/tasks/089-closed-verify-sweep-registry.md -e docs/tasks/089b-closed-verify-sweep-registry-b.md | sort | tr '\n' ' ')"
     [ "$red_files" = "docs/tasks/089b-verify.sh " ] && pass "AC11.3 the red commit touches only 089b-verify.sh and the task files" || fail "AC11.3 the red commit touches: $red_files"
     fix_files="$(G diff --name-only "$PIN_RED" "$PIN_FIX" 2>/dev/null | sort | tr '\n' ' ')"
