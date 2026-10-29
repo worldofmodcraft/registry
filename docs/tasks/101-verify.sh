@@ -63,7 +63,8 @@ FINAL008B1="2f179d08a9786ba94cb2f6c6fc2da4bf0ba5ffca"  # M^2
 E_BASE="dd7da2d79fc278597762cce862b48cc48434f816"     # registry main when 101 was cut (= M008B1)
 E_FIX="fbd384c8ee0edc5da50038ab8f74d2c988333c81"     # first commit touching 008b1-verify.sh
 E_FINAL="fbd384c8ee0edc5da50038ab8f74d2c988333c81"   # last commit touching 008b1-verify.sh
-E_TIP="5fe5cfa12c36d6fc6dc4b3ea2e006b1a79f0c4eb"     # the pin commit; nothing is range-checked after it (see the task log)
+E_SCRIPT="unpinned"  # the last commit changing 101-verify.sh other than by pin lines (AC3.4 repair, below in the task log)
+E_TIP="unpinned"     # the pin commit; nothing is range-checked after it (see the task log)
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
@@ -228,10 +229,12 @@ for key in PIN_M PIN_BASE PIN_FINAL; do
         rc=$(run008b1 "$TMP/d" "$TMP/d-$key.out" "$TMP/dead.sh"); expect "AC3.$key the NEW script with $key=deadbee" red "$rc" "$TMP/d-$key.out" "^FAIL  scope pin $key='deadbee' is not a full 40-character SHA"
     else fail "AC3.$key the pin line was not found exactly once"; fi
 done
-printf 'x skipped y\n' > "$TMP/skipctl.txt"
-grep -Eiq 'skip|not evaluated' "$TMP/skipctl.txt" && pass "AC3.4a positive control: the skip-word grep matches a sample line" || fail "AC3.4a the skip-word grep cannot match"
-hits=$(cat "$TMP"/d-PIN_*.out "$TMP"/n-f?.out 2>/dev/null | grep -Eic 'skip|not evaluated')
-[ "$hits" = 0 ] && pass "AC3.4 'skip' / 'not evaluated' occur 0 times in the outputs of the deadbee and NEW runs" || fail "AC3.4 $hits skip/not-evaluated line(s) in the run outputs"
+# The skip-word grep reads only the scope-check lines: 008b-1's planner legitimately has a "skip" plan category (C17aSkip, skip=0 counters).
+skipwords() { grep -iE 'scope|pin' | grep -Eic 'skip|not evaluated'; }
+printf 'scope pin PIN_M skipped\n' > "$TMP/skipctl.txt"; printf 'ok    [criterion 17a] C17aSkip: 4 passing (skip=0)\n' > "$TMP/skipneg.txt"
+{ [ "$(skipwords < "$TMP/skipctl.txt")" = 1 ] && [ "$(skipwords < "$TMP/skipneg.txt")" = 0 ]; } && pass "AC3.4a positive control: the scope-line skip-word grep matches a scope line and ignores the planner's own skip category" || fail "AC3.4a the skip-word grep cannot tell a scope line from the planner's skip category"
+hits=$(cat "$TMP"/d-PIN_*.out "$TMP"/n-f?.out 2>/dev/null | skipwords)
+[ "$hits" = 0 ] && pass "AC3.4 'skip' / 'not evaluated' occur 0 times on scope-check lines of the deadbee and NEW runs" || fail "AC3.4 $hits skip/not-evaluated scope line(s) in the run outputs"
 
 section "AC5 -- item-12 control: the fixed 008b1-verify.sh as committed at HEAD exits 0 on HEAD and on a merge with a later synthetic branch"
 if ! full40 "$E_FIX"; then fail "AC5.0 E_FIX='$E_FIX' is not a full SHA: cannot compare 008b1-verify.sh at HEAD with the fix commit"
@@ -245,13 +248,13 @@ rc=$(run008b1 "$TMP/hl" "$TMP/hl.out"); expect "AC5.2 the HEAD script on HEAD me
 fi   # OWN = 0
 
 section "AC11 -- 101's own change, measured on fixed SHAs only (never HEAD, never main)"
-if ! full40 "$E_FIX" || ! full40 "$E_FINAL" || ! full40 "$E_TIP"; then
-    fail "AC11.0 the 101 fix/final/tip SHAs are not pinned yet (E_FIX=$E_FIX E_FINAL=$E_FINAL E_TIP=$E_TIP)"
+if ! full40 "$E_FIX" || ! full40 "$E_FINAL" || ! full40 "$E_SCRIPT" || ! full40 "$E_TIP"; then
+    fail "AC11.0 the 101 fix/final/tip SHAs are not pinned yet (E_FIX=$E_FIX E_FINAL=$E_FINAL E_SCRIPT=$E_SCRIPT E_TIP=$E_TIP)"
 else
-    for s in "$E_BASE" "$E_FIX" "$E_FINAL" "$E_TIP"; do G cat-file -e "$s^{commit}" 2>/dev/null && pass "AC11.1 pin ${s:0:12} exists" || fail "AC11.1 pin $s does not exist"; done
+    for s in "$E_BASE" "$E_FIX" "$E_FINAL" "$E_SCRIPT" "$E_TIP"; do G cat-file -e "$s^{commit}" 2>/dev/null && pass "AC11.1 pin ${s:0:12} exists" || fail "AC11.1 pin $s does not exist"; done
     anc() { G merge-base --is-ancestor "$1" "$2" 2>/dev/null; }
-    anc "$E_BASE" "$E_FIX" && anc "$E_FIX" "$E_FINAL" && anc "$E_FINAL" "$E_TIP" && anc "$E_TIP" "$HEADREV" && [ "$E_BASE" != "$E_FIX" ] \
-        && pass "AC11.2 BASE < FIX <= FINAL <= TIP <= HEAD (ancestry of the pins)" || fail "AC11.2 the pins are not in ancestry order"
+    anc "$E_BASE" "$E_FIX" && anc "$E_FIX" "$E_FINAL" && anc "$E_FINAL" "$E_SCRIPT" && anc "$E_SCRIPT" "$E_TIP" && anc "$E_TIP" "$HEADREV" && [ "$E_BASE" != "$E_FIX" ] \
+        && pass "AC11.2 BASE < FIX <= FINAL <= SCRIPT <= TIP <= HEAD (ancestry of the pins)" || fail "AC11.2 the pins are not in ancestry order"
     first_touch="$(G log --reverse --format=%H "$E_BASE..$E_TIP" -- "$V008B1" | head -n1)"; last_touch="$(G log --format=%H -n1 "$E_BASE..$E_TIP" -- "$V008B1")"
     [ -n "$first_touch" ] && [ "$first_touch" = "$E_FIX" ] && pass "AC11.3a FIX is the first commit in BASE..TIP touching 008b1-verify.sh" || fail "AC11.3a FIX ${E_FIX:0:12} is not the first 008b1-verify.sh commit (that is ${first_touch:0:12})"
     [ -n "$last_touch" ] && [ "$last_touch" = "$E_FINAL" ] && pass "AC11.3b FINAL is the last commit in BASE..TIP touching 008b1-verify.sh" || fail "AC11.3b FINAL ${E_FINAL:0:12} is not the last 008b1-verify.sh commit (that is ${last_touch:0:12})"
@@ -265,8 +268,8 @@ else
     # FINAL..TIP (both fixed): only this script's E_FIX/E_FINAL pin lines and the task file; 008b1-verify.sh untouched after FINAL
     tail_files="$(G diff --name-only "$E_FINAL" "$E_TIP" 2>&1)"
     [ -z "$(printf '%s\n' "$tail_files" | grep -vxE "$SELF|$TASKF")" ] && pass "AC11.5a FINAL..TIP touches only this script and the task file" || fail "AC11.5a FINAL..TIP touches: $(printf '%s' "$tail_files" | tr '\n' ' ')"
-    nonpin="$(G diff "$E_FINAL" "$E_TIP" -- "$SELF" | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' | grep -vE '^[+-]E_(FIX|FINAL)=' || true)"
-    [ -z "$nonpin" ] && pass "AC11.5b FINAL..TIP changes only the E_FIX/E_FINAL pin lines of this script" || fail "AC11.5b FINAL..TIP changes this script beyond its pin lines: $(printf '%s' "$nonpin" | head -n3 | tr '\n' '|')"
+    nonpin="$(G diff "$E_SCRIPT" "$E_TIP" -- "$SELF" | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' | grep -vE '^[+-]E_(FIX|FINAL|SCRIPT)=' || true)"
+    [ -z "$nonpin" ] && pass "AC11.5b SCRIPT..TIP changes only the E_FIX/E_FINAL/E_SCRIPT pin lines of this script" || fail "AC11.5b SCRIPT..TIP changes this script beyond its pin lines: $(printf '%s' "$nonpin" | head -n3 | tr '\n' '|')"
     G diff --quiet "$E_FINAL" "$E_TIP" -- "$V008B1" && pass "AC11.5c 008b1-verify.sh at TIP equals FINAL" || fail "AC11.5c 008b1-verify.sh changed between FINAL and TIP"
     G diff --quiet "$E_FINAL" "$HEADREV" -- "$V008B1" && pass "AC11.5d 008b1-verify.sh at HEAD equals FINAL (blob equality against the fixed pin; not a range scope check)" || fail "AC11.5d 008b1-verify.sh at HEAD differs from FINAL"
     # the other 008b1 checks are untouched: five regions of the script are byte-identical OLD (at M) vs NEW (at FIX)

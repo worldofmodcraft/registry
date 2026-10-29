@@ -47,3 +47,13 @@ them). The reference implementation of exactly this change is task 089e for `008
 - 2026-10-29 qa-engineer: COMMITS (full SHAs). red-first 101-verify.sh `d9650ccd61646c075033165bce4ae630a0cea0ca`; fix (the only commit touching 008b1-verify.sh)
   `fbd384c8ee0edc5da50038ab8f74d2c988333c81` = E_FIX = E_FINAL; pin commit (E_FIX/E_FINAL lines) `5fe5cfa12c36d6fc6dc4b3ea2e006b1a79f0c4eb` = E_TIP; E_BASE = M = `dd7da2d79fc278597762cce862b48cc48434f816`.
   The next commit records E_TIP (one line) and this log entry. Phase 1 done; phase 2 follows (machine released by the manager).
+- 2026-10-29 qa-engineer (PHASE 2, first run, UNEXPECTED RED, stopped and reported as required): fresh non-shallow clone of
+  https://github.com/worldofmodcraft/registry at `65964e877c7ac9809341d2a0d0c62ee71f6b5185` (git 2.53.0, PYTHONDONTWRITEBYTECODE=1, ps printed 0 verify processes).
+  `101-verify.sh --own-only` rc=0 (all PASS). `101-verify.sh` (default) rc=1: AC1 (OLD red on f1/f2/f3 with exactly the predicted lines; NEW exit 0 on all),
+  AC3 (three deadbee runs exit 2 with the expected FAIL lines), AC5 (exit 0 on HEAD and HEAD+later branch), AC11 all PASS; ONE FAIL: `AC3.4 30 skip/not-evaluated line(s)`
+  (101-verify.sh line 234). Cause: a defect in MY test, not in 008b1-verify.sh: the grep for the words skip/not-evaluated, copied from 089e, was run over the whole
+  output of the 008b1 script, whose planner legitimately has a "skip" plan category (`C17aSkip`, `skip=0`, "Recovering a skipped version"; 008c had no such word).
+  Repair (my own file, test-side only; the intent "an unusable pin is never skipped silently" is kept and made precise): the grep now reads only scope-check lines
+  (`scope|pin`), with a positive control that matches `scope pin PIN_M skipped` and a negative control that ignores a planner skip line. Because this edits 101-verify.sh
+  after the fix commit, AC11.5b now compares from a new fixed pin E_SCRIPT (the repair commit) to TIP and allows the three pin lines E_FIX/E_FINAL/E_SCRIPT; AC11.5a
+  (FINAL..TIP files only 101-verify.sh and the task file) is unchanged. 008b1-verify.sh is untouched by the repair (still FIX = FINAL). The 5fe5cfa/65964e8 E_TIP is superseded.
