@@ -64,7 +64,7 @@ E_BASE="dd7da2d79fc278597762cce862b48cc48434f816"     # registry main when 101 w
 E_FIX="fbd384c8ee0edc5da50038ab8f74d2c988333c81"     # first commit touching 008b1-verify.sh
 E_FINAL="fbd384c8ee0edc5da50038ab8f74d2c988333c81"   # last commit touching 008b1-verify.sh
 OLD101="0c67d6eb7eae922fbc6b4d9304fda82feea771f4"   # the head of this script that still read HEAD (AC11.5d, AC5.0); AC12 proves one later commit reddens it
-E_SCRIPT="unpinned"  # the last commit changing 101-verify.sh other than by pin lines (AC3.4 repair, below in the task log)
+E_SCRIPT="ca6ddad3efd3924fec37fddfec6fd26d5e42cf9e"  # the last commit changing 101-verify.sh other than by pin lines (AC3.4 repair, below in the task log)
 E_TIP="unpinned"     # the pin commit; nothing is range-checked after it (see the task log)
 
 TMP="$(mktemp -d)" || exit 99
