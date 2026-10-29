@@ -20,8 +20,9 @@
 # AC9 quiet machine: before EVERY child run this script waits until no other *-verify.sh process is running (ancestors and itself
 # are excluded) and logs the `ps` lines it saw; the wait is capped (6 hours) and a timeout is a FAIL. One child at a time.
 # Everything runs on the COMMITTED state in temporary clones; the caller's worktree is never modified. The scripts under test are
-# read as blobs of the pinned commits below (OLD = registry main at M, NEW = 089e's fix commit), never from HEAD, except the HEAD
-# control, which is the fixed script as committed at HEAD. No environment variable overrides any pin.
+# read as blobs of the pinned commits below (OLD = registry main at M, NEW = 089e's fix commit), never from HEAD. Every own-change check
+# reads fixed SHAs only (decision 2026-10-29, "A: fixed SHAs only"), so this script stays green on main after any later commit; the only
+# use of HEAD is AC12, which models a later commit on top of it. No environment variable overrides any pin.
 # Network: none. Exit code: the number of failed checks. Requires: git, python3, ps.
 
 set -u
@@ -44,8 +45,8 @@ pass() { printf 'PASS  %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n' "$1"; FAILURES=$((FAILURES + 1)); }
 section() { printf '\n== %s ==\n' "$1"; }
 GITID=(-c user.name=verify089e -c user.email=verify089e@invalid -c commit.gpgsign=false)
-HEADREV="$(git -C "$ROOT" rev-parse HEAD)"
 G() { git -C "$ROOT" "$@"; }
+HEADREV="$(git -C "$ROOT" rev-parse HEAD)"   # used ONLY by AC12 (the model of a later commit on top of the current head); no own-change check reads it
 
 V008C=docs/tasks/008c-verify.sh
 TASKF=docs/tasks/089e-closed-verify-sweep-registry-e.md
@@ -60,7 +61,8 @@ FINAL008C="7810e70af50d7e2ebae1e53dccba37be1095afe7"  # M^2
 E_BASE="32c641b5f56139a86c820f0b16d522c0f991d207"     # registry main when 089e was cut (= M008C)
 E_FIX="c68eec7b910a29be295b1944e826497d37cac326"     # first commit touching 008c-verify.sh
 E_FINAL="c68eec7b910a29be295b1944e826497d37cac326"   # last commit touching 008c-verify.sh
-E_TIP="48141c31631f6a9dbe6ce2df06a15d1054efed1d"     # last commit before the pin commit; after it only the task file and the pin lines of this script may change
+E_TIP="48141c31631f6a9dbe6ce2df06a15d1054efed1d"     # last content commit of 089e (a fixed SHA; the pin commit that records it, and anything after it, is never read by an own-change check)
+OLD089E="cee2bc70d030b152cad6a891137ee5905f6e537f"   # the phase-2 head: the script that still read HEAD (AC12 red-first cell); a fixed SHA
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
@@ -173,8 +175,8 @@ section "AC2 -- pins are full SHAs, recomputed from the merge commit (never copi
 for p in M008C BASE008C FINAL008C E_BASE; do
     full40 "${!p}" && G cat-file -e "${!p}^{commit}" 2>/dev/null && pass "AC2.1 $p is a full 40-character SHA and exists" || fail "AC2.1 $p='${!p}' is not a full SHA that exists"
 done
-mlist="$(G log --merges --first-parent --format=%H --grep='Merge pull request #27 from worldofmodcraft/task/008c-pipeline-write-back' HEAD 2>/dev/null)"
-[ "$mlist" = "$M008C" ] && pass "AC2.2 the merge found by 'git log --merges --grep' on HEAD's first-parent chain is exactly M ($M008C)" || fail "AC2.2 merge search returned '$mlist', expected exactly $M008C"
+mlist="$(G log --merges --first-parent --format=%H --grep='Merge pull request #27 from worldofmodcraft/task/008c-pipeline-write-back' "$E_TIP" 2>/dev/null)"
+[ "$mlist" = "$M008C" ] && pass "AC2.2 the merge found by 'git log --merges --grep' on the first-parent chain of the pinned TIP is exactly M ($M008C)" || fail "AC2.2 merge search returned '$mlist', expected exactly $M008C"
 d_base="$(G merge-base "$M008C^1" "$M008C^2" 2>/dev/null)"; d_final="$(G rev-parse "$M008C^2" 2>/dev/null)"
 [ -n "$d_base" ] && [ "$d_base" = "$BASE008C" ] && pass "AC2.3 BASE = git merge-base M^1 M^2 = $d_base" || fail "AC2.3 derived BASE '$d_base' != pinned $BASE008C"
 [ -n "$d_final" ] && [ "$d_final" = "$FINAL008C" ] && pass "AC2.4 FINAL = M^2 = $d_final" || fail "AC2.4 derived FINAL '$d_final' != pinned $FINAL008C"
@@ -230,15 +232,16 @@ grep -Eiq 'skip|not evaluated' "$TMP/skipctl.txt" && pass "AC3.4a positive contr
 hits=$(cat "$TMP"/d-PIN_*.out "$TMP"/n-f?.out 2>/dev/null | grep -Eic 'skip|not evaluated')
 [ "$hits" = 0 ] && pass "AC3.4 'skip' / 'not evaluated' occur 0 times in the outputs of the deadbee and NEW runs" || fail "AC3.4 $hits skip/not-evaluated line(s) in the run outputs"
 
-section "AC5 -- item-12 control: the fixed 008c-verify.sh as committed at HEAD exits 0 on HEAD and on a merge with a later synthetic branch"
-if ! full40 "$E_FIX"; then fail "AC5.0 E_FIX='$E_FIX' is not a full SHA: cannot compare 008c-verify.sh at HEAD with the fix commit"
-elif G diff --quiet "$E_FIX" "$HEADREV" -- "$V008C" 2>/dev/null; then pass "AC5.0 008c-verify.sh at HEAD equals the fix commit's (HEAD is the fixed script)"
-else fail "AC5.0 008c-verify.sh at HEAD differs from the fix commit $E_FIX"; fi
-mk_frame "$TMP/h" "$HEADREV" "$HEADREV" || fail "AC5.0 cannot clone HEAD"
-rc=$(run008c "$TMP/h" "$TMP/h.out"); expect "AC5.1 the HEAD script on HEAD" green "$rc" "$TMP/h.out" '!^FAIL'
-if mk_frame "$TMP/hl" "$HEADREV" "$HEADREV" && lh=$(add_later "$TMP/hl" "$HEADREV"); then git -C "$TMP/hl" update-ref refs/remotes/origin/main "$lh"
-else fail "AC5.0 cannot build the HEAD + later-branch frame"; fi
-rc=$(run008c "$TMP/hl" "$TMP/hl.out"); expect "AC5.2 the HEAD script on HEAD merged with a later branch (main moved)" green "$rc" "$TMP/hl.out" '!^FAIL'
+section "AC5 -- item-12 control: the fixed 008c-verify.sh (blob at the fix commit) exits 0 on the final tree and on a merge with a later synthetic branch"
+# A behaviour test on fixed inputs: the tree is the pinned TIP (never HEAD), so a later commit on main cannot change this control.
+if ! full40 "$E_FIX" || ! full40 "$E_FINAL"; then fail "AC5.0 E_FIX/E_FINAL are not full SHAs: cannot compare the fix commit's 008c-verify.sh with FINAL's"
+elif [ "$(G rev-parse "$E_FIX:$V008C" 2>/dev/null)" = "$(G rev-parse "$E_FINAL:$V008C" 2>/dev/null)" ] && [ -n "$(G rev-parse "$E_FIX:$V008C" 2>/dev/null)" ]; then pass "AC5.0 008c-verify.sh at the fix commit and at FINAL are the same blob"
+else fail "AC5.0 008c-verify.sh differs between the fix commit $E_FIX and FINAL $E_FINAL"; fi
+mk_frame "$TMP/h" "$E_TIP" "$E_TIP" || fail "AC5.0 cannot clone the pinned TIP"
+rc=$(run008c "$TMP/h" "$TMP/h.out" "$NEWF"); expect "AC5.1 the fixed script on the pinned TIP" green "$rc" "$TMP/h.out" '!^FAIL'
+if mk_frame "$TMP/hl" "$E_TIP" "$E_TIP" && lh=$(add_later "$TMP/hl" "$E_TIP"); then git -C "$TMP/hl" update-ref refs/remotes/origin/main "$lh"
+else fail "AC5.0 cannot build the TIP + later-branch frame"; fi
+rc=$(run008c "$TMP/hl" "$TMP/hl.out" "$NEWF"); expect "AC5.2 the fixed script on the pinned TIP merged with a later branch (main moved)" green "$rc" "$TMP/hl.out" '!^FAIL'
 fi   # OWN = 0
 
 section "AC11 -- 089e's own change, measured on fixed SHAs (never HEAD)"
@@ -247,8 +250,8 @@ if ! full40 "$E_FIX" || ! full40 "$E_FINAL" || ! full40 "$E_TIP"; then
 else
     for s in "$E_BASE" "$E_FIX" "$E_FINAL" "$E_TIP"; do G cat-file -e "$s^{commit}" 2>/dev/null && pass "AC11.1 pin ${s:0:12} exists" || fail "AC11.1 pin $s does not exist"; done
     anc() { G merge-base --is-ancestor "$1" "$2" 2>/dev/null; }
-    anc "$E_BASE" "$E_FIX" && anc "$E_FIX" "$E_FINAL" && anc "$E_FINAL" "$E_TIP" && anc "$E_TIP" "$HEADREV" && [ "$E_BASE" != "$E_FIX" ] \
-        && pass "AC11.2 BASE < FIX <= FINAL <= TIP <= HEAD (ancestry)" || fail "AC11.2 the pins are not in ancestry order"
+    anc "$E_BASE" "$E_FIX" && anc "$E_FIX" "$E_FINAL" && anc "$E_FINAL" "$E_TIP" && [ "$E_BASE" != "$E_FIX" ] \
+        && pass "AC11.2 BASE < FIX <= FINAL <= TIP (ancestry, all fixed SHAs)" || fail "AC11.2 the pins are not in ancestry order"
     first_touch="$(G log --reverse --format=%H "$E_BASE..$E_TIP" -- "$V008C" | head -n1)"; last_touch="$(G log --format=%H -n1 "$E_BASE..$E_TIP" -- "$V008C")"
     [ -n "$first_touch" ] && [ "$first_touch" = "$E_FIX" ] && pass "AC11.3a FIX is the first commit in BASE..TIP touching 008c-verify.sh" || fail "AC11.3a FIX ${E_FIX:0:12} is not the first 008c-verify.sh commit (that is ${first_touch:0:12})"
     [ -n "$last_touch" ] && [ "$last_touch" = "$E_FINAL" ] && pass "AC11.3b FINAL is the last commit in BASE..TIP touching 008c-verify.sh" || fail "AC11.3b FINAL ${E_FINAL:0:12} is not the last 008c-verify.sh commit (that is ${last_touch:0:12})"
@@ -256,15 +259,14 @@ else
         extra="$(printf '%s\n' "$scope_files" | grep -vxE "$V008C|$SELF|$TASKF|$UMB" || true)"
         [ -n "$scope_files" ] && [ -z "$extra" ] && pass "AC11.4 BASE..TIP stays inside the declared file scope ($(echo $scope_files | tr '\n' ' '))" || fail "AC11.4 out-of-scope files in BASE..TIP (or empty range): $extra"
         # the umbrella may appear only as the cut commit's copy-in: exactly one commit touched it, it is not 089e's fix, and nothing later changes it
-        n_umb="$(G log --format=%H "$E_BASE..$HEADREV" -- "$UMB" | wc -l)"; umb_c="$(G log --format=%H -n1 "$E_BASE..$HEADREV" -- "$UMB")"
-        { [ "$n_umb" = 1 ] && [ "$umb_c" != "$E_FIX" ] && anc "$umb_c" "$E_FIX"; } && pass "AC11.4c the umbrella file was touched by exactly one commit (the cut copy-in ${umb_c:0:12}), before the fix" || fail "AC11.4c the umbrella file was touched by $n_umb commit(s) in BASE..HEAD, or by the fix commit"
+        n_umb="$(G log --format=%H "$E_BASE..$E_TIP" -- "$UMB" | wc -l)"; umb_c="$(G log --format=%H -n1 "$E_BASE..$E_TIP" -- "$UMB")"
+        { [ "$n_umb" = 1 ] && [ "$umb_c" != "$E_FIX" ] && anc "$umb_c" "$E_FIX"; } && pass "AC11.4c the umbrella file was touched by exactly one commit (the cut copy-in ${umb_c:0:12}), before the fix" || fail "AC11.4c the umbrella file was touched by $n_umb commit(s) in BASE..TIP, or by the fix commit"
         for need in "$V008C" "$SELF"; do printf '%s\n' "$scope_files" | grep -qx "$need" && pass "AC11.4b BASE..TIP contains $need" || fail "AC11.4b BASE..TIP lacks $need"; done
     fi
-    tail_files="$(G diff --name-only "$E_TIP" "$HEADREV" 2>&1)"
-    [ -z "$(printf '%s\n' "$tail_files" | grep -vxE "$SELF|$TASKF")" ] && pass "AC11.5a TIP..HEAD touches only this script and the task file" || fail "AC11.5a TIP..HEAD touches: $(printf '%s' "$tail_files" | tr '\n' ' ')"
-    nonpin="$(G diff "$E_TIP" "$HEADREV" -- "$SELF" | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' | grep -vE '^[+-]E_(FIX|FINAL|TIP)=' || true)"
-    [ -z "$nonpin" ] && pass "AC11.5b TIP..HEAD changes only the E_FIX/E_FINAL/E_TIP pin lines of this script" || fail "AC11.5b TIP..HEAD changes this script beyond its pin lines: $(printf '%s' "$nonpin" | head -n3 | tr '\n' '|')"
-    G diff --quiet "$E_FINAL" "$HEADREV" -- "$V008C" && pass "AC11.5c 008c-verify.sh at HEAD equals FINAL" || fail "AC11.5c 008c-verify.sh changed after FINAL"
+    mid_files="$(G diff --name-only "$E_FINAL" "$E_TIP" 2>&1)"
+    [ -z "$(printf '%s\n' "$mid_files" | grep -vxE "$SELF|$TASKF")" ] && pass "AC11.5a FINAL..TIP touches only this script and the task file" || fail "AC11.5a FINAL..TIP touches: $(printf '%s' "$mid_files" | tr '\n' ' ')"
+    [ "$(G rev-parse "$E_TIP:$V008C" 2>/dev/null)" = "$(G rev-parse "$E_FINAL:$V008C" 2>/dev/null)" ] && [ -n "$(G rev-parse "$E_FINAL:$V008C" 2>/dev/null)" ] && pass "AC11.5c 008c-verify.sh at TIP is the same blob as at FINAL" || fail "AC11.5c 008c-verify.sh changed between FINAL and TIP"
+    G cat-file -e "$E_TIP:$SELF" 2>/dev/null && pass "AC11.5b this script exists at TIP (what happens after TIP is deliberately not measured: the pins are fixed SHAs)" || fail "AC11.5b this script does not exist at TIP"
     # the existing 008c checks are untouched: the mutation block up to the scope mutations, and the normal-mode suite checks, are byte-identical
     cut_mut() { awk '/^  run_mut copy-commit-from-result/{f=1} /^  # finding 5/{f=0} f{print}' "$1"; }
     cut_norm() { awk '/^OUT=\$\(python3 tests\/pipeline\/run_checks\.py/{f=1} /^# hygiene and scope/{f=0} f{print}' "$1"; }
@@ -272,9 +274,36 @@ else
         a="$($c "$OLDF")"; b="$($c "$NEWF")"
         [ "$(printf '%s\n' "$a" | wc -l)" -gt 10 ] && [ "$a" = "$b" ] && pass "AC11.6 $c: $(printf '%s\n' "$a" | wc -l) lines of existing 008c checks are byte-identical OLD vs NEW" || fail "AC11.6 $c differs between OLD and NEW (or is empty)"
     done
-    [ "$(G ls-tree "$HEADREV" "$V008C" "$SELF" | awk '$1=="100755"' | wc -l)" = 2 ] && pass "AC11.7 both scripts are executable at HEAD" || fail "AC11.7 a script is not mode 100755 at HEAD"
+    [ "$(G ls-tree "$E_TIP" "$V008C" "$SELF" | awk '$1=="100755"' | wc -l)" = 2 ] && pass "AC11.7 both scripts are executable at TIP" || fail "AC11.7 a script is not mode 100755 at TIP"
     bash -n "$NEWF" && pass "AC11.8 the NEW 008c-verify.sh parses (bash -n)" || fail "AC11.8 the NEW 008c-verify.sh does not parse"
 fi
+
+if [ "$OWN" = 0 ]; then
+section "AC12 -- RED FIRST for HEAD-independence: one extra later commit reddens the OLD 089e-verify.sh, not the fixed one"
+# OLD089E is the head that still read HEAD (AC11.5a/b/c, AC5.0, AC11.7). Each variant: a clone at OLD089E (resp. at the current HEAD) plus ONE later commit;
+# the clone's own docs/tasks/089e-verify.sh runs --own-only (no recursion: AC12 is not part of --own-only).
+if ! full40 "$OLD089E" || ! G cat-file -e "$OLD089E^{commit}" 2>/dev/null; then fail "AC12.0 OLD089E='$OLD089E' is not a full SHA that exists"; else
+later_commit() {   # later_commit DIR KIND : one commit on top of the clone's HEAD; KIND=file adds a new file, KIND=edit008c appends a comment to 008c-verify.sh
+    case "$2" in
+        file) printf 'a later commit (089e AC12)\n' > "$1/docs/089e-later-commit.md"; git -C "$1" add docs/089e-later-commit.md ;;
+        edit008c) printf '# a later edit (089e AC12)\n' >> "$1/$V008C"; git -C "$1" add "$V008C" ;;
+    esac
+    git -C "$1" "${GITID[@]}" commit -q -m "later commit ($2)"
+}
+own_only_in() {   # own_only_in DIR OUTFILE : the clone's own 089e-verify.sh --own-only; echo the exit code
+    wait_quiet "$(basename "$1")" >&2 || { touch "$TMP/timeout"; echo 99; return; }
+    ( cd "$1" && PYTHONDONTWRITEBYTECODE=1 bash "$SELF" --own-only ) > "$2" 2>&1; echo $?
+}
+mk_frame "$TMP/o0" "$OLD089E" "$OLD089E" || fail "AC12.0 cannot clone OLD089E"
+rc=$(own_only_in "$TMP/o0" "$TMP/o0.out"); expect "AC12.0 control: the OLD script at its own head, no later commit" green "$rc" "$TMP/o0.out" '!^FAIL'
+for kind in file edit008c; do
+    mk_frame "$TMP/o-$kind" "$OLD089E" "$OLD089E" && later_commit "$TMP/o-$kind" "$kind" || { fail "AC12.$kind cannot build the OLD + later-commit frame"; continue; }
+    rc=$(own_only_in "$TMP/o-$kind" "$TMP/o-$kind.out"); expect "AC12.$kind the OLD script with one later commit ($kind)" red "$rc" "$TMP/o-$kind.out" '^FAIL  AC11\.5'
+    mk_frame "$TMP/n-$kind" "$HEADREV" "$HEADREV" && later_commit "$TMP/n-$kind" "$kind" || { fail "AC12.$kind cannot build the HEAD + later-commit frame"; continue; }
+    rc=$(own_only_in "$TMP/n-$kind" "$TMP/n-$kind.out"); expect "AC12.$kind the fixed script with one later commit ($kind)" green "$rc" "$TMP/n-$kind.out" '!^FAIL'
+done
+fi
+fi   # OWN = 0 (AC12)
 
 else
 # ==================================================================================================
@@ -300,15 +329,15 @@ if edit_file "$TMP/mut2.sh" '  git merge-base --is-ancestor "$PIN_BASE" "$PIN_FI
         || fail "AC4.m2 exit $rc; unexpected FAIL lines: '$other'; $(first_fail "$TMP/m2.out")"
 else fail "AC4.m2 the mutation did not apply (pattern not found exactly once)"; fi
 
-# every existing 008c mutation (and the two scope mutations) is red, via 008c-verify.sh --mutate run from a clean clone of HEAD
-mk_frame "$TMP/mh" "$HEADREV" "$HEADREV" || fail "AC4.0 cannot clone HEAD"
+# every existing 008c mutation (and the two scope mutations) is red, via 008c-verify.sh --mutate run from a clean clone of the fix commit
+mk_frame "$TMP/mh" "$E_FIX" "$E_FIX" || fail "AC4.0 cannot clone the fix commit"
 exp_n=$(( $(grep -cE '^  (run_mut|scope_mut) [a-z]' "$TMP/mh/$V008C") + 1 ))
 rc=$(run008c "$TMP/mh" "$TMP/mh.out" "" --mutate)
 got_n=$(grep -c '^ok    mutation ' "$TMP/mh.out")
 [ "$rc" = 0 ] && [ "$exp_n" = 28 ] && [ "$got_n" = 28 ] && [ "$got_n" = "$exp_n" ] && ! grep -q '^FAIL' "$TMP/mh.out" \
     && grep -q '^ok    mutation scope-right-side-head: red -> scope scenario merge-from-main' "$TMP/mh.out" \
     && grep -q '^ok    mutation scope-unusable-pin-passes: red -> scope scenario bad-pin' "$TMP/mh.out" \
-    && pass "AC4.m3 008c-verify.sh --mutate at HEAD: exit 0, all $got_n mutations red (expected $exp_n), both scope mutations named" \
+    && pass "AC4.m3 008c-verify.sh --mutate at the fix commit: exit 0, all $got_n mutations red (expected $exp_n), both scope mutations named" \
     || fail "AC4.m3 008c-verify.sh --mutate: exit $rc, $got_n red mutations vs $exp_n expected: $(first_fail "$TMP/mh.out")"
 fi
 

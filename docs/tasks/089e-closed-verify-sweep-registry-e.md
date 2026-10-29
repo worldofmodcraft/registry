@@ -1,6 +1,6 @@
 # Task 089e: registry closed scripts — part E (008c-verify.sh own-change scope check re-pinned to 008c's merged range)
 
-- **Mission:** SITE-V1 (verification integrity) — **Status:** review 2026-10-29 (phase 2 green; was in-progress 2026-10-28 (cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A; part E cut by the manager in session 14 from the finding booked in the umbrella log (094 spec review), spec-approved solo under MANAGER.md §2b as a small, mechanical one-file task of the umbrella pattern)
+- **Mission:** SITE-V1 (verification integrity) — **Status:** in-progress 2026-10-29 (fixed-SHA rewrite of 089e-verify.sh awaiting phase 2; earlier phase 2 green at d50e7d8, was in-progress 2026-10-28 (cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A; part E cut by the manager in session 14 from the finding booked in the umbrella log (094 spec review), spec-approved solo under MANAGER.md §2b as a small, mechanical one-file task of the umbrella pattern)
 - **Agent / model:** qa-engineer (model per frontmatter) — **Budget:** small (one agent-session)
 - **Branch / worktree:** `task/089e-closed-verify-sweep-registry-e` / `~/wt/registry-task-089e`, from registry main `32c641b`
 - **Umbrella (authoritative for findings, pins, criteria, forbidden list, Q1-Q6):** `docs/tasks/089-closed-verify-sweep-registry.md` (copied
@@ -114,3 +114,17 @@ bash docs/tasks/008c-verify.sh --scope-selftest            # 5. the self-test al
   (5) `008c-verify.sh --scope-selftest` rc=0 (merge-from-main green + old formula red/sensitive, stray-commit, stray-plus-merge, bad-pin). No unexpected red; no finding.
   Note: this also fixes the symptom 089d saw ("FAIL 008c-verify.sh exit 1 on HEAD: FAIL out of scope: docs/tasks/089-closed-verify-sweep-registry.md") once this branch is merged.
   Criteria 1-5, 9, 11: DONE (demonstrated above). Status: review.
+- 2026-10-29 qa-engineer (fix round, Ludwig's decision "A: fixed SHAs only"; WRITE ONLY, no *-verify.sh run, `bash -n` only): `089e-verify.sh` read HEAD for own-change
+  properties and would redden on any later commit. OLD -> NEW, intent kept for each:
+  AC2.2 merge search on `HEAD` -> on the first-parent chain of the pinned `E_TIP`. AC11.2 `anc E_TIP HEAD` -> dropped from the chain (BASE < FIX <= FINAL <= TIP, all fixed).
+  AC11.4c `E_BASE..HEAD` umbrella-touch count -> `E_BASE..E_TIP`. AC11.5a "TIP..HEAD touches only this script and the task file" -> "FINAL..TIP touches only
+  this script and the task file" (fixed range). AC11.5b "TIP..HEAD changes only the three pin lines" -> REPLACED by "this script exists at TIP": that assertion measured
+  the future, which a fixed-SHA script cannot do without reading HEAD; the equivalent protection (nothing else changes after the content commit) is not
+  re-creatable on fixed SHAs, noted here as a deliberate, decided loss. AC11.5c "008c-verify.sh at HEAD == FINAL" -> "blob at TIP == blob at FINAL". AC11.7 `ls-tree HEAD`
+  -> `ls-tree E_TIP`. AC5.0 "008c at HEAD == fix commit" -> "blob at E_FIX == blob at E_FINAL". AC5.1/5.2 (item-12 control, a behaviour test) kept, but now run
+  the blob at the fix commit on a clone of the pinned TIP (and TIP + a merge of a later branch), not HEAD's copy on HEAD. AC4.m3 clean clone of HEAD -> clone of the fix commit.
+  `HEADREV` survives only for AC12. NEW pins: `E_TIP` = the content commit of this round (recorded by the pin commit right after it), `OLD089E` = cee2bc70d030b152cad6a891137ee5905f6e537f.
+  NEW AC12 (red-first cell, written-but-not-run): clone at OLD089E + ONE later commit (a new file; an edit appending a comment to 008c-verify.sh) -> the OLD script's
+  `--own-only` must FAIL (`^FAIL  AC11.5`), with a control at OLD089E without the commit that must pass; the same two later commits on top of the current head -> the fixed
+  script's `--own-only` must exit 0. Phase 2 for this round must be re-run (own-only, default, --mutate); the previous phase-2 result no longer covers this script version.
+  Status goes back to in-progress until then.
