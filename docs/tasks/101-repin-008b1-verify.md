@@ -24,3 +24,14 @@ them). The reference implementation of exactly this change is task 089e for `008
 ---
 # Task 101 log
 - 2026-10-29 manager (session 14): created on Ludwig's decision A; dispatched (phase 1 + phase 2, the machine is quiet).
+- 2026-10-29 qa-engineer (phase 1, session 14): re-derived the pins from git (read-only), git 2.53.0: M = `dd7da2d79fc278597762cce862b48cc48434f816`
+  (`git log --merges --first-parent` finds "Merge pull request #29 from worldofmodcraft/task/008b1-pipeline-plan" as the only match);
+  BASE = `git merge-base M^1 M^2` = `32c641b5f56139a86c820f0b16d522c0f991d207`; FINAL = `M^2` = `2f179d08a9786ba94cb2f6c6fc2da4bf0ba5ffca`.
+  `git diff --name-only BASE FINAL` = build-pipeline.md, 008b1-pipeline-plan.md, 008b1-verify.sh, test_plan_pending.py, plan_pending.py: all five inside
+  008b1's SCOPE_RE (green by construction). Reference read: task 089e (`089e-verify.sh`, the 008c re-pin diff, its log); 101-verify.sh is adapted from it.
+- 2026-10-29 qa-engineer: DESIGN of 101-verify.sh (Ludwig: "fixed SHAs only"). Deviation from 089e, deliberate: 089e's AC11 used `TIP..HEAD` and
+  `UMB` range checks; here AC11 reads only BASE..TIP and FINAL..TIP with fixed pins E_BASE (= M), E_FIX = E_FINAL (the one commit touching
+  008b1-verify.sh), E_TIP (the pin commit, recorded by one later commit). Commits: (1) 101-verify.sh red-first with `unpinned` pins, (2) the 008b1-verify.sh fix,
+  (3) pin commit (E_FIX/E_FINAL lines only), (4) E_TIP line + log. AC11.3c asserts (1) precedes the fix. Commits after TIP (the E_TIP line, log entries)
+  are not range-checked by this script (a TIP..HEAD check is forbidden by the decision); the only HEAD read besides the item-12 controls is blob
+  equality `008b1-verify.sh at HEAD == FINAL` (a fixed-pin comparison, not a scope diff). The reviewer's diff covers the tail.
