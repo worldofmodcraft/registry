@@ -86,3 +86,5 @@ them). The reference implementation of exactly this change is task 089e for `008
   the old AC3.4 repair. (4) INFO noted: AC12's red-first demonstrates AC11.5d only (the only removed HEAD read under `--own-only`); the removed AC5.0/5.1/5.2 and AC4.m3 HEAD reads are not
   under `--own-only` and were verified by reading the code (they use only E_FIX and E_TIP). (5) INFO: the scope-lines-only skip grep stays; AC3's exact FAIL line plus non-zero exit is the binding check.
   E_SCRIPT/E_TIP re-pinned (below); the manager re-runs in a fresh clone.
+- 2026-10-29 qa-engineer: CORRECTION: the entry above was committed (unpushed `a924b83`) before its edit script had applied (a comment anchor wrapped across lines); this next commit is the one that actually
+  applies the AC2.2 change (now searches from the fixed E_BASE) and the comment fixes. E_SCRIPT is the commit of that edit; the pins below are from it.

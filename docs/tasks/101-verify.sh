@@ -7,13 +7,14 @@
 # itself ("no changes since base") and on every later branch (out-of-scope files): REVIEW-CHECKLIST item 12. It now reads the
 # fixed merged range BASE..FINAL, BASE = git merge-base M^1 M^2, FINAL = M^2, which a later merge of main cannot change.
 # Ludwig's decision (2026-10-29, "fixed SHAs only"): every own-change check of THIS script reads only fixed commits; there is no
-# TIP..HEAD or merge-base-with-main scope check in it. The only HEAD reads are the item-12 controls (the HEAD script run on HEAD).
+# TIP..HEAD or merge-base-with-main scope check in it. The only HEAD reads are AC11.2 (E_TIP is an ancestor of HEAD)
+# and the AC12 fixtures (HEAD's own script plus one later commit); the item-12 controls (AC5) run the blob at E_FIX on the pinned E_TIP.
 # Demonstrates acceptance criteria 1-7 of docs/tasks/101-repin-008b1-verify.md.
 #
 # Usage:  docs/tasks/101-verify.sh [--mutate] [--own-only]      (any cwd inside the repository)
 #   (no flag)   AC2 (pins re-derived from the merge commit; the scope check names no HEAD / origin/main), AC1 (RED FIRST: the
 #               OLD script at M fails on M itself and on later synthetic branches, the NEW one passes), AC3 (deadbee pins fail,
-#               nothing is passed silently), AC5 (item-12 control: NEW exits 0 on HEAD and on a merge with a later branch),
+#               nothing is passed silently), AC5 (item-12 control: the NEW blob exits 0 on the pinned TIP and on a merge with a later branch),
 #               AC11 (scope, on fixed SHAs only: BASE..FINAL and FINAL..TIP).
 #   --mutate    AC4: the live scope check widened back to the merge-base with origin/main, and its right side widened to HEAD, on a
 #               later-branch merge: red, and only that check; the unmutated control stays green; 008b1-verify.sh --mutate (every
@@ -22,8 +23,8 @@
 # AC9 quiet machine: before EVERY child run this script waits until no other *-verify.sh process is running (ancestors and itself
 # are excluded) and logs the `ps` lines it saw; the wait is capped (6 hours) and a timeout is a FAIL. One child at a time.
 # Everything runs on the COMMITTED state in temporary clones; the caller's worktree is never modified. The scripts under test are
-# read as blobs of the pinned commits below (OLD = registry main at M, NEW = 101's fix commit), never from HEAD, except the HEAD
-# control, which is the fixed script as committed at HEAD. No environment variable overrides any pin.
+# read as blobs of the pinned commits below (OLD = registry main at M, NEW = 101's fix commit), never from HEAD (the only HEAD uses are
+# AC11.2 ancestry and the AC12 fixtures). No environment variable overrides any pin.
 # Network: none. Exit code: the number of failed checks. Requires: git, python3, ps.
 
 set -u
@@ -64,8 +65,8 @@ E_BASE="dd7da2d79fc278597762cce862b48cc48434f816"     # registry main when 101 w
 E_FIX="fbd384c8ee0edc5da50038ab8f74d2c988333c81"     # first commit touching 008b1-verify.sh
 E_FINAL="fbd384c8ee0edc5da50038ab8f74d2c988333c81"   # last commit touching 008b1-verify.sh
 OLD101="0c67d6eb7eae922fbc6b4d9304fda82feea771f4"   # the head of this script that still read HEAD (AC11.5d, AC5.0); AC12 proves one later commit reddens it
-E_SCRIPT="ca6ddad3efd3924fec37fddfec6fd26d5e42cf9e"  # the last commit changing 101-verify.sh other than by pin lines (AC3.4 repair, below in the task log)
-E_TIP="8afd7215d15a4370e288e343cf29d5a74bdb7afa"     # the pin commit; nothing is range-checked after it (see the task log)
+E_SCRIPT="unpinned"  # the last commit changing 101-verify.sh other than by pin lines
+E_TIP="unpinned"     # the pin commit; nothing is range-checked after it (see the task log)
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
@@ -178,8 +179,8 @@ section "AC2 -- pins are full SHAs, recomputed from the merge commit (never copi
 for p in M008B1 BASE008B1 FINAL008B1 E_BASE; do
     full40 "${!p}" && G cat-file -e "${!p}^{commit}" 2>/dev/null && pass "AC2.1 $p is a full 40-character SHA and exists" || fail "AC2.1 $p='${!p}' is not a full SHA that exists"
 done
-mlist="$(G log --merges --first-parent --format=%H --grep='Merge pull request #29 from worldofmodcraft/task/008b1-pipeline-plan' HEAD 2>/dev/null)"
-[ "$mlist" = "$M008B1" ] && pass "AC2.2 the merge found by 'git log --merges --grep' on HEAD's first-parent chain is exactly M ($M008B1)" || fail "AC2.2 merge search returned '$mlist', expected exactly $M008B1"
+mlist="$(G log --merges --first-parent --format=%H --grep='Merge pull request #29 from worldofmodcraft/task/008b1-pipeline-plan' "$E_BASE" 2>/dev/null)"
+[ "$mlist" = "$M008B1" ] && pass "AC2.2 the merge found by 'git log --merges --grep' on the first-parent chain of the pinned E_BASE (= M) is exactly M ($M008B1)" || fail "AC2.2 merge search returned '$mlist', expected exactly $M008B1"
 d_base="$(G merge-base "$M008B1^1" "$M008B1^2" 2>/dev/null)"; d_final="$(G rev-parse "$M008B1^2" 2>/dev/null)"
 [ -n "$d_base" ] && [ "$d_base" = "$BASE008B1" ] && pass "AC2.3 BASE = git merge-base M^1 M^2 = $d_base" || fail "AC2.3 derived BASE '$d_base' != pinned $BASE008B1"
 [ -n "$d_final" ] && [ "$d_final" = "$FINAL008B1" ] && pass "AC2.4 FINAL = M^2 = $d_final" || fail "AC2.4 derived FINAL '$d_final' != pinned $FINAL008B1"
