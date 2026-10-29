@@ -16,6 +16,11 @@ FAILS=0
 fail() { echo "FAIL  $*"; FAILS=$((FAILS + 1)); }
 ok()   { echo "ok    $*"; }
 SCOPE_RE='\.github/workflows/pipeline\.yml|tools/pipeline/(sign_built|handoff|build_version)\.py|tests/pipeline/test_handoff\.py|docs/pipeline/build-pipeline\.md|docs/tasks/008b2-pipeline-build-sign\.md|docs/tasks/008b2-verify\.sh'
+# Fixed commits for the own-change checks (never HEAD or the current main). BASE_SHA = registry main when 008b-1 was merged and merged
+# into this branch (dd7da2d); BASE_SHA..PIN_FINAL lists exactly this task's files.
+BASE_SHA="dd7da2d79fc278597762cce862b48cc48434f816"
+PIN_FINAL="__FINAL__"
+PIN_TIP="__TIP__"
 WF=.github/workflows/pipeline.yml
 CONTRACT=contracts/pipeline-trigger.md
 
@@ -436,12 +441,42 @@ for name, rel, edits, tests in M:
 sys.exit(failed)
 PYEOF
 
-scope_base() {
-  local r
+# own_change_report DIR BASE FINAL : prints one line per problem with the own-change checks (empty output = pass); rc 1 if the
+# range cannot be computed. (Round 3 of 008b-2, red-first step: this is still the OLD rule, merge-base of HEAD with the current
+# main; it ignores BASE and FINAL. The next commit replaces it with the fixed-SHA rule.)
+own_change_report() {
+  local d=$1 r b="" f
   for r in origin/main refs/heads/main; do
-    if git rev-parse -q --verify "$r^{commit}" >/dev/null 2>&1; then git merge-base HEAD "$r"; return $?; fi
+    if git -C "$d" rev-parse -q --verify "$r^{commit}" >/dev/null 2>&1; then b=$(git -C "$d" merge-base HEAD "$r"); break; fi
   done
-  return 1
+  [ -n "$b" ] || { echo "NOBASE: no main ref to compute the base"; return 1; }
+  git -C "$d" diff --name-status "$b" HEAD -- tests/pipeline | grep -v '^A' | sed 's/^/MOD: /' || true
+  git -C "$d" diff --name-only "$b" HEAD | grep -vxE "$SCOPE_RE" | sed 's/^/VIOL: /' || true
+  return 0
+}
+
+# scope_selftest : the cell that failed registry main after 008b-1 merged. A clone of THIS repository, `origin/main` moved to its
+# head (as if this branch had been merged) and one later commit on top: the own-change check must still pass, because it may
+# read only fixed commits. Control: a fixed range that really contains an out-of-scope file must be flagged.
+scope_selftest() {
+  local C="$T/st" rc=0 out
+  git clone -q "$PWD" "$C" 2>/dev/null || { fail "scope selftest: cannot clone"; return 1; }
+  (
+    cd "$C" && git update-ref refs/remotes/origin/main HEAD \
+      && echo later > later-task.txt && git add later-task.txt \
+      && git -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false commit -q -m "a later commit on top"
+  ) || { fail "scope selftest: cannot build the clone"; return 1; }
+  out=$(own_change_report "$C" "$BASE_SHA" "$PIN_FINAL" "$PIN_TIP"); rc=$?
+  [ "$rc" -eq 0 ] && [ -z "$out" ] && ok "scope selftest: a later commit on top of the head (origin/main == head) does not disturb the own-change check" \
+    || { fail "scope selftest: later commit on top flagged: $out"; }
+  (
+    cd "$C" && git checkout -q "$PIN_FINAL" 2>/dev/null && echo x > stray.txt && git add stray.txt \
+      && git -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false commit -q -m "stray in range"
+  ) || { fail "scope selftest: cannot build the control"; return 1; }
+  strayfinal=$(git -C "$C" rev-parse HEAD)
+  out=$(own_change_report "$C" "$BASE_SHA" "$strayfinal" "$strayfinal")
+  printf '%s\n' "$out" | grep -qx 'VIOL: stray.txt' && ok "scope selftest control: an out-of-scope file inside the fixed range is flagged" \
+    || fail "scope selftest control: stray.txt in the range was not flagged: $out"
 }
 
 if [ "${1:-}" = "--mutate" ]; then
@@ -468,14 +503,11 @@ echo "$out" | tail -4 | sed 's/^/      /'
 [ "$rc" -eq 0 ] && ok "16, 26: the whole tests/pipeline suite passes (008a's, 008b-1's and test_handoff.py)" || fail "unit suite"
 n=$(python3 -B -m unittest discover -s tests/pipeline -p test_handoff.py 2>&1 | sed -n 's/^Ran \([0-9]*\) tests.*/\1/p')
 [ -n "$n" ] && [ "$n" -ge 20 ] && ok "test_handoff.py ran $n tests (zero-match guard: at least 20)" || fail "test_handoff.py ran '${n:-none}' tests"
-if b=$(scope_base) && [ -n "$b" ]; then
-  mod=$(git diff --name-status "$b" HEAD -- tests/pipeline | grep -v '^A' || true)
-  [ -z "$mod" ] && ok "16(d): no pre-existing test file was modified (only additions)" || fail "16(d): existing tests modified: $mod"
-  viol=$(git diff --name-only "$b" HEAD | grep -vxE "$SCOPE_RE" || true)
-  [ -z "$viol" ] && ok "scope: every changed file is in the declared file scope" || fail "scope: out-of-scope changes: $viol"
-else
-  fail "scope and 16(d): no main ref to compute the base"
-fi
+rep=$(own_change_report "$PWD" "$BASE_SHA" "$PIN_FINAL" "$PIN_TIP"); rc=$?
+[ "$rc" -eq 0 ] || fail "scope and 16(d): the range cannot be computed: $rep"
+[ -z "$(printf '%s\n' "$rep" | grep '^MOD: ' || true)" ] && [ "$rc" -eq 0 ] && ok "16(d): no pre-existing test file was modified (only additions)" || fail "16(d): $(printf '%s\n' "$rep" | grep '^MOD: ' || true)"
+[ -z "$(printf '%s\n' "$rep" | grep -v '^MOD: ' || true)" ] && [ "$rc" -eq 0 ] && ok "scope: every changed file is in the declared file scope" || fail "scope: $(printf '%s\n' "$rep" | grep -v '^MOD: ' || true)"
+scope_selftest
 
 # ---- criterion 18: docs
 grep -q '^## The pipeline workflow (task 008b-2)' docs/pipeline/build-pipeline.md \
