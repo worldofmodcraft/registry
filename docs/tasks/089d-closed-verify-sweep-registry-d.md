@@ -128,3 +128,21 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   before that, pins/extraction/positive controls, were fine). My phase-1 harness built each scenario once, so it never saw this. Fix: a per-build sequence number in the
   scenario directory name (`SC_SEQ`). This is a fix to a verification script's own harness, not a weakening: no assertion was changed. Run 1's output is discarded; all
   steps are re-run from a fresh clone of the new head.
+- 2026-10-29 qa-engineer (phase 2, run 2: fresh clone of head d288b54b6a38d4fe189149b631aaa964b5f4ecff, git 2.53.0, PYTHONDONTWRITEBYTECODE=1, quiet machine: no verify script
+  running; `ps` showed only pgrep loops and shells). Outputs in `/tmp/tmp.IS0EPfMlyN/*.out` (temp dir, not committed). Results, each a separate invocation:
+  - `bash docs/tasks/089d-verify.sh`: **exit 0, SUMMARY failed=0, 65 PASS.** Trimmed: pins 6 PASS; extraction positive controls 6 PASS (red 15 lines, fixed 34 lines);
+    case table (unfixed / fixed): g0 PASS/PASS; a1 FAIL/PASS; a2 FAIL/PASS; a2b FAIL/PASS; a3 FAIL/PASS; b1 FAIL/FAIL (other.txt); b2i FAIL/FAIL (other.txt); b2ii FAIL/FAIL (evil.txt);
+    b3 FAIL/FAIL (side.txt); b4 FAIL/FAIL (octopus message); b5 FAIL/FAIL (other.txt); b5b FAIL/FAIL (other.txt). (c): BASE..FINAL red, unreachable HEAD/TIP pin red, non-ancestor TIP red,
+    merged case NOT-APPLICABLE (merged) not PASS, control block byte-identical. (f): PIN_START..PIN_TIP = exactly the three files; 092 pins equal; outside the region diff lines 0.
+  - `--mutate`: **exit 0, failed=0.** Mutant 1 (old pattern) reddens exactly a1 a2 a2b a3, others unchanged; mutant 2 (`--no-merges` alone) flips exactly b2i b2ii b3 b4 b5 b5b to PASS.
+  - `--own-only`: **exit 0, failed=0.**
+  - `bash docs/tasks/092-verify.sh`: **exit 0, SUMMARY failed=0, 188 PASS**; post-TIP line `NA post-TIP NOT-APPLICABLE (merged): ab31a88... is an ancestor of d288b54... but not on its first-parent chain`
+    (the open point of phase 1 resolved as expected). `--live-selftest`: **exit 0, SUMMARY failed=0, 205 PASS**, same NA line.
+  - `bash docs/tasks/039a-verify.sh <clone>/tools/dev/node_modules` (started 2026-10-29T05:29:47Z after `npm ci --prefix tools/dev`, exit 0): **RED, stopped by me.** At AC12 it printed
+    `FAIL  another *-verify.sh kept running for six hours` (its wait_quiet at line 186 waited 21600 s). Cause, found with `ps`: pid 2864176, started 2026-10-29 04:52:34, a tool shell
+    `/bin/bash -c ... eval 'O=$(cat /tmp/p2dir); (until false; do sleep 1000; done) >/dev/null 2>&1 & disown; nohup $O/run.sh $O/c s3 bash docs/tasks/090-verify.sh --sweep ...'` (task 090's
+    sweep launcher; it has a child `sleep 1000` and never exits). Its command line contains `docs/tasks/090-verify.sh` and no "grep", so 039a's filter
+    `ps -eo args | grep -E 'docs/tasks/[^ ]*-verify\.sh' | grep -v grep | grep -v 039a-verify\.sh` matches it for as long as it lives. It is not a verify run (no verify script process); not mine; **not killed**.
+    I killed only my own 039a (pid 3846492). The pgrep loops from 2026-10-19 do NOT match (they contain "pgrep"). **Criterion (d)'s standalone 039a run is therefore NOT done**; (a)(b)(c)(e)(f) and 092 default/selftest are done and green.
+  - Earlier in this phase: run 1 of 089d-verify.sh (head 70c3ead) exit 36 from my harness defect (reused scenario directory), fixed in d288b54 (entry above); pins re-derived: PIN_TIP=70c75139513654818b0d1768f902ccf4cd9fa989.
+  Status stays in-progress: needs a quiet machine without pid 2864176 (or Ludwig/manager decision) to run 039a.
