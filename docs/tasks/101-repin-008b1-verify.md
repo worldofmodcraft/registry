@@ -59,3 +59,12 @@ them). The reference implementation of exactly this change is task 089e for `008
   (FINAL..TIP files only 101-verify.sh and the task file) is unchanged. 008b1-verify.sh is untouched by the repair (still FIX = FINAL). The 5fe5cfa/65964e8 E_TIP is superseded.
 - 2026-10-29 qa-engineer: re-pinned. Final pins (full SHAs): M = E_BASE = `dd7da2d79fc278597762cce862b48cc48434f816`; BASE = `32c641b5f56139a86c820f0b16d522c0f991d207`;
   FINAL(M^2) = `2f179d08a9786ba94cb2f6c6fc2da4bf0ba5ffca`; E_FIX = E_FINAL = `fbd384c8ee0edc5da50038ab8f74d2c988333c81`; E_SCRIPT = `8dc4f9bd597b4d05d7aa78830a55e613c3d04608`; E_TIP (pin commit) = `8952591f671894d4009e9ebf20a3c4dc521e1fe4`.
+- 2026-10-29 qa-engineer (PHASE 2, all criteria demonstrated): fresh non-shallow clone of https://github.com/worldofmodcraft/registry at branch head
+  `3d9494bb06f882c15cb9671946bec820bacd2732` (is-shallow false), git 2.53.0, PYTHONDONTWRITEBYTECODE=1, outputs under `/tmp/p2-101b.bPXNXU`. Before each run
+  `ps -eo pid,args | grep -E 'docs/tasks/[^ ]*-verify\.sh'` printed nothing; inside 101 every `wait_quiet` logged "no other *-verify.sh process running (waited 0s)" (11 of 11).
+  Exit codes: `101-verify.sh` default rc=0 (57 PASS: AC1 OLD exit 1 on f1 "FAIL  no changes since base (broken search)", f2 "FAIL  out of scope: docs/101-synthetic-later.md",
+  f3 "no changes since base", NEW exit 0 on all three; AC3 deadbee PIN_M/PIN_BASE/PIN_FINAL each exit 2; AC3.4 skip-word count 0 with positive+negative control; AC5 exit 0 on HEAD and HEAD+later branch;
+  AC11 on fixed SHAs); `101-verify.sh --mutate` rc=0 (1m33s: control green; m1 merge-base-with-origin/main exit 1 with exactly one FAIL; m2 right side HEAD exit 2, scope check + self-test only;
+  m3 `008b1-verify.sh --mutate` exit 0, 27 mutations red = expected 27); plain `008b1-verify.sh` rc=0 (SUMMARY failed=0, "changed files in 32c641b..2f179d0: 5", all in scope, self-test A-D ok);
+  `008b1-verify.sh --mutate` rc=0 (27 `ok mutation`, both scope mutations named, SUMMARY mutate failed=0, worktree clean after). (The first default run was red once, AC3.4, repaired above; no other red.)
+  Criteria 1-7: demonstrated. Item 7 scope: `git diff --name-only dd7da2d 5fe5cfa12c36..` is asserted by AC11.4 = 008b1-verify.sh, 101-verify.sh, this file. Status: review.
