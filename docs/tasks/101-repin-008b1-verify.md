@@ -67,4 +67,4 @@ them). The reference implementation of exactly this change is task 089e for `008
   AC11 on fixed SHAs); `101-verify.sh --mutate` rc=0 (1m33s: control green; m1 merge-base-with-origin/main exit 1 with exactly one FAIL; m2 right side HEAD exit 2, scope check + self-test only;
   m3 `008b1-verify.sh --mutate` exit 0, 27 mutations red = expected 27); plain `008b1-verify.sh` rc=0 (SUMMARY failed=0, "changed files in 32c641b..2f179d0: 5", all in scope, self-test A-D ok);
   `008b1-verify.sh --mutate` rc=0 (27 `ok mutation`, both scope mutations named, SUMMARY mutate failed=0, worktree clean after). (The first default run was red once, AC3.4, repaired above; no other red.)
-  Criteria 1-7: demonstrated. Item 7 scope: `git diff --name-only dd7da2d 5fe5cfa12c36..` is asserted by AC11.4 = 008b1-verify.sh, 101-verify.sh, this file. Status: review.
+  Criteria 1-7: demonstrated. Item 7 scope: `git diff --name-only dd7da2d 8952591f671894d4009e9ebf20a3c4dc521e1fe4` (E_BASE..E_TIP) is asserted by AC11.4 = 008b1-verify.sh, 101-verify.sh, this file. Status: review.
