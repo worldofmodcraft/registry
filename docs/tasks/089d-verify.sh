@@ -209,7 +209,7 @@ later_commit_checks() {
         [ -n "$names" ] && [ "$names" = "$exp" ] && pass "(f) with a later commit on top, PIN_START..PIN_TIP is still exactly the three own files" \
             || fail "(f) a later commit changed the fixed-range answer: $(printf '%s' "$names" | tr '\n' ' ')"
         head_names="$(git -C "$L" diff --name-only "$PIN_START" HEAD 2>/dev/null | sort)"
-        [ -n "$head_names" ] && [ "$head_names" != "$exp" ] && pass "(f) positive control: the HEAD-relative form of the check WOULD be red on that clone ($(printf '%s' "$head_names" | wc -l) files)" \
+        [ -n "$head_names" ] && [ "$head_names" != "$exp" ] && pass "(f) positive control: the HEAD-relative form of the check WOULD be red on that clone ($(printf '%s\n' "$head_names" | wc -l) files)" \
             || fail "(f) positive control failed: the HEAD-relative form is not distinguishable on the later-commit clone"
     else fail "(f) could not build the later-commit clone at PIN_TIP"; fi
     body="$(sed -n '/^scope_checks() {/,/^}/p; /^extract() {/,/^}/p' "$0")"
