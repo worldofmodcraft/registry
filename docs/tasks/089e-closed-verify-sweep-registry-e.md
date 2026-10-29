@@ -1,6 +1,6 @@
 # Task 089e: registry closed scripts — part E (008c-verify.sh own-change scope check re-pinned to 008c's merged range)
 
-- **Mission:** SITE-V1 (verification integrity) — **Status:** in-progress 2026-10-29 (fixed-SHA rewrite of 089e-verify.sh awaiting phase 2; earlier phase 2 green at d50e7d8, was in-progress 2026-10-28 (cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A; part E cut by the manager in session 14 from the finding booked in the umbrella log (094 spec review), spec-approved solo under MANAGER.md §2b as a small, mechanical one-file task of the umbrella pattern)
+- **Mission:** SITE-V1 (verification integrity) — **Status:** review 2026-10-29 (fixed-SHA version, phase 2 green on the merged head; earlier phase 2 green at d50e7d8, was in-progress 2026-10-28 (cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A; part E cut by the manager in session 14 from the finding booked in the umbrella log (094 spec review), spec-approved solo under MANAGER.md §2b as a small, mechanical one-file task of the umbrella pattern)
 - **Agent / model:** qa-engineer (model per frontmatter) — **Budget:** small (one agent-session)
 - **Branch / worktree:** `task/089e-closed-verify-sweep-registry-e` / `~/wt/registry-task-089e`, from registry main `32c641b`
 - **Umbrella (authoritative for findings, pins, criteria, forbidden list, Q1-Q6):** `docs/tasks/089-closed-verify-sweep-registry.md` (copied
@@ -128,3 +128,11 @@ bash docs/tasks/008c-verify.sh --scope-selftest            # 5. the self-test al
   `--own-only` must FAIL (`^FAIL  AC11.5`), with a control at OLD089E without the commit that must pass; the same two later commits on top of the current head -> the fixed
   script's `--own-only` must exit 0. Phase 2 for this round must be re-run (own-only, default, --mutate); the previous phase-2 result no longer covers this script version.
   Status goes back to in-progress until then.
+- 2026-10-29 qa-engineer (PHASE 2 of the fixed-SHA version): merged origin/main (registry main aa6e382, task 101) into the branch with a plain merge, no rebase: head
+  `0d3af5869a4cb760870f4c1515e76ef972f76aab`, pushed. Live test of decision A: the merge reddened nothing. Fresh non-shallow clone (is-shallow=false) at that head, git 2.53.0,
+  PYTHONDONTWRITEBYTECODE=1, outputs under `/tmp/tmp.KxIA4Q4SOu`; `ps` (docs/tasks/[^ ]*-verify\.sh) printed 0 before each run. Exit codes:
+  (1) `089e-verify.sh --own-only` rc=0, 35 PASS, ALL CHECKS PASSED. (2) default rc=0, ALL CHECKS PASSED: AC3.4a positive control PASS, AC3.4 skip-word count 0; AC5.0-5.2 exit 0;
+  AC12.0 control OLD (cee2bc7) no later commit exit 0; AC12.file OLD + one new file exit 1 "FAIL  AC11.5a TIP..HEAD touches: docs/089e-later-commit.md ..."; AC12.edit008c OLD + an edit of
+  008c-verify.sh exit 2 (AC11.5 red); the fixed script exit 0 on both later commits. (3) `--mutate` rc=0: control green; m1 exit 1 (one FAIL, out of scope); m2 exit 2 (scope check + self-test only);
+  m3 exit 0, all 28 mutations red (expected 28), both scope mutations named. (4) plain `008c-verify.sh` rc=0, 0 FAIL lines, "changed files in e2f7fe3..7810e70: 5", SUMMARY failed=0.
+  (5) `008c-verify.sh --scope-selftest` rc=0 (bad-pin scenario ok). No unexpected red, no finding. Criteria 1-5, 9, 11 plus AC12: DONE. Status: review.
