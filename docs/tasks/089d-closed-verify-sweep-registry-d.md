@@ -154,3 +154,14 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   merge-base with the CURRENT main (`scope_base`, lines ~223-227 on main), so every later branch that adds files fails it. This branch adds the umbrella copy and part D's files, so it trips it.
   It is not caused by 089d's change and not fixable inside 089d's file scope (008c-verify.sh is not in it; the fix is the booked re-pin of 008c to its merged range). 039a has therefore NOT
   completed green on this branch; it was not run to the end, so any later script is unobserved. Criterion (d)'s 039a run remains OPEN. Status stays in-progress.
+- 2026-10-29 qa-engineer (fix round, Ludwig's decision "A: fixed SHAs only"; WRITE ONLY, no verify script run, `bash -n` and throwaway repos only). Audit of every own-change check in
+  `089d-verify.sh` (grep for HEAD, origin/main, merge-base, `..`): **none reads HEAD, a branch name or a range ending in HEAD.** Own-change checks were already on fixed SHAs:
+  (f) `git diff --name-only PIN_START PIN_TIP` (PIN_START = dispatch commit, PIN_TIP = last commit before the pin commit), the blobs of PIN_RED and PIN_FIX, and 092's typed BASE/FINAL/TIP; all
+  `HEAD` uses are inside synthetic scenario repos or the temp merged clone, and `ROOT` is only cloned to reach the pinned objects. So there is nothing to replace (old -> new: none), and the
+  requested red-first cell ("current script on a clone with a later commit must fail its own-change check") **cannot be produced: the script has no HEAD-relative own-change check.** I report
+  that instead of inventing a failure. In place of a red cell I made the property explicit and self-proving: new `later_commit_checks` (commit ae4ed0e5d8a0af3b1f93866796e317812a496bb7, 089d-verify.sh only; runs in default and
+  `--own-only`): (1) a temp clone detached at PIN_TIP with one extra later commit still gives `PIN_START..PIN_TIP` = exactly the three own files; (2) positive control: the HEAD-relative form
+  (`diff PIN_START HEAD`) on that same clone is different (includes the extra file), so the control distinguishes the two; (3) a grep over `scope_checks` and `extract` finds >0 pin names
+  and 0 occurrences of HEAD / origin/main / merge-base. Development harness (sourced just that function, throwaway clone, seconds): all three PASS. Written-but-not-run as a script.
+  092-verify.sh untouched (its post-TIP check is correct by design). Assertion intent unchanged; nothing weakened. The 039a red on the booked 008c scope finding is separate (008c-verify.sh is outside this file scope).
+  Pins: PIN_RED, PIN_FIX, PIN_START unchanged; PIN_TIP re-pinned by the next commit.
