@@ -57,3 +57,5 @@ them). The reference implementation of exactly this change is task 089e for `008
   (`scope|pin`), with a positive control that matches `scope pin PIN_M skipped` and a negative control that ignores a planner skip line. Because this edits 101-verify.sh
   after the fix commit, AC11.5b now compares from a new fixed pin E_SCRIPT (the repair commit) to TIP and allows the three pin lines E_FIX/E_FINAL/E_SCRIPT; AC11.5a
   (FINAL..TIP files only 101-verify.sh and the task file) is unchanged. 008b1-verify.sh is untouched by the repair (still FIX = FINAL). The 5fe5cfa/65964e8 E_TIP is superseded.
+- 2026-10-29 qa-engineer: re-pinned. Final pins (full SHAs): M = E_BASE = `dd7da2d79fc278597762cce862b48cc48434f816`; BASE = `32c641b5f56139a86c820f0b16d522c0f991d207`;
+  FINAL(M^2) = `2f179d08a9786ba94cb2f6c6fc2da4bf0ba5ffca`; E_FIX = E_FINAL = `fbd384c8ee0edc5da50038ab8f74d2c988333c81`; E_SCRIPT = `8dc4f9bd597b4d05d7aa78830a55e613c3d04608`; E_TIP (pin commit) = `8952591f671894d4009e9ebf20a3c4dc521e1fe4`.
