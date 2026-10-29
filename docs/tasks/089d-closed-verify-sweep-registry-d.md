@@ -146,3 +146,11 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
     I killed only my own 039a (pid 3846492). The pgrep loops from 2026-10-19 do NOT match (they contain "pgrep"). **Criterion (d)'s standalone 039a run is therefore NOT done**; (a)(b)(c)(e)(f) and 092 default/selftest are done and green.
   - Earlier in this phase: run 1 of 089d-verify.sh (head 70c3ead) exit 36 from my harness defect (reused scenario directory), fixed in d288b54 (entry above); pins re-derived: PIN_TIP=70c75139513654818b0d1768f902ccf4cd9fa989.
   Status stays in-progress: needs a quiet machine without pid 2864176 (or Ludwig/manager decision) to run 039a.
+- 2026-10-29 qa-engineer (phase 2, step 9 re-run after Ludwig's cleanup): fresh clone at head ac8a998adad35dded3bc29216cb1322b5dcd70c2, `ps` before the run: 0 processes matching
+  `docs/tasks/[^ ]*-verify\.sh`; `npm ci --prefix tools/dev` exit 0; `PYTHONDONTWRITEBYTECODE=1 bash docs/tasks/039a-verify.sh <clone>/tools/dev/node_modules` started 2026-10-29T19:43:55Z, output
+  in `/tmp/tmp.uFOqoSGPFs/039a.out` (temp dir). The quiet-wait now passes (the earlier blocker is gone). **First red, run stopped by me (my own background task only) after 57 PASS:**
+  `FAIL  008c-verify.sh exit 1 on HEAD: FAIL  out of scope: docs/tasks/089-closed-verify-sweep-registry.md`
+  008a, 032 and 034 pass in the same sweep. This is exactly the finding booked in the umbrella log (2026-10-28, from 094's spec review): `008c-verify.sh` computes its own-change scope against the
+  merge-base with the CURRENT main (`scope_base`, lines ~223-227 on main), so every later branch that adds files fails it. This branch adds the umbrella copy and part D's files, so it trips it.
+  It is not caused by 089d's change and not fixable inside 089d's file scope (008c-verify.sh is not in it; the fix is the booked re-pin of 008c to its merged range). 039a has therefore NOT
+  completed green on this branch; it was not run to the end, so any later script is unobserved. Criterion (d)'s 039a run remains OPEN. Status stays in-progress.
