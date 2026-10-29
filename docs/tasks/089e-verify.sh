@@ -61,7 +61,7 @@ FINAL008C="7810e70af50d7e2ebae1e53dccba37be1095afe7"  # M^2
 E_BASE="32c641b5f56139a86c820f0b16d522c0f991d207"     # registry main when 089e was cut (= M008C)
 E_FIX="c68eec7b910a29be295b1944e826497d37cac326"     # first commit touching 008c-verify.sh
 E_FINAL="c68eec7b910a29be295b1944e826497d37cac326"   # last commit touching 008c-verify.sh
-E_TIP="48141c31631f6a9dbe6ce2df06a15d1054efed1d"     # last content commit of 089e (a fixed SHA; the pin commit that records it, and anything after it, is never read by an own-change check)
+E_TIP="c03bed44f51fad176cf18e127ff2e316350ccc4b"     # last content commit of 089e (a fixed SHA; the pin commit that records it, and anything after it, is never read by an own-change check)
 OLD089E="cee2bc70d030b152cad6a891137ee5905f6e537f"   # the phase-2 head: the script that still read HEAD (AC12 red-first cell); a fixed SHA
 
 TMP="$(mktemp -d)" || exit 99
