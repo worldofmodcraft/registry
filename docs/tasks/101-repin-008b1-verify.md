@@ -88,3 +88,4 @@ them). The reference implementation of exactly this change is task 089e for `008
   E_SCRIPT/E_TIP re-pinned (below); the manager re-runs in a fresh clone.
 - 2026-10-29 qa-engineer: CORRECTION: the entry above was committed (unpushed `a924b83`) before its edit script had applied (a comment anchor wrapped across lines); this next commit is the one that actually
   applies the AC2.2 change (now searches from the fixed E_BASE) and the comment fixes. E_SCRIPT is the commit of that edit; the pins below are from it.
+- 2026-10-29 qa-engineer: re-pinned: E_FIX = E_FINAL = `fbd384c8ee0edc5da50038ab8f74d2c988333c81` (unchanged); OLD101 = `0c67d6eb7eae922fbc6b4d9304fda82feea771f4`; E_SCRIPT = `e66c26d73112d912680dae0aa08a191400765bfc`; E_TIP = `eb08d248d7604612090ce559e20e12bb9be843e0`. Nothing was run (machine held by the manager).

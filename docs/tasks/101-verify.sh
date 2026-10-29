@@ -66,7 +66,7 @@ E_FIX="fbd384c8ee0edc5da50038ab8f74d2c988333c81"     # first commit touching 008
 E_FINAL="fbd384c8ee0edc5da50038ab8f74d2c988333c81"   # last commit touching 008b1-verify.sh
 OLD101="0c67d6eb7eae922fbc6b4d9304fda82feea771f4"   # the head of this script that still read HEAD (AC11.5d, AC5.0); AC12 proves one later commit reddens it
 E_SCRIPT="e66c26d73112d912680dae0aa08a191400765bfc"  # the last commit changing 101-verify.sh other than by pin lines
-E_TIP="unpinned"     # the pin commit; nothing is range-checked after it (see the task log)
+E_TIP="eb08d248d7604612090ce559e20e12bb9be843e0"     # the pin commit; nothing is range-checked after it (see the task log)
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
