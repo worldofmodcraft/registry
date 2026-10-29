@@ -63,6 +63,7 @@ FINAL008B1="2f179d08a9786ba94cb2f6c6fc2da4bf0ba5ffca"  # M^2
 E_BASE="dd7da2d79fc278597762cce862b48cc48434f816"     # registry main when 101 was cut (= M008B1)
 E_FIX="fbd384c8ee0edc5da50038ab8f74d2c988333c81"     # first commit touching 008b1-verify.sh
 E_FINAL="fbd384c8ee0edc5da50038ab8f74d2c988333c81"   # last commit touching 008b1-verify.sh
+OLD101="0c67d6eb7eae922fbc6b4d9304fda82feea771f4"   # the head of this script that still read HEAD (AC11.5d, AC5.0); AC12 proves one later commit reddens it
 E_SCRIPT="8dc4f9bd597b4d05d7aa78830a55e613c3d04608"  # the last commit changing 101-verify.sh other than by pin lines (AC3.4 repair, below in the task log)
 E_TIP="8952591f671894d4009e9ebf20a3c4dc521e1fe4"     # the pin commit; nothing is range-checked after it (see the task log)
 
@@ -288,6 +289,34 @@ else
     bash -n "$NEWF" && pass "AC11.8 the NEW 008b1-verify.sh parses (bash -n)" || fail "AC11.8 the NEW 008b1-verify.sh does not parse"
 fi
 
+
+if [ "$OWN" = 0 ]; then
+section "AC12 -- RED FIRST for HEAD-independence: one extra later commit (an edit of 008b1-verify.sh) reddens the OLD 101-verify.sh, not the fixed one"
+# OLD101 is the head that still compared 008b1-verify.sh at HEAD with FINAL (AC11.5d, AC5.0). Each variant: a clone at OLD101 (resp. at the current HEAD)
+# plus ONE later commit; the clone's own docs/tasks/101-verify.sh runs --own-only (no recursion: AC12 is not part of --own-only).
+if ! full40 "$OLD101" || ! G cat-file -e "$OLD101^{commit}" 2>/dev/null; then fail "AC12.0 OLD101='$OLD101' is not a full SHA that exists"; else
+later_commit() {   # later_commit DIR KIND : one commit on top of the clone's HEAD; KIND=file adds a new file, KIND=edit008b1 appends a comment to 008b1-verify.sh
+    case "$2" in
+        file) printf 'a later commit (101 AC12)\n' > "$1/docs/101-later-commit.md"; git -C "$1" add docs/101-later-commit.md ;;
+        edit008b1) printf '# a later edit (101 AC12)\n' >> "$1/$V008B1"; git -C "$1" add "$V008B1" ;;
+    esac
+    git -C "$1" "${GITID[@]}" commit -q -m "later commit ($2)"
+}
+own_only_in() {   # own_only_in DIR OUTFILE : the clone's own 101-verify.sh --own-only; echo the exit code
+    wait_quiet "$(basename "$1")" >&2 || { touch "$TMP/timeout"; echo 99; return; }
+    ( cd "$1" && PYTHONDONTWRITEBYTECODE=1 bash "$SELF" --own-only ) > "$2" 2>&1; echo $?
+}
+mk_frame "$TMP/o0" "$OLD101" "$OLD101" || fail "AC12.0 cannot clone OLD101"
+rc=$(own_only_in "$TMP/o0" "$TMP/o0.out"); expect "AC12.0 control: the OLD script at its own head, no later commit" green "$rc" "$TMP/o0.out" '!^FAIL'
+for kind in file edit008b1; do
+    mk_frame "$TMP/o-$kind" "$OLD101" "$OLD101" && later_commit "$TMP/o-$kind" "$kind" || { fail "AC12.$kind cannot build the OLD + later-commit frame"; continue; }
+    if [ "$kind" = file ]; then want=green; rx='!^FAIL'; else want=red; rx='^FAIL  AC11\.5d'; fi
+    rc=$(own_only_in "$TMP/o-$kind" "$TMP/o-$kind.out"); expect "AC12.$kind the OLD script with one later commit ($kind)" "$want" "$rc" "$TMP/o-$kind.out" "$rx"
+    mk_frame "$TMP/n-$kind" "$HEADREV" "$HEADREV" && later_commit "$TMP/n-$kind" "$kind" || { fail "AC12.$kind cannot build the HEAD + later-commit frame"; continue; }
+    rc=$(own_only_in "$TMP/n-$kind" "$TMP/n-$kind.out"); expect "AC12.$kind the fixed script with one later commit ($kind)" green "$rc" "$TMP/n-$kind.out" '!^FAIL'
+done
+fi
+fi   # OWN = 0 (AC12)
 else
 # ==================================================================================================
 section "AC4 -- mutations (the live scope check widened back; red, and only that check) and the existing 008b-1 mutations"

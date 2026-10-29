@@ -68,3 +68,7 @@ them). The reference implementation of exactly this change is task 089e for `008
   m3 `008b1-verify.sh --mutate` exit 0, 27 mutations red = expected 27); plain `008b1-verify.sh` rc=0 (SUMMARY failed=0, "changed files in 32c641b..2f179d0: 5", all in scope, self-test A-D ok);
   `008b1-verify.sh --mutate` rc=0 (27 `ok mutation`, both scope mutations named, SUMMARY mutate failed=0, worktree clean after). (The first default run was red once, AC3.4, repaired above; no other red.)
   Criteria 1-7: demonstrated. Item 7 scope: `git diff --name-only dd7da2d 8952591f671894d4009e9ebf20a3c4dc521e1fe4` (E_BASE..E_TIP) is asserted by AC11.4 = 008b1-verify.sh, 101-verify.sh, this file. Status: review.
+- 2026-10-29 qa-engineer (follow-up, manager message, decision A "fixed SHAs only"): finding on my own head `0c67d6eb7eae922fbc6b4d9304fda82feea771f4`: AC11.5d (`008b1-verify.sh` at HEAD == FINAL) and AC5.0/AC5.1/AC5.2
+  (HEAD's copy of the script, run on HEAD) read HEAD for an own-change property and redden the day a later task edits 008b1-verify.sh. RED FIRST commit: AC12 added (pin OLD101 = that head): a clone of
+  OLD101 plus ONE later commit appending a comment to 008b1-verify.sh must make the OLD `--own-only` FAIL `AC11.5d` (a later new file must stay green), and the same later commit on the current HEAD must be green.
+  Until the fix commit follows, AC12 is red on the fixed side by construction.
