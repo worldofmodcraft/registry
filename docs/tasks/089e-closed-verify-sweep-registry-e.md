@@ -1,6 +1,6 @@
 # Task 089e: registry closed scripts — part E (008c-verify.sh own-change scope check re-pinned to 008c's merged range)
 
-- **Mission:** SITE-V1 (verification integrity) — **Status:** in-progress 2026-10-28 (cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A; part E cut by the manager in session 14 from the finding booked in the umbrella log (094 spec review), spec-approved solo under MANAGER.md §2b as a small, mechanical one-file task of the umbrella pattern)
+- **Mission:** SITE-V1 (verification integrity) — **Status:** review 2026-10-29 (phase 2 green; was in-progress 2026-10-28 (cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A; part E cut by the manager in session 14 from the finding booked in the umbrella log (094 spec review), spec-approved solo under MANAGER.md §2b as a small, mechanical one-file task of the umbrella pattern)
 - **Agent / model:** qa-engineer (model per frontmatter) — **Budget:** small (one agent-session)
 - **Branch / worktree:** `task/089e-closed-verify-sweep-registry-e` / `~/wt/registry-task-089e`, from registry main `32c641b`
 - **Umbrella (authoritative for findings, pins, criteria, forbidden list, Q1-Q6):** `docs/tasks/089-closed-verify-sweep-registry.md` (copied
@@ -101,3 +101,16 @@ bash docs/tasks/008c-verify.sh --scope-selftest            # 5. the self-test al
   pinned literal 28. Notes 5 and 6 left as notes: phase 2 must show the AC3.4 skip-word count = 0 (with its positive control). Because this edit
   changes 089e-verify.sh beyond its pin lines, E_TIP moves to this fix commit (E_FIX/E_FINAL stay at the only commit touching 008c-verify.sh,
   `c68eec7b910a29be295b1944e826497d37cac326`, which is unchanged); AC11.5b still holds from the new TIP.
+- 2026-10-29 qa-engineer (PHASE 2, all criteria demonstrated): fresh clone of https://github.com/worldofmodcraft/registry at branch head
+  `d50e7d8a1772d1ce4004b6948cb8d9b203b2b369`, git 2.53.0, PYTHONDONTWRITEBYTECODE=1, separate invocations, outputs under `/tmp/tmp.6k9buHWYAH`. Before each run
+  `ps -eo pid,args | grep -E 'docs/tasks/[^ ]*-verify\.sh'` printed 0 matches; inside 089e every `wait_quiet` logged "no other *-verify.sh process running (waited 0s)".
+  Exit codes: (1) `089e-verify.sh --own-only` rc=0 (AC2 + AC11 all PASS; AC2.6c positive control found 5 HEAD/main reads in the OLD blob, AC2.6d 0 in the NEW);
+  (2) default rc=0, 8 s, ALL CHECKS PASSED: AC1.f1 OLD exit 1 "FAIL  no changes since base", AC1.f2 OLD exit 1 "FAIL  out of scope: docs/089e-synthetic-later.md",
+  AC1.f3 OLD exit 1 "no changes since base", NEW exit 0 on all three; AC3 PIN_M/PIN_BASE/PIN_FINAL=deadbee each exit 2 with "FAIL  scope pin KEY='deadbee' is not a full 40-character SHA ...";
+  AC3.4a positive control PASS (skip-word grep matches a sample), AC3.4 skip/not-evaluated count = 0; AC5.0-5.2 exit 0 on HEAD and on HEAD + later-branch merge;
+  (3) `--mutate` rc=0: control green; m1 (merge-base with origin/main) exit 1 with exactly the one "out of scope" FAIL; m2 (right side HEAD) exit 2, scope check + self-test only;
+  m3 `008c-verify.sh --mutate` exit 0, all 28 mutations red (expected 28, pinned literal 28), both scope mutations named; (4) plain `008c-verify.sh` rc=0, 0 FAIL lines,
+  "ok scope pins re-derived from the merge commit", "changed files in e2f7fe3..7810e70: 5", "all changes of 008c's merged range inside the declared file scope", SUMMARY failed=0;
+  (5) `008c-verify.sh --scope-selftest` rc=0 (merge-from-main green + old formula red/sensitive, stray-commit, stray-plus-merge, bad-pin). No unexpected red; no finding.
+  Note: this also fixes the symptom 089d saw ("FAIL 008c-verify.sh exit 1 on HEAD: FAIL out of scope: docs/tasks/089-closed-verify-sweep-registry.md") once this branch is merged.
+  Criteria 1-5, 9, 11: DONE (demonstrated above). Status: review.
