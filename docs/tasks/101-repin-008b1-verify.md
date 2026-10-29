@@ -76,3 +76,5 @@ them). The reference implementation of exactly this change is task 089e for `008
   (copied into the clone) on a clone of the pinned E_TIP and on E_TIP + a later branch, as 089e's AC5 does (E_TIP rather than live HEAD: a behaviour test on a tree a later task cannot change; this is
   the one deliberate difference from "a clone of HEAD"). The only remaining HEAD read is ancestry (`E_TIP` is an ancestor of HEAD, AC11.2), which a later edit cannot redden. E_SCRIPT/E_TIP re-pinned below.
 - 2026-10-29 qa-engineer: re-pinned: OLD101 = `0c67d6eb7eae922fbc6b4d9304fda82feea771f4`; E_FIX = E_FINAL = `fbd384c8ee0edc5da50038ab8f74d2c988333c81` (unchanged); E_SCRIPT = `2acfe2e70de91b023eae756bb2afd333af6b47f5`; E_TIP = `658343f05e5528a368c6f396c576c40fd6e1bb44`.
+- 2026-10-29 qa-engineer: one more HEAD read found in my own mutation code (AC4.m3 ran `008b1-verify.sh --mutate` from a clone of HEAD, i.e. HEAD's copy of the script): now a clone of the pinned E_TIP
+  (the script there is the fix commit's blob, AC11.5c). Mutation code touched, so --mutate is re-run. E_SCRIPT/E_TIP re-pinned again (superseding the previous pair).

@@ -64,8 +64,8 @@ E_BASE="dd7da2d79fc278597762cce862b48cc48434f816"     # registry main when 101 w
 E_FIX="fbd384c8ee0edc5da50038ab8f74d2c988333c81"     # first commit touching 008b1-verify.sh
 E_FINAL="fbd384c8ee0edc5da50038ab8f74d2c988333c81"   # last commit touching 008b1-verify.sh
 OLD101="0c67d6eb7eae922fbc6b4d9304fda82feea771f4"   # the head of this script that still read HEAD (AC11.5d, AC5.0); AC12 proves one later commit reddens it
-E_SCRIPT="2acfe2e70de91b023eae756bb2afd333af6b47f5"  # the last commit changing 101-verify.sh other than by pin lines (AC3.4 repair, below in the task log)
-E_TIP="658343f05e5528a368c6f396c576c40fd6e1bb44"     # the pin commit; nothing is range-checked after it (see the task log)
+E_SCRIPT="unpinned"  # the last commit changing 101-verify.sh other than by pin lines (AC3.4 repair, below in the task log)
+E_TIP="unpinned"     # the pin commit; nothing is range-checked after it (see the task log)
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
@@ -342,15 +342,15 @@ if edit_file "$TMP/mut2.sh" '  git merge-base --is-ancestor "$PIN_BASE" "$PIN_FI
         || fail "AC4.m2 exit $rc; unexpected FAIL lines: '$other'; $(first_fail "$TMP/m2.out")"
 else fail "AC4.m2 the mutation did not apply (pattern not found exactly once)"; fi
 
-# every existing 008b-1 mutation (and the two scope mutations) is red, via 008b1-verify.sh --mutate run from a clean clone of HEAD
-mk_frame "$TMP/mh" "$HEADREV" "$HEADREV" || fail "AC4.0 cannot clone HEAD"
+# every existing 008b-1 mutation (and the two scope mutations) is red, via 008b1-verify.sh --mutate run from a clean clone of the pinned TIP
+mk_frame "$TMP/mh" "$E_TIP" "$E_TIP" || fail "AC4.0 cannot clone the pinned TIP (008b1-verify.sh there is the fix commit's blob, AC11.5c)"
 exp_n=$(( $(grep -cE '^  (run_mut|scope_mut) [a-z]' "$TMP/mh/$V008B1") + 1 ))
 rc=$(run008b1 "$TMP/mh" "$TMP/mh.out" "" --mutate)
 got_n=$(grep -c '^ok    mutation ' "$TMP/mh.out")
 [ "$rc" = 0 ] && [ "$exp_n" = 27 ] && [ "$got_n" = 27 ] && [ "$got_n" = "$exp_n" ] && ! grep -q '^FAIL' "$TMP/mh.out" \
     && grep -q '^ok    mutation scope-right-side-head: red -> scope scenario merge-from-main' "$TMP/mh.out" \
     && grep -q '^ok    mutation scope-unusable-pin-passes: red -> scope scenario bad-pin' "$TMP/mh.out" \
-    && pass "AC4.m3 008b1-verify.sh --mutate at HEAD: exit 0, all $got_n mutations red (expected $exp_n), both scope mutations named" \
+    && pass "AC4.m3 008b1-verify.sh --mutate at the pinned TIP: exit 0, all $got_n mutations red (expected $exp_n), both scope mutations named" \
     || fail "AC4.m3 008b1-verify.sh --mutate: exit $rc, $got_n red mutations vs $exp_n expected: $(first_fail "$TMP/mh.out")"
 fi
 
