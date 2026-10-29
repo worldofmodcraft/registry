@@ -239,6 +239,34 @@ class SignBuiltTests(NoSignBase):
         json.dump(good, open(p, "w"))
         self.sign(d)   # the unmodified result still signs
 
+    def _damaged_result(self, name, edit):
+        _, _, d = self.built(name)
+        p = os.path.join(d, "result.json")
+        res = json.load(open(p))
+        edit(res)
+        json.dump(res, open(p, "w"))
+        out = os.path.join(self.fresh("so"), "signed")
+        return d, out
+
+    def test_result_json_with_a_bad_scan_value_is_refused(self):
+        """Values, not only keys: scan must satisfy validation-report.schema.json (the validator 008a uses)."""
+        for i, edit in enumerate((lambda r: r["scan"]["summary"].update(files_inspected="many"),
+                                  lambda r: r["scan"].update(root=5),
+                                  lambda r: r["scan"].update(accepted="not a list"))):
+            d, out = self._damaged_result(f"sb11-{i}", edit)
+            with self.assertRaises(sign_built.SignRefused, msg=i) as cm:
+                self.sign(d, out=out)
+            self.assertEqual(cm.exception.rule, "result/scan", i)
+            self.assertFalse(os.path.exists(out))
+
+    def test_result_json_with_a_bad_built_at_is_refused(self):
+        for i, value in enumerate(("yesterday", "2026-10-28T00:00:00", 12345, "2026-10-28T00:00:00Z\n")):
+            d, out = self._damaged_result(f"sb12-{i}", lambda r, v=value: r.update(built_at=v))
+            with self.assertRaises(sign_built.SignRefused, msg=repr(value)) as cm:
+                self.sign(d, out=out)
+            self.assertEqual(cm.exception.rule, "result/built-at", repr(value))
+            self.assertFalse(os.path.exists(out))
+
     def run_sign_cli(self, d, key=None, pub=None, out=None):
         out = out or os.path.join(self.fresh("so"), "signed")
         argv = [sys.executable, SIGN_CLI, "--tarball", os.path.join(d, f"{TAG}.tar.gz"), "--result", os.path.join(d, "result.json"),

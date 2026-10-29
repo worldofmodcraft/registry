@@ -150,6 +150,8 @@ def c14_unset():
     assert "unset MINISIGN_SECRET_KEY" in run, "the signing step never unsets MINISIGN_SECRET_KEY"
     w, u, p = run.find('> "$RUNNER_TEMP/signing.key"'), run.find("unset MINISIGN_SECRET_KEY"), run.find("sign_built.py")
     assert 0 <= w < u < p, "the key must be written, then unset, before sign_built.py is invoked"
+    before = [ln.strip() for ln in run[:u].splitlines() if ln.strip()]
+    assert before == ["umask 077", "printf '%s\\n' \"$MINISIGN_SECRET_KEY\" > \"$RUNNER_TEMP/signing.key\""], f"the lines before the unset are not exactly the two key-write lines: {before}"
 check("c14 (d2) signing step unsets the secret from the environment before the python call", c14_unset)
 
 
@@ -317,6 +319,8 @@ mut("c14-remove-unset", [("          unset MINISIGN_SECRET_KEY   # the python be
 mut("c17-expression-in-run", [('          echo "pipeline fault (exit 2) while building this version; see build.stderr"\n', '          echo "pipeline fault ${{ matrix.tag }}"\n', 1)], "c17 ")
 mut("c25-or-true-on-build", [("    if: github.event_name != 'push' && needs.plan.result == 'success' && needs.plan.outputs.has_build == 'true'\n", "    if: github.event_name != 'push' && needs.plan.result == 'success' && needs.plan.outputs.has_build == 'true' || true\n", 1)], "c25 ")
 mut("c25-or-true-on-plan", [(GATE, "    if: github.event_name != 'push' || true\n", "first")], "c25 ")
+
+mut("c14-python-before-unset", [("          unset MINISIGN_SECRET_KEY   # the python below parses untrusted build output: keep the key out of its environment\n", "          python3 -I tools/pipeline/handoff.py guard --dir build\n          unset MINISIGN_SECRET_KEY\n", 1)], "c14 (d2)")
 
 
 def apply(text, edits):
