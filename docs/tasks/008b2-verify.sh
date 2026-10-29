@@ -19,8 +19,8 @@ SCOPE_RE='\.github/workflows/pipeline\.yml|tools/pipeline/(sign_built|handoff|bu
 # Fixed commits for the own-change checks (never HEAD or the current main). BASE_SHA = registry main when 008b-1 was merged and merged
 # into this branch (dd7da2d); BASE_SHA..PIN_FINAL lists exactly this task's files.
 BASE_SHA="dd7da2d79fc278597762cce862b48cc48434f816"
-PIN_FINAL="__FINAL__"
-PIN_TIP="__TIP__"
+PIN_FINAL="fc712d9de456e3bc1903682c6787ce87cf19b1a8"
+PIN_TIP="fc712d9de456e3bc1903682c6787ce87cf19b1a8"
 WF=.github/workflows/pipeline.yml
 CONTRACT=contracts/pipeline-trigger.md
 
