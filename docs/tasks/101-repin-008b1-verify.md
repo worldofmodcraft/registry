@@ -1,6 +1,6 @@
 # Task 101: re-pin `008b1-verify.sh`'s own-change scope check to 008b-1's merged range (it is red on registry main)
 
-- **Mission:** SITE-V1 (verification integrity) — **Status:** spec-approved 2026-10-29 (manager, session 14; Ludwig's decision "A: fixed SHAs only", 2026-10-29)
+- **Mission:** SITE-V1 (verification integrity) — **Status:** done 2026-10-29 (manager, session 14; Ludwig's decision "A: fixed SHAs only", 2026-10-29)
 - **Agent / model:** qa-engineer (model per frontmatter) — **Budget:** small
 - **Branch / worktree:** `task/101-repin-008b1-verify` / `~/wt/registry-task-101`, from registry main `dd7da2d`
 
@@ -89,3 +89,7 @@ them). The reference implementation of exactly this change is task 089e for `008
 - 2026-10-29 qa-engineer: CORRECTION: the entry above was committed (unpushed `a924b83`) before its edit script had applied (a comment anchor wrapped across lines); this next commit is the one that actually
   applies the AC2.2 change (now searches from the fixed E_BASE) and the comment fixes. E_SCRIPT is the commit of that edit; the pins below are from it.
 - 2026-10-29 qa-engineer: re-pinned: E_FIX = E_FINAL = `fbd384c8ee0edc5da50038ab8f74d2c988333c81` (unchanged); OLD101 = `0c67d6eb7eae922fbc6b4d9304fda82feea771f4`; E_SCRIPT = `e66c26d73112d912680dae0aa08a191400765bfc`; E_TIP = `eb08d248d7604612090ce559e20e12bb9be843e0`. Nothing was run (machine held by the manager).
+- 2026-10-29 manager (session 14): manager fresh-clone re-runs green — at `e9aa831`: 101-verify default + `--mutate` ALL CHECKS PASSED, 008b1-verify SUMMARY failed=0;
+  at `a5d4000` (after the review's AC2.2 fix; mutation code untouched): 101-verify default + `--own-only` ALL CHECKS PASSED. Independent Opus review
+  PASS-WITH-AMENDMENTS (1 MED AC2.2 HEAD search -> fixed `$E_BASE`; 2 LOW comments) — all applied. The agent's own slip (log-only commit `a924b83` claiming an
+  edit not yet made) is corrected in the log. Status done; merged on the manager's authority (§7; registry `gate` required).
