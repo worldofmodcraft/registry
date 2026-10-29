@@ -63,7 +63,7 @@ FINAL008B1="2f179d08a9786ba94cb2f6c6fc2da4bf0ba5ffca"  # M^2
 E_BASE="dd7da2d79fc278597762cce862b48cc48434f816"     # registry main when 101 was cut (= M008B1)
 E_FIX="fbd384c8ee0edc5da50038ab8f74d2c988333c81"     # first commit touching 008b1-verify.sh
 E_FINAL="fbd384c8ee0edc5da50038ab8f74d2c988333c81"   # last commit touching 008b1-verify.sh
-E_TIP="unpinned"     # the pin commit; nothing is range-checked after it (see the task log)
+E_TIP="5fe5cfa12c36d6fc6dc4b3ea2e006b1a79f0c4eb"     # the pin commit; nothing is range-checked after it (see the task log)
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT

@@ -44,3 +44,6 @@ them). The reference implementation of exactly this change is task 089e for `008
   D no-main-ref -> bad-pin (no main ref exists in the design; "cannot compute the base must FAIL" is now: 7-char, `deadbee`, nonexistent full SHA, reversed pins all FAIL, plus a valid-pin control).
   `--mutate`: old `scope-fixed-base` replaced by `scope-right-side-head` (-> merge-from-main red) and `scope-unusable-pin-passes` (-> bad-pin red); all 24 `run_mut`
   and the c12 mutation untouched (byte-identical, asserted by 101-verify.sh AC11.6). Expected `ok mutation` count 24+2+1 = 27 (was 26).
+- 2026-10-29 qa-engineer: COMMITS (full SHAs). red-first 101-verify.sh `d9650ccd61646c075033165bce4ae630a0cea0ca`; fix (the only commit touching 008b1-verify.sh)
+  `fbd384c8ee0edc5da50038ab8f74d2c988333c81` = E_FIX = E_FINAL; pin commit (E_FIX/E_FINAL lines) `5fe5cfa12c36d6fc6dc4b3ea2e006b1a79f0c4eb` = E_TIP; E_BASE = M = `dd7da2d79fc278597762cce862b48cc48434f816`.
+  The next commit records E_TIP (one line) and this log entry. Phase 1 done; phase 2 follows (machine released by the manager).
