@@ -176,3 +176,144 @@ may reveal a status code) goes to `build.log`, and the clone is time- and size-b
 per test) and the structural checks; `docs/tasks/008a-verify.sh --mutate` breaks each guard in a
 scratch copy and requires the named check to turn red. All keys are throwaway, generated at test
 time in a temp directory (`wom008a-*`) and removed afterwards.
+
+## Write-back (task 008c)
+
+`tools/pipeline/write_back.py` turns a `build_version.py` `result.json` into the registry's
+`pending -> published` write-back (transition T1, ADR-0121; edge E8). It is pure: no network, no
+subprocess, no key material, no clock (the timestamp is the build's own `built_at`). It does not open,
+commit or merge anything; who may commit its output is task 008b plus the ownership carve-out.
+
+### What is computed
+
+- `write_back_values(result, source_archive)` returns exactly five keys: `source_archive` (the argument,
+  passed through), `source_sha256`, `signature` and `key_id` (from `result.artifact`) and `published_at`
+  (= `result.built_at`; it must match `entry.schema.json`'s `published_at` pattern, see the `bad-value` row below).
+- `source_archive_url(namespace, name, version)` returns
+  `https://archive.worldofmodcraft.com/<tag>/<tag>.tar.gz` with `tag` = `naming.release_tag(...)`. The
+  host is the single constant `ARCHIVE_HOST`, whose value comes from `contracts/artifact-naming.md`
+  ("The archived-source URL"). `+` is written literally. A version with build metadata still yields a
+  URL; holding such versions back is 008b's (092 decision Q10).
+- `apply_write_back(entry, result, source_archive)` returns a **new** entry in which the one version equal
+  to `result.version` has the five values added and `status` set to `published`. Nothing else changes;
+  `commit` and every other existing field are never taken from `result`. Inputs are never mutated.
+
+### What is refused
+
+Every refusal raises `WriteBackRefused` (a `PipelineError`: the pipeline is inconsistent, exit 2, never
+a PR rejection) with a `reason`:
+
+| reason | when |
+|---|---|
+| `id-mismatch` | `result.id` differs from the entry's `id` |
+| `version-absent` / `version-duplicate` | no version, or more than one, equals `result.version` |
+| `not-pending` | the version is `published`, `removed` or `rejected` |
+| `pending-shape` | the target `pending` version does not have exactly the four pending keys `version`, `commit`, `source_url`, `status` (`contracts/append-only.rules.md` key-set table; `entry.schema.json`'s `pending` branch): a stray key such as `reason`, or an already-present write-back key such as `source_archive`, is refused before anything is written |
+| `result-missing-field` | `result` lacks `artifact.source_sha256`, `artifact.signature`, `artifact.key_id` or `built_at` |
+| `key-set` | the computed values do not have exactly the five keys |
+| `bad-value` | a value fails its `entry.schema.json` pattern, or `signature` is empty. Patterns are matched as ECMA-262 does: full-match (a trailing newline fails) and ASCII-only digits (each unescaped `\d` in a schema pattern is translated to `[0-9]` when the pattern is loaded, so Arabic-Indic digits fail; `\s`/`\S` are left at Python's default, which is Unicode-aware like ECMA's, so U+00A0 and U+2028 fail `\S`; no global `re.ASCII` flag). `published_at` accepts what the schema pattern accepts: `YYYY-MM-DDThh:mm:ss`, an optional fraction (`.` and one or more digits), then `Z` or a `+hh:mm`/`-hh:mm` offset. The pattern checks shape only, not calendar validity (month 13 passes) |
+| `bad-id` / `bad-version` / `reserved-namespace` | `source_archive_url` input is not a valid id, a semver string, or a Windows reserved device name |
+| `entry-malformed` / `result-malformed` | the arguments are not objects of the expected shape |
+
+### Not verified
+
+- [unverified] Nothing here checks a hash against a tarball, nor that `source_archive` equals the derived
+  URL (092 decision Q2, a separate CI task). `source_archive` is checked for shape only. Hash and
+  signature verification before use is the E9 verifiers' job.
+
+Tests: `tests/pipeline/test_write_back.py`; verification: `docs/tasks/008c-verify.sh` (and
+`docs/tasks/008c-verify.sh --mutate`).
+
+## The planner (task 008b-1)
+
+`tools/pipeline/plan_pending.py` decides which versions the pipeline workflow builds. It is pure and
+offline: the registry state, the branch list, the archive's log list and the dispatch inputs are all passed
+in. It writes one **plan document** and nothing else; building, signing, releasing and opening PRs are other
+tasks (008b-2, 008b-3b). Contract text: `contracts/pipeline-trigger.md` (PT4, PT5, PT6, PT9, PT12);
+decisions: umbrella `008b-pipeline-workflow.md`, designs 2, 3 and 9.
+
+```
+python3 -I tools/pipeline/plan_pending.py --registry DIR --head-sha SHA --branches FILE --archive-logs FILE \
+    [--dry-run true|false] [--version <namespace>.<name>@<semver>] \
+    [--dry-run-source-url https://... --dry-run-commit <40 hex>] [--out FILE]
+```
+
+`--registry` is a checkout of `main` (it reads `mods/*/entry.json`); `--head-sha` is that checkout's SHA
+(40 lowercase hex), logged on stderr and copied into the document. `--branches` lists the repository's
+existing branches, `--archive-logs` the existing paths under `logs/` in `worldofmodcraft/archive`, one per
+line, bare names (`pipeline/mc.a-1.0.0`, `logs/mc.a/1.0.0+b.1.log`). Both are required: an absent file is
+an input error, never "nothing exists". The document goes to stdout (and to `--out` if given).
+
+### The plan document
+
+```json
+{
+  "head_sha": "<40 hex>",
+  "build":  [ {"version_id": "mc.a@1.1.0", "entry_path": "mods/mc.a/entry.json", "kind": "build", "reason": ""} ],
+  "refuse": [ {"version_id": "mc.a@2.0.0+b.1", "entry_path": "mods/mc.a/entry.json", "kind": "refuse",
+               "reason": "<the 092 text>", "log_exists": false} ],
+  "skip":   [ {"version_id": "mc.a@1.0.0", "entry_path": "mods/mc.a/entry.json", "kind": "skip",
+               "reason": "pipeline/mc.a-1.0.0"} ],
+  "fault":  [ {"version_id": null, "entry_path": "mods/bad.one/entry.json", "kind": "fault",
+               "reason": "mods/bad.one/entry.json fails entry.schema.json: ..."} ]
+}
+```
+
+Every `pending` version is on exactly one list; `published`, `removed` and `rejected` versions are on none.
+Entries are ordered by entry directory, then by position in the entry. Every entry has exactly the four
+fields `version_id`, `entry_path`, `kind`, `reason`; a `refuse` entry adds `log_exists` (boolean). `reason`
+is empty for `build`, the exact 092 text for `refuse`, the branch name for `skip`, and the error for
+`fault`. A `fault` is per entry file (`version_id` is `null`, except in a `version` dispatch, where it is the
+requested id). This document is internal to node N5 and adds no edge to the dependency graph.
+
+### Planner rules
+
+- **Exit codes.** Exit 0 with the document whenever the inputs are well-formed, even if the plan has `skip`,
+  `refuse` or `fault` entries. Exit 1 only for malformed or conflicting inputs or an unreadable state, and
+  then no document is written (stdout is empty, `--out` is not touched). A skip or fault is never reported
+  by a non-zero planner exit.
+- **Input snapshot (PT4).** The state is `mods/*/entry.json` at the logged `main` head; never the push's
+  `github.sha` or range. A `mods/` directory that does not exist is an empty registry (zero pending, exit 0).
+- **What is listed (PT5).** With no `version` (a push, or a dispatch with an empty `version`) every `pending`
+  version. With `version=<namespace>.<name>@<semver>` only that version, and only if it is `pending`;
+  a malformed id, an absent entry, or a version that is absent or not `pending` exits 1. In that mode only
+  that entry is read, so a fault in another entry does not matter.
+- **Schema fault (C15, PT9).** An entry that fails `contracts/entry.schema.json` (also: not JSON, duplicate
+  keys, `NaN`, a file nested too deeply to parse (reason `nested too deeply to parse`), an `id` that does not belong to its directory `mods/<namespace>.<name>/`, the same version
+  twice, a `mods/<dir>/` without `entry.json`) is one `fault` entry naming the file. Nothing is built for
+  any version of it and no T3 is opened. Other entries continue. Patterns are matched through
+  `write_back`'s helpers (full match, ASCII-only `\d`); task 094 will move the pipeline to
+  `tools/registry/schema.py`'s `ecma_pattern`, and the `\s` residual booked in task 008c applies here too.
+- **Branch skip (C13, PT6).** A `pending` version whose `pipeline/<namespace>.<name>-<version>` branch exists
+  is a `skip`, never built, and the skip applies before the `+` rule. It is not silent: see
+  `summarize_outcomes` below.
+- **`+` versions (092 Q10).** A `pending` version whose `version` contains `+` is a `refuse` with the reason
+  "versions with build metadata (+) are not yet published — pending proof that GitHub resolves them (task 010)".
+  A prerelease without `+` (`1.0.0-rc.1`) is built. `log_exists` is `true` iff
+  `logs/<namespace>.<name>/<version>.log` is in the `--archive-logs` list: if the refusal log was committed
+  and the T3 PR then failed, the next plan carries `log_exists: true` and 008b-3b re-opens only the T3 PR
+  (it neither recommits the log nor faults). Neither value is a fault.
+- **Dry-run inputs (PT12, Q-M option A).** `--dry-run` is `true`, `false` or empty. A dry run needs exactly
+  one source: a `version` (planned as above), or the pair `--dry-run-source-url` (`https://`, printable
+  ASCII) plus `--dry-run-commit` (40 lowercase hex). The pair is accepted only together, only with
+  `--dry-run true`, and only with `version` empty. Anything else exits 1. With the pair the plan is empty
+  (all four lists empty): the synthetic in-run entry is built by 008b-2's dry-run job, not read from `main`.
+
+### Ending the run: `summarize_outcomes(plan, outcomes)`
+
+A pure function in the same module, called by 008b-2's `summary` job. `outcomes` is a list of
+`{"version_id": ..., "exit_class": 0|1|2}`, one per built version. It returns `(green, message)`. The run
+is non-green if the plan has a `skip` entry, a `fault` entry, a built version whose outcome is exit class 2
+(a pipeline fault, PT5), or a `build` entry with no reported outcome; the message names every one of them.
+Exit class 1 (a 008a verdict, handled by its T3) and `refuse` entries alone leave the run green. A malformed
+outcome list (unknown exit class, duplicate or stray version id) raises `ValueError`.
+
+### Recovering a skipped version
+
+A `skip` means an earlier run's write-back PR is still open, or an earlier run died after pushing the branch
+(PT8). Nothing is built for it and the run ends non-green naming it. Recovery is manual: close its PR, delete
+its `pipeline/` branch, then dispatch the workflow (with `version=<namespace>.<name>@<semver>`, or with an
+empty `version` to plan every pending version).
+
+Tests: `tests/pipeline/test_plan_pending.py`; verification: `docs/tasks/008b1-verify.sh` (and
+`docs/tasks/008b1-verify.sh --mutate`).
