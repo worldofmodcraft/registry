@@ -165,3 +165,14 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   and 0 occurrences of HEAD / origin/main / merge-base. Development harness (sourced just that function, throwaway clone, seconds): all three PASS. Written-but-not-run as a script.
   092-verify.sh untouched (its post-TIP check is correct by design). Assertion intent unchanged; nothing weakened. The 039a red on the booked 008c scope finding is separate (008c-verify.sh is outside this file scope).
   Pins: PIN_RED, PIN_FIX, PIN_START unchanged; PIN_TIP re-pinned by the next commit.
+- 2026-10-31 qa-engineer (phase 2 on the merged head): merged `origin/main` (f30dfbd, task 089e) into the branch without conflict (merge commit ea2567e75d252737eacb1a2220eb3916b2d8c1d4; the umbrella file had no diff against main's), pushed; fresh
+  non-shallow clone at that head (`rev-parse --is-shallow-repository` false), `npm ci --prefix tools/dev` exit 0, `PYTHONDONTWRITEBYTECODE=1`, `ps` match count 0 before every run. Results, separate invocations:
+  `089d-verify.sh` exit 0, 68 PASS, `SUMMARY failed=0` (including the new later-commit checks: `PASS (f) with a later commit on top, PIN_START..PIN_TIP is still exactly the three own files`,
+  `PASS (f) positive control: the HEAD-relative form of the check WOULD be red on that clone (4 files)`, `PASS (f) the own-change code (scope_checks, extract) names pins and reads no HEAD, origin/main or merge-base`);
+  `--mutate` exit 0, 30 PASS, `failed=0`; `--own-only` exit 0, 23 PASS, `failed=0`; `092-verify.sh` exit 0, 188 PASS, `failed=0`, `NA post-TIP NOT-APPLICABLE (merged): ab31a88... is an ancestor of ea2567e...`;
+  `092-verify.sh --live-selftest` exit 0, 205 PASS, `failed=0`.
+  **Standalone `039a-verify.sh <clone>/tools/dev/node_modules` (started 2026-10-29T20:23:39Z): criterion (d)'s 039a run is BLOCKED, not red.** Output at the stop: 59 PASS, 0 FAIL; in the AC12 sweep these scripts
+  exited 0 on HEAD, in order: 006, 007a, 007b, 008a, 008b1, 008c, 032, 034 (last lines `PASS  008c-verify.sh exits 0 on HEAD`, `PASS  032-verify.sh exits 0 on HEAD`, `PASS  034-verify.sh exits 0 on HEAD`). It then
+  hung at the next script (039b) for about 20 hours: the known S4/Q7 deadlock (on main, 039a runs 039b without `--no-closed`, so 039b's own AC12 sweep waits for its parent 039a forever; fixed in task 089b's branch,
+  not yet merged). Stopped by the coordinator's instruction on 2026-10-31 with TaskStop on my own two background jobs (no kill/pkill); `ps` afterwards shows no verify process of mine. Raw output was in `/tmp/tmp.rukX60UIhi/039a.out` (temp dir, not committed).
+  **Status: in-progress, (d) blocked on 089b's merge (S4 fix); re-run the standalone 039a after 089b merges.** (a), (b), (c), (e), (f) and the 092 default/selftest runs are green on the merged head. Idle until re-dispatched.
