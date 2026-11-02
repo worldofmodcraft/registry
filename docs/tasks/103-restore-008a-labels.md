@@ -25,3 +25,4 @@ FAIL); if the pin detail is wanted in the output, print it as a separate line th
 ---
 # Task 103 log
 - 2026-11-02 manager (session 14): created after reproducing 062 red on main (fresh clone at `4eca251`); dispatched.
+- 2026-11-02 qa-engineer: 103-verify.sh committed red-first (FIX unrecorded: AC0 fails).
