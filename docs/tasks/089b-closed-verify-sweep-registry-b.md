@@ -1,6 +1,6 @@
 # Task 089b: registry closed scripts — part B (contract and R11 pins; findings 8-12, S4)
 
-- **Mission:** SITE-V1 (verification integrity) — **Status:** in-progress 2026-10-28 (cut from umbrella 089 at dispatch, session 13; umbrella spec-approved 2026-10-26, parts per Q5 ★ A)
+- **Mission:** SITE-V1 (verification integrity) — **Status:** review 2026-11-02 (was in-progress 2026-10-28) (cut from umbrella 089 at dispatch, session 13; umbrella spec-approved 2026-10-26, parts per Q5 ★ A)
 - **Agent / model:** qa-engineer (model per frontmatter) — **Budget:** medium (≤ 3 agent-sessions)
 - **Branch / worktree:** `task/089b-closed-verify-sweep-registry-b` / `~/wt/registry-task-089b`, from registry main `e2f7fe3`
 - **Umbrella (authoritative for findings, pins, criteria, forbidden list, Q1-Q6):** `docs/tasks/089-closed-verify-sweep-registry.md` (copied
@@ -192,3 +192,23 @@ Criterion 9 (quiet machine) is mandatory: one script at a time, `ps` logged befo
   Red-first cell, committed first (`7b31dd8e4d3364e08b16273acf7b067001119917`): section AC13 extracts the AC0 section (up to the `AC1 --` marker, ifs closed) of the pre-round script (`PIN_PRE=9ec482278f58eb94c0fe8e8a057f3fe752ea30ad`) and of the current script; runs them on plain HEAD (AC13.1 green control) and on HEAD plus ONE synthetic later commit that re-adds a class named AC9ProductionR11Unconfigured to test_ci_gate.py: the pre-round AC0 must FAIL on AC0.12 (AC13.2), the current must PASS (AC13.3). At the red commit the current script still read HEAD, so AC13.3 was expected red (not executed: write-only round; the manager's run confirms). AC13.4/13.5: the `mk_later` tolerance and its negative control.
   Fix commit: `de3ee3a48d4ee3399b6121c8dc828536aa4b03a2`. Umbrella copy synced byte-identical to `origin/task/089e-closed-verify-sweep-registry-e:docs/tasks/089-closed-verify-sweep-registry.md` in its own commit `bc96690fac946e72a60bb7bdb39fc97b97cd5fa7` (+4 lines). Pins re-set by the pin commit that follows this entry: FINAL = the fix commit, TIP = this log commit.
   Not demonstrated yet (needs a run, which this round forbids): 089b-verify.sh default and --mutate and --own-only all green after the re-pin; AC13.2 red / AC13.3 green. Side effect to know: the file-scope check AC11.5 allows the umbrella copy, so the sync commit is inside BASE..TIP.
+- 2026-11-02 qa-engineer (PHASE 2 final entry; I ran the steps on 2026-10-31, the machine was released to me; this entry only reads the finished outputs). Merge: `git merge --no-edit origin/main` (main at f30dfbd: 008b-1, 101, 089e) was clean, no conflict;
+  the umbrella file is identical to main's (empty diff). Merged head `1b7b46b7e956ee327d850f79374a56482dd3e565`, pushed. Fresh non-shallow clone `/tmp/w089b/p2/clone` at that head (`is-shallow-repository` false), `npm ci --prefix tools/dev`, PYTHONDONTWRITEBYTECODE=1,
+  one step at a time by the driver `/tmp/w089b/p2/driver.sh`; `ps` listing of `*-verify.sh` processes was empty before every step (`/tmp/w089b/p2/status.txt`):
+      == own-only      exit 0   10:52:47Z-10:52:49Z   (30 lines, 22 PASS, 0 FAIL)   ... == RESULT == ALL CHECKS PASSED
+      == default       exit 0   10:52:49Z-11:05:50Z   (85 lines, 65 PASS, 0 FAIL)   ... == RESULT == ALL CHECKS PASSED
+      == mutate        exit 0   11:05:50Z-11:08:38Z   (10 lines, 5 PASS, 0 FAIL)    ... == RESULT == ALL CHECKS PASSED
+      == 039a-full     exit 0   11:08:38Z-16:59:21Z   (86 lines, 76 PASS, 0 FAIL)   ... == RESULT == ALL CHECKS PASSED      ALL DONE 2026-10-31T16:59:21Z
+  AC13 (red-first for the fix round), default.out lines 75-82:
+      PASS  AC13.0 positive control: both AC0 extracts are non-empty and parse (206 / 211 lines)
+      PASS  AC13.1 control: the pre-fix-round AC0 on plain HEAD: exit 0
+      PASS  AC13.2 the pre-fix-round AC0 on HEAD + one later commit: exit 1, FAIL  AC0.12 the AC9 unit test is still in tests/registry/test_ci_gate.py, or its condition is not asserted in 039a-veri...
+      PASS  AC13.3 the current AC0 on HEAD + the same later commit: exit 0
+      PASS  AC13.4 mk_later on HEAD accepts a frame that already contains the later edit
+      PASS  AC13.5 positive control: an anchor in neither form is still refused      (the stderr line `edit.py: pattern found 0 times ... 'no such anchor text xyzzy'` just above it is that negative control's expected output)
+  Mutations (mutate.out): PASS AC4.m8 (065 AC3.5 widened to HEAD: red, only that check), AC4.m9 (075 AC4), AC4.m10 (039a r11-identity.json), AC4.m11 (moved AC9 assertion), AC4.m12 (039a class_check back to exact counts): 5/5, each exit 1 with only its own FAIL line.
+  039a-full.out (S4 / Q7, no deadlock): `PASS  full tests/registry suite: Ran 373 tests in 33.818s` (line 57), then line 66: `PASS  039b-verify.sh exits 0 on HEAD (--no-closed: its AC12 sweep is this loop)`; 039b ran once, as a child with `--no-closed`, and the whole 039a finished in 5 h 51 min.
+  Note: the literal text "AC12 NOT RUN" is not in 039a-full.out (0 hits): 039a captures each child's output and prints only PASS/FAIL, so 039b's own "AC12 NOT RUN" line is not visible there; the evidence of a single `--no-closed` run is line 66 plus the exit and the absence of a six-hour wait (no wait on a parent 039a).
+  Criteria: 1-5, 8, 11 were demonstrated by the harness (default/own-only/mutate runs above, and the 2026-10-28 log); **criterion 9 is now demonstrated on the main-merged head 1b7b46b**: the whole 039a (every closed script, one at a time, quiet machine, ps logged) is green on it (exit 0); the earlier L3 reds were a wrong-reason
+  fixture collision (Q10/(b)) and an unreproduced one-off in the 064 chain (not seen in this run); the fixture now accepts a frame that already holds the later edit (AC13.4/13.5). **Criterion 10**: done (finding 8 not reproduced, unfixed and fixed 065 both green on the 039b merge, L1). S5: `FAIL AC1.5` did not recur in this run.
+  Status -> review. Remaining for the manager: review and merge; booked Q10-Q12 were triaged by the manager (commit eaffbb9).
