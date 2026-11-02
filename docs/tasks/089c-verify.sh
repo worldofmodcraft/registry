@@ -494,15 +494,17 @@ else fail "AC4.m2 cannot build the later-branch merge"; fi
 # be ABSENT (rc 0, no AC5.3 verdict): i.e. the AC3.1-3.3 detector set reddens when the guard is removed, so it does bite on 069's own line.
 GUARD='fail "AC5.3 pinned commit $PIN064 (task 064'"'"'s FINAL) or its docs/tasks/034-verify.sh cannot be read in this clone"'
 NOFILE_COMMIT="$(G rev-list --max-parents=0 "$OLDREF" 2>/dev/null | head -n1)"
+m3i=0
 for bad in deadbee deadbeefdeadbeefdeadbeefdeadbeefdeadbeef "${NOFILE_COMMIT:-0}"; do
-    if mk_frame "$TMP/m3" "$TREE" deleted; then
-        rm -f "$TMP/m3.out"
-        cp "$NEWD/069.trunc.sh" "$TMP/m3/$TRUNC"
-        if edit_file "$TMP/m3/$TRUNC" "PIN064=\"$P064\"" "PIN064=\"$bad\"" && edit_file "$TMP/m3/$TRUNC" "$GUARD" ':'; then
-            rc=$(run_in "$TMP/m3" "$TMP/m3.out" bash "$TRUNC")
-            if [ "$rc" = 0 ] && ! grep -Eq '^FAIL  AC5\.3 ' "$TMP/m3.out" && ! grep -Eq '^PASS  AC5\.3 ' "$TMP/m3.out"; then
+    m3i=$((m3i + 1)); M3D="$TMP/m3-$m3i"   # one clone directory per pin: git clone refuses a non-empty directory
+    if mk_frame "$M3D" "$TREE" deleted; then
+        rm -f "$M3D.out"
+        cp "$NEWD/069.trunc.sh" "$M3D/$TRUNC"
+        if edit_file "$M3D/$TRUNC" "PIN064=\"$P064\"" "PIN064=\"$bad\"" && edit_file "$M3D/$TRUNC" "$GUARD" ':'; then
+            rc=$(run_in "$M3D" "$M3D.out" bash "$TRUNC")
+            if [ "$rc" = 0 ] && ! grep -Eq '^FAIL  AC5\.3 ' "$M3D.out" && ! grep -Eq '^PASS  AC5\.3 ' "$M3D.out"; then
                 pass "AC4.m3 guard removed, PIN064=${bad:0:12}: exit 0 and the expected 'FAIL AC5.3' is absent (the AC3 detector would redden)"
-            else fail "AC4.m3 guard removed, PIN064=${bad:0:12}: the expected FAIL AC5.3 is still produced or the run is not silent (exit $rc): $(first_fail "$TMP/m3.out")"; fi
+            else fail "AC4.m3 guard removed, PIN064=${bad:0:12}: the expected FAIL AC5.3 is still produced or the run is not silent (exit $rc): $(first_fail "$M3D.out")"; fi
         else fail "AC4.m3 the guard-removal mutation did not apply (pattern not found exactly once)"; fi
     else fail "AC4.m3 cannot build the frame"; fi
 done
