@@ -1,6 +1,6 @@
 # Task 089b: registry closed scripts — part B (contract and R11 pins; findings 8-12, S4)
 
-- **Mission:** SITE-V1 (verification integrity) — **Status:** review 2026-11-02 (was in-progress 2026-10-28) (cut from umbrella 089 at dispatch, session 13; umbrella spec-approved 2026-10-26, parts per Q5 ★ A)
+- **Mission:** SITE-V1 (verification integrity) — **Status:** done 2026-11-02 (was in-progress 2026-10-28) (cut from umbrella 089 at dispatch, session 13; umbrella spec-approved 2026-10-26, parts per Q5 ★ A)
 - **Agent / model:** qa-engineer (model per frontmatter) — **Budget:** medium (≤ 3 agent-sessions)
 - **Branch / worktree:** `task/089b-closed-verify-sweep-registry-b` / `~/wt/registry-task-089b`, from registry main `e2f7fe3`
 - **Umbrella (authoritative for findings, pins, criteria, forbidden list, Q1-Q6):** `docs/tasks/089-closed-verify-sweep-registry.md` (copied
@@ -262,3 +262,8 @@ Criterion 9 (quiet machine) is mandatory: one script at a time, `ps` logged befo
       PASS  AC15.4b net_files (the part's net delta against the merged main) lists the reverted file: main-change.txt mine.txt
   Red-first for this round: AC15.4 was committed at 4faa017 before net_files/AC11.5c existed (red by construction: `net_files` undefined). Not executed at that commit in this round (the machine was not mine then); the evidence is the construction plus the green control AC15.4a, which shows scope_files alone really does miss the file.
   State: all delta-review amendments applied (MEDIUM, LOW 2-4) or logged (INFO 5, 6; 092's own take-ours hole is booked for 089d/092). Status: review.
+- 2026-11-02 manager (session 14): manager fresh-clone re-run at `904a1d2`: default exit 0 ALL CHECKS PASSED, `--mutate` exit 0 ALL CHECKS PASSED (after `npm ci
+  --prefix tools/dev`). A first manager re-run without `npm ci` reported 9 + 1 FAILs — the manager's own setup slip (089b-verify.sh needs tools/dev/node_modules,
+  and fails loudly without it, as it should); not a defect. Whole 039a demonstrated at the main-merged head `1b7b46b` (raw output read by the manager: exit 0, 76 PASS,
+  039b once with --no-closed); 065/075/039a sources unchanged since. Reviews: static PWA (HIGH fixtures-on-HEAD) -> fixed; delta PWA (MED take-ours) -> fixed.
+  Booked: LOW 3 (065:73, 075:44 is-ancestor HEAD); 092's post-TIP take-ours hole (for 089d/092). Status done; merged on the manager's authority (§7).
