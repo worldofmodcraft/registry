@@ -26,3 +26,13 @@ FAIL); if the pin detail is wanted in the output, print it as a separate line th
 # Task 103 log
 - 2026-11-02 manager (session 14): created after reproducing 062 red on main (fresh clone at `4eca251`); dispatched.
 - 2026-11-02 qa-engineer: 103-verify.sh committed red-first (FIX unrecorded: AC0 fails).
+- 2026-11-03 qa-engineer: executed. Commits: 103-verify.sh red-first (it exits 1: AC0, FIX unrecorded) -> 008a fix `67df935ec7754c48b3ede6ec522305404e4e7cfb`
+  (both label strings restored exactly; pinned-blob read and FAIL-on-unreadable-pin kept; the pin is shown on a separate non-check `echo` line without ok/FAIL prefix)
+  -> FIX pinned in 103-verify.sh. Fresh non-shallow clone of github.com/worldofmodcraft/registry, `npm ci --prefix tools/dev`, PYTHONDONTWRITEBYTECODE=1,
+  absolute node_modules path, `ps` logged (no other verify/pytest/npm process) before each run. 062 run WHOLE in both cases (AC6L is not separated out).
+  - 062-verify.sh at 4eca251: exit 1, only `FAIL AC6L.008a a check id of 008a-verify.sh that existed at 82fa564 is gone at HEAD` (1 CHECK FAILED).
+  - 008a-verify.sh at head: exit 0. 062-verify.sh at head: exit 0, `PASS AC6L.008a`. 103-verify.sh at head: exit 0, 30 ok, `SUMMARY failed=0`.
+  - Own defect: the first 103-verify.sh run at head exited 1 on AC4.4 (my filter rejected a pure comment line of the fix); a test defect, not a production one;
+    filter widened to comment lines in baab0e9, rerun exit 0. 103's own `ps` listing shows only 103's own process (self-match), the independent `ps` before each run showed none.
+  - 103-verify.sh checks: labels byte-identical to 82fa564 (control on 82fa564 and on 4eca251), pin read from blob (emptying worktree README leaves it green,
+    unreadable FINAL reddens exactly that check), scope, 062 whole at both SHAs.
