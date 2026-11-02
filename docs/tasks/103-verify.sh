@@ -22,7 +22,7 @@ NM="${WOM_NODE_MODULES:-$ROOT/tools/dev/node_modules}"
 
 BAD=4eca2511aeb19871b36e65e6bf417cb0b347f32e    # registry main after 089a1's merge: 062 is red here
 ORIG=82fa56416cc46611318e2eeaeaa6f0d833e16346   # the commit 062 guards (its FINAL062); the original label strings
-FIX=""                                           # task 103's 008a fix commit (full SHA; recorded after the fix commit exists)
+FIX="67df935ec7754c48b3ede6ec522305404e4e7cfb"                                           # task 103's 008a fix commit (full SHA; recorded after the fix commit exists)
 
 FAILS=0
 pass() { echo "ok    $*"; }
