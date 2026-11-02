@@ -65,8 +65,8 @@ OLDREF="e2f7fe383d7b2231e1d37a73e474bca7ed56af46"
 PIN_BASE="e2f7fe383d7b2231e1d37a73e474bca7ed56af46"   # registry main when 089b was cut
 PIN_RED="fcf2ac81ae38e5b53dbeaac425a199050fe52313"      # 089b-verify.sh + task file only
 PIN_FIX="0f7f5b0bb9a54d6afcc519974dd4c1fe1dd1cc5e"      # 065-verify.sh, 075-verify.sh, 039a-verify.sh, test_ci_gate.py
-PIN_FINAL="84518e5d4349848a9024081423c2a9a339311394"  # last commit touching a source file of the part
-PIN_TIP="cc99e5d24d9bcfbab12d30947027cabae4ce8343"      # last commit of the branch before the pin commit (log/task-file only after FINAL)
+PIN_FINAL="cbc7de9cd0944d11e934077156761e1fa76a1b56"  # last commit touching a source file of the part
+PIN_TIP="de592285b25eee2b70efff8396cdd4848470e428"      # last commit of the branch before the pin commit (log/task-file only after FINAL)
 # The frame of every later-branch fixture below: a FIXED commit (the 089b tip), never HEAD. Anchors in the fixtures are text of this frame; a later commit to main (R11 configured, 008b rewording ownership.md) cannot remove them.
 FRAMEREV="$PIN_TIP"
 # The registry main commit this branch merged (task 089b merged origin/main at f30dfbd). A merge on the first-parent chain BASE..TIP whose second parent is an
