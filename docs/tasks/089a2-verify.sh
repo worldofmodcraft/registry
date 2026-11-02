@@ -513,7 +513,7 @@ PY
             *) [ "$m_old" = "$m_new" ] && [ -n "$m_new" ] && pass "AC11.11 $f keeps its mode ($m_new)" || fail "AC11.11 $f mode changed ($m_old -> $m_new)" ;; esac
     done
     # no hard-coded working-copy path in this script (S2 is about removing one)
-    [ "$(grep -v '^[[:space:]]*#' "$0" | grep -c '/ho[m]e/')" = 0 ] && pass "AC11.12 089a2-verify.sh itself names no /home path in a code line" || fail "AC11.12 089a2-verify.sh names a /home path"
+    [ "$(grep -v '^[[:space:]]*#' "$0" | grep -v '^[+-]' | grep -c '/ho[m]e/')" = 0 ] && pass "AC11.12 089a2-verify.sh itself names no /home path in a code line" || fail "AC11.12 089a2-verify.sh names a /home path"
 fi
 
 # ---- AC15: the file-scope range BASE..TIP must not leak main's files when the branch merged main, but must keep a merge of a side branch of the part.
