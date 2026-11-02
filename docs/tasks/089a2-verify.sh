@@ -209,8 +209,8 @@ RD_NEW='task 0xx'
 README=docs/contracts/README.md
 
 if [ -n "$LATERDIR" ]; then
-    mk_later "$LATERDIR" "$HEADREV" "$README" "$RD_RE" "$RD_NEW" || { echo "cannot build the later-branch clone" >&2; exit 99; }
-    echo "$LATERDIR  (HEAD $HEADREV + a --no-ff merge of a synthetic later branch that rewrites every 'task 057' in $README)"
+    mk_later "$LATERDIR" "$FRAMEREV" "$README" "$RD_RE" "$RD_NEW" || { echo "cannot build the later-branch clone" >&2; exit 99; }
+    echo "$LATERDIR  (fixed frame $FRAMEREV + a --no-ff merge of a synthetic later branch that rewrites every 'task 057' in $README)"
     exit 0
 fi
 
@@ -298,7 +298,7 @@ if mk_frame "$TMP/c6" "$OLDREF"; then
     place "$TMP/c6" "$OLDD/057.trunc.sh" "$TRUNC057"; rc=$(run_in "$TMP/c6" "$TMP/c6.out" bash "$TRUNC057")
     expect "AC1.6b control: the OLD 057-verify.sh (truncated) on plain OLD (the later branch is the cause; A1 depends on the machine, so only T1 is judged)" has "$rc" "$TMP/c6.out" '^PASS  T1 ' '!^FAIL  T1 ' '!^FAIL  required/'
 else fail "AC1.6.1 cannot clone OLD"; fi
-if ! mk_later "$TMP/n6" "$HEADREV" "$README" "$RD_RE" "$RD_NEW"; then fail "AC1.6.2 cannot build the later-branch merge on HEAD"; else
+if ! mk_later "$TMP/n6" "$FRAMEREV" "$README" "$RD_RE" "$RD_NEW"; then fail "AC1.6.2 cannot build the later-branch merge on the fixed frame"; else
     place "$TMP/n6" "$NEWD/057.trunc.sh" "$TRUNC057"; rc=$(run_in "$TMP/n6" "$TMP/n6.out" bash "$TRUNC057")
     expect "AC1.6c the NEW 057-verify.sh (truncated) on HEAD + the same later README edit" green "$rc" "$TMP/n6.out" '^PASS  T1 ' '^PASS  T2 ' '!^FAIL'
     # the later branch really removed the sentence from the README the OLD check would read
@@ -311,7 +311,7 @@ if mk_frame "$TMP/o2" "$OLDREF"; then
     place "$TMP/o2" "$OLDD/057.trunc.sh" "$TRUNC057"; rc=$(PLATFORM_REPO="$NOPLAT" run_in "$TMP/o2" "$TMP/o2.out" bash "$TRUNC057")
     expect "AC1.2a the OLD 057-verify.sh on a machine whose platform checkout is absent (PLATFORM_REPO=nonexistent)" red "$rc" "$TMP/o2.out" '^FAIL  A1 ADR-0121 not found or not Accepted'
 else fail "AC1.2.0 cannot clone OLD"; fi
-if mk_frame "$TMP/n2" "$HEADREV"; then
+if mk_frame "$TMP/n2" "$FRAMEREV"; then
     place "$TMP/n2" "$NEWD/057.trunc.sh" "$TRUNC057"; rc=$(PLATFORM_REPO="$NOPLAT" run_in "$TMP/n2" "$TMP/n2.out" bash "$TRUNC057")
     expect "AC1.2b the NEW 057-verify.sh with the same absent platform checkout (the variable has no effect)" green "$rc" "$TMP/n2.out" '^PASS  A1 ADR-0121 \(fixture blob' '!^FAIL'
 else fail "AC1.2.1 cannot clone HEAD"; fi
@@ -336,7 +336,7 @@ evalna() {   # evalna SCRIPTBLOBFILE CLONEDIR : print "na nt" as that script's A
 }
 G show "$PIN_PREV:docs/tasks/089a2-verify.sh" > "$TMP/prev.sh" 2>/dev/null || fail "AC1.H.0 cannot read the previous script at $PIN_PREV"
 G show "$PIN_FINAL:docs/tasks/089a2-verify.sh" > "$TMP/cur.sh" 2>/dev/null || fail "AC1.H.0 cannot read the script at FINAL $PIN_FINAL"
-if mk_frame "$TMP/hc" "$HEADREV" && mk_frame "$TMP/hx" "$HEADREV"; then
+if mk_frame "$TMP/hc" "$FRAMEREV" && mk_frame "$TMP/hx" "$FRAMEREV"; then
     mkdir -p "$TMP/hx/docs/decisions" && printf '# a later ADR\n' > "$TMP/hx/docs/decisions/0001-later.md" \
         && git -C "$TMP/hx" add docs/decisions/0001-later.md && git -C "$TMP/hx" "${GITID[@]}" commit -q -m "a later commit on top of the branch head" || fail "AC1.H.1 cannot build the later commit"
     set -- $(evalna "$TMP/prev.sh" "$TMP/hc"); pna=$1; pnt=$2
@@ -377,7 +377,7 @@ cross062 "$NEWD/062.sh" "$NEWD/057.sh"; rcx=$?
 printf 'x BASE_COMMIT="a50daac" y\n' > "$TMP/pinctl.txt"
 grep -q 'BASE_COMMIT="a50daac"' "$TMP/pinctl.txt" && pass "AC1.Xd positive control: the short-pin grep matches a sample line" || fail "AC1.Xd the short-pin grep cannot match"
 short=0
-for f in $(G ls-tree --name-only "$PIN_FINAL" docs/tasks/ | grep -E 'docs/tasks/[^/]*-verify\.sh$'); do
+for f in $(G ls-tree --name-only "$PIN_FINAL" docs/tasks/ | grep -E 'docs/tasks/[^/]*-verify\.sh$' | grep -vx 'docs/tasks/089a2-verify.sh'); do
     n=$(G show "$PIN_FINAL:$f" | grep -cE '(BASE|FINAL)_COMMIT="(a50daac|3ab8f43)"'); short=$((short + n))
 done
 [ "$short" = 0 ] && pass "AC1.Xe no closed verify script at FINAL still names 057's short pins as a literal (0 hits over every docs/tasks/*-verify.sh)" || fail "AC1.Xe $short script line(s) at FINAL still name 057's short pins"
@@ -385,14 +385,14 @@ fi   # OWN = 0
 
 # ==================================================================================================
 if [ "$OWN" = 0 ]; then
-section "AC5 -- item-12 control: the NEW 057-verify.sh (truncated) on plain HEAD exits 0 (the unmerged state); on the merge it did so in AC1.6c"
+section "AC5 -- LIVE run on HEAD (the only HEAD read besides its definition): the NEW 057-verify.sh (truncated) on plain HEAD exits 0; the item-12 control on the later-branch merge is AC1.6c, on the fixed frame"
 if mk_frame "$TMP/h" "$HEADREV"; then
     place "$TMP/h" "$NEWD/057.trunc.sh" "$TRUNC057"; rc=$(run_in "$TMP/h" "$TMP/h057.out" bash "$TRUNC057")
     expect "AC5.1 NEW 057-verify.sh (truncated) on HEAD" green "$rc" "$TMP/h057.out" '^PASS  A1 ' '^PASS  T1 ' '^PASS  T2 '
 else fail "AC5.0 cannot clone HEAD"; fi
 
 section "AC3 -- an unreachable pin (deadbee) is a FAIL naming the check; nothing is skipped"
-if mk_frame "$TMP/d" "$HEADREV"; then
+if mk_frame "$TMP/d" "$FRAMEREV"; then
     p057=$(pin_of "$NEWD/057.sh" FINAL_COMMIT)
     cp "$NEWD/057.trunc.sh" "$TMP/d/$TRUNC057" && edit_file "$TMP/d/$TRUNC057" "FINAL_COMMIT=\"$p057\"" 'FINAL_COMMIT="deadbee"' && rc=$(run_in "$TMP/d" "$TMP/d057.out" bash "$TRUNC057")
     expect "AC3.1 057 with FINAL_COMMIT=deadbee" red "${rc:-0}" "$TMP/d057.out" '^FAIL  T1 cannot read docs/contracts/README.md at pinned FINAL_COMMIT deadbee' '^FAIL  P0 pinned commit deadbee' '^PASS  A1 '
@@ -552,7 +552,7 @@ else
 section "AC4 mutations (each fixed check widened back / broken in a temp copy, on a later-branch merge on HEAD: red, and only that check)"
 mutate_057() {   # mutate_057 LABEL OLD NEW REQUIRED_FAIL_REGEX ALLOWED_FAIL_REGEX
     local label="$1" old="$2" new="$3" req="$4" allow="$5" d="$TMP/m-$RANDOM" rc nreq nbad
-    mk_later "$d" "$HEADREV" "$README" "$RD_RE" "$RD_NEW" || { fail "$label cannot build the later-branch frame"; return; }
+    mk_later "$d" "$FRAMEREV" "$README" "$RD_RE" "$RD_NEW" || { fail "$label cannot build the later-branch frame"; return; }
     cp "$NEWD/057.trunc.sh" "$d/$TRUNC057"
     edit_file "$d/$TRUNC057" "$old" "$new" || { fail "$label: the mutation did not apply (pattern not found exactly once)"; return; }
     rc=$(run_in "$d" "$TMP/mut.out" bash "$TRUNC057")
