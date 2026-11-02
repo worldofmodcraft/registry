@@ -80,6 +80,13 @@ echo "== task 089c verify: HEAD ${REALHEAD:0:7}, fixtures from PIN_FINAL ${TREE:
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
 
+# The registry main commit this branch merged (phase 2 merged origin/main = 903b546 into the branch at 5a31f6c). A merge on the first-parent chain
+# BASE..TIP whose second parent is an ancestor of this commit is "a merge from main": it contributes only the files it changes itself
+# (diff-tree --cc), not main's files (the task 089b / 089d rule). Full SHA, no override.
+PIN_MAINMERGED="903b546151ddef3e618b3478f8b3db6b99dcd85e"
+# The quiet_wait that hung in phase 2 (it counted its own subshell as another script): the red of the quiet_wait fix, read as a blob (AC13).
+PIN_QW_OLD="92f6700f390672b79a5d04d8a3907ce0417d79d0"
+
 # ---------------------------------------------------------------------------------------------------------------------
 # helpers
 edit_py="$TMP/edit.py"
@@ -119,9 +126,14 @@ quiet_wait() {
             [ -z "$pp" ] && break
             anc="$anc$pp "; p=$pp
         done
+        # transitive: skip this script, its ancestors, and every process whose ancestor chain reaches this script (the subshells of $(...) and of
+        # rc=$(run_in ...) are descendants, not only direct children: the earlier direct-child test counted them as "another" script forever)
         others=$(ps -eo pid=,ppid=,args= 2>/dev/null | awk -v anc="$anc" -v me="$$" '
-            { if (index(anc, " " $1 " ") || $2 == me) next
-              if ($0 ~ /[0-9a-z]+-verify\.sh/) print $0 }')
+            { pid=$1; pp[pid]=$2; line[pid]=$0; ord[++n]=pid }
+            END { for (i = 1; i <= n; i++) { pid = ord[i]; skip = 0
+                    if (index(anc, " " pid " ")) skip = 1
+                    for (q = pid; !skip && q != "" && q > 1; q = pp[q]) if (q == me) skip = 1
+                    if (!skip && line[pid] ~ /[0-9a-z]+-verify\.sh/ && line[pid] !~ /awk -v anc=/) print line[pid] } }')
         n=$(printf '%s' "$others" | grep -c .)
         if [ "$n" = 0 ]; then
             printf 'ps    %s quiet: no other *-verify.sh process running (waited %ss)\n' "$(date +%H:%M:%S)" "$waited" | tee -a "$TMP/ps.log" >&2
@@ -196,6 +208,23 @@ run_in() {
     ( cd "$d" && PYTHONDONTWRITEBYTECODE=1 env -u WOM_NODE_MODULES "$@" ) > "$o" 2>&1
     echo $?
 }
+# scope_files DIR BASE TIP MAINSHA : the files the part's own commits touch, on FIXED SHAs only (089b's function). Walks the first-parent chain BASE..TIP. A
+# non-merge commit contributes its files; a merge contributes the files of diff-tree --cc, plus, when its second parent is NOT an ancestor of MAINSHA (a side
+# branch of the part), every file that branch changed (C^1...C^2). An octopus merge prints OCTOPUS. Never HEAD, never origin/main. Misses a take-ours
+# resolution: net_files (AC11.5c) covers it.
+scope_files() {
+    local d="$1" b="$2" t="$3" m="$4" c np
+    for c in $(git -C "$d" rev-list --first-parent "$b..$t"); do
+        np=$(( $(git -C "$d" rev-list --parents -n1 "$c" | wc -w) - 1 ))
+        if [ "$np" -gt 2 ]; then echo "OCTOPUS $c"
+        elif [ "$np" = 2 ]; then
+            git -C "$d" diff-tree --cc --no-commit-id --name-only --no-renames -r "$c"
+            git -C "$d" merge-base --is-ancestor "$c^2" "$m" 2>/dev/null || git -C "$d" diff --name-only --no-renames "$c^1...$c^2"
+        else git -C "$d" diff-tree --root --no-commit-id --name-only --no-renames -r "$c"; fi
+    done | sort -u
+}
+# net_files DIR MAINSHA TIP : the part's NET delta against the main it merged (fixed SHAs); also sees a take-ours merge.
+net_files() { git -C "$1" diff --name-only --no-renames "$2" "$3"; }
 place() { cp "$2" "$1/$3"; }   # place DIR SRCFILE DESTRELPATH : an (untracked) copy of a script in the clone
 
 # the later branch: a legitimate later edit of the very file whose blob AC5.3 judges (034-verify.sh), item 12
@@ -298,6 +327,58 @@ if mk_frame "$TMP/d" "$TREE" deleted; then
     [ "$hits" = 0 ] && pass "AC3.5 'skip' / 'not evaluated' occur 0 times in the output of every NEW run (branch deleted, present, later merge, four bad pins)" || fail "AC3.5 $hits skip/not-evaluated line(s) in the NEW run outputs"
 else fail "AC3.0 cannot build the frame"; fi
 
+section "AC13 -- quiet_wait does not count its own subshells (the hang of phase 2: red first, then the fix)"
+# the function text is read from fixed blobs: OLD = PIN_QW_OLD (hung), NEW = PIN_FINAL (the content commit of this round)
+qw_text() { G show "$1:docs/tasks/089c-verify.sh" 2>/dev/null | sed -n '/^quiet_wait() {$/,/^}$/p'; }
+qw_cell() {   # qw_cell BLOBREV FOREIGN(0|1) : exit 0 = quiet (returned), 7 = it would have waited (sleep was reached). Fake ps: this script, a subshell R, a nested subshell S.
+    local rev="$1" foreign="$2" f="$TMP/qw-$1-$2.sh"
+    { echo 'TMP="'"$TMP"'"'; qw_text "$rev"
+      cat <<'EOS'
+sleep() { exit 7; }
+ps() { case "$*" in
+    *"-o ppid="*) echo 1 ;;
+    *) printf '%s\n' "$$ 1 bash docs/tasks/089c-verify.sh" "90001 $$ bash docs/tasks/089c-verify.sh" "90002 90001 bash docs/tasks/089c-verify.sh" "90003 1 sleep 5"
+       [ "$FOREIGN" = 1 ] && printf '%s\n' "90004 1 bash docs/tasks/062-verify.sh" ;; esac; }
+quiet_wait; exit $?
+EOS
+    } > "$f"
+    FOREIGN="$foreign" bash "$f" >/dev/null 2>&1; echo $?
+}
+if [ -n "$(qw_text "$PIN_QW_OLD")" ] && [ -n "$(qw_text "$PIN_FINAL")" ]; then
+    r=$(qw_cell "$PIN_QW_OLD" 0); [ "$r" = 7 ] && pass "AC13.a red first: the OLD quiet_wait (blob ${PIN_QW_OLD:0:7}) counts a nested subshell of itself as another script and would wait (exit 7)" || fail "AC13.a the OLD quiet_wait did not show the self-count (exit $r)"
+    r=$(qw_cell "$PIN_FINAL" 0); [ "$r" = 0 ] && pass "AC13.b the NEW quiet_wait (blob ${PIN_FINAL:0:7}) ignores its own subshells and ancestors: quiet (exit 0)" || fail "AC13.b the NEW quiet_wait did not return quiet (exit $r)"
+    r=$(qw_cell "$PIN_FINAL" 1); [ "$r" = 7 ] && pass "AC13.c positive control: the NEW quiet_wait still waits for a foreign 062-verify.sh process (exit 7)" || fail "AC13.c the NEW quiet_wait ignored a foreign verify process (exit $r)"
+else fail "AC13.0 cannot read quiet_wait from the pinned blobs"; fi
+
+section "AC15 -- scope_files: a merge from main contributes only its own files; a merge of the part's own side branch contributes its files"
+SF="$TMP/sf"
+sfw() { printf '%s\n' "$2" > "$SF/$1" && git -C "$SF" add -A && git -C "$SF" "${GITID[@]}" commit -q -m "add $1"; }
+if mkdir "$SF" && git -C "$SF" init -q && git -C "$SF" checkout -q -b main 2>/dev/null && sfw base.txt b && SFB=$(git -C "$SF" rev-parse HEAD) \
+    && git -C "$SF" checkout -q -b part && sfw mine1.txt m \
+    && git -C "$SF" checkout -q main && sfw main-only.txt x && SFM=$(git -C "$SF" rev-parse HEAD) \
+    && git -C "$SF" checkout -q part && git -C "$SF" "${GITID[@]}" merge --no-ff -q -m "merge main into the part" main >/dev/null 2>&1 \
+    && git -C "$SF" checkout -q -b side "$SFB" && sfw side-only.txt s \
+    && git -C "$SF" checkout -q part && git -C "$SF" "${GITID[@]}" merge --no-ff -q -m "merge a side branch of the part" side >/dev/null 2>&1 \
+    && sfw mine2.txt m && SFT=$(git -C "$SF" rev-parse HEAD); then
+    got="$(scope_files "$SF" "$SFB" "$SFT" "$SFM" | tr '\n' ' ')"
+    [ "$got" = "mine1.txt mine2.txt side-only.txt " ] && pass "AC15.1 scope_files lists the part's own files and the side branch's, and NOT main's file: $got" || fail "AC15.1 scope_files returned '$got' (want 'mine1.txt mine2.txt side-only.txt ')"
+    old="$(git -C "$SF" diff --name-only "$SFB" "$SFT" | tr '\n' ' ')"
+    case "$old" in *main-only.txt*) pass "AC15.2 control: the plain 'git diff BASE TIP' does list main's file, so the leak is real ($old)";; *) fail "AC15.2 control: the plain range did not leak main's file ($old): the fixture proves nothing";; esac
+    got2="$(scope_files "$SF" "$SFB" "$SFT" "$SFB" | tr '\n' ' ')"
+    case "$got2" in *main-only.txt*) pass "AC15.3 control: with a main pin that does not contain the merged main commit the merge is not trusted and main's file is listed (a stale pin is red)";; *) fail "AC15.3 control: a main merge not covered by the pin was silently trusted ($got2)";; esac
+else fail "AC15.0 cannot build the synthetic repository"; fi
+SF2="$TMP/sf2"
+if mkdir "$SF2" && git -C "$SF2" init -q && git -C "$SF2" checkout -q -b main 2>/dev/null \
+    && printf 'one\n' > "$SF2/main-change.txt" && printf 'b\n' > "$SF2/base.txt" && git -C "$SF2" add -A && git -C "$SF2" "${GITID[@]}" commit -q -m base && SB2=$(git -C "$SF2" rev-parse HEAD) \
+    && git -C "$SF2" checkout -q -b part && printf 'm\n' > "$SF2/mine.txt" && git -C "$SF2" add -A && git -C "$SF2" "${GITID[@]}" commit -q -m "part commit" \
+    && git -C "$SF2" checkout -q main && printf 'two\n' > "$SF2/main-change.txt" && git -C "$SF2" "${GITID[@]}" commit -q -am "main changes a file" && SM2=$(git -C "$SF2" rev-parse HEAD) \
+    && git -C "$SF2" checkout -q part && git -C "$SF2" "${GITID[@]}" merge -s ours --no-ff -q -m "merge main, take ours" main >/dev/null 2>&1 && ST2=$(git -C "$SF2" rev-parse HEAD); then
+    got4="$(scope_files "$SF2" "$SB2" "$ST2" "$SM2" | tr '\n' ' ')"
+    case "$got4" in *main-change.txt*) fail "AC15.4a control: scope_files listed the reverted main file ($got4): the fixture does not show the hole";; *) pass "AC15.4a control: scope_files alone misses the file a take-ours merge reverts ($got4)";; esac
+    net4="$(net_files "$SF2" "$SM2" "$ST2" | tr '\n' ' ')"
+    case "$net4" in *main-change.txt*) pass "AC15.4b net_files (the part's net delta against the merged main) lists the reverted file: $net4";; *) fail "AC15.4b net_files does not list the reverted main file ($net4)";; esac
+else fail "AC15.4 cannot build the take-ours fixture"; fi
+
 section "AC12 -- item 12 for 089c itself: a later commit on top of the branch must not redden the own-change checks"
 OLD089C="ac6a823e6cf32fa243bf63c77fb84a99b9daad3d"   # the branch head before the fixed-SHAs round: its AC11.9 read HEAD (git diff PIN_TIP HEAD)
 EXTRA_FILE=docs/tasks/zz-later-task.txt
@@ -358,9 +439,17 @@ else
     [ "$red_files" = "docs/tasks/089c-verify.sh " ] && pass "AC11.3 the red commit touches only 089c-verify.sh and the task files" || fail "AC11.3 the red commit touches: $red_files"
     fix_files="$(G diff --name-only "$PIN_RED" "$PIN_FIX" 2>/dev/null | grep -vx -e docs/tasks/089c-closed-verify-sweep-registry-c.md | sort | tr '\n' ' ')"
     [ "$fix_files" = "docs/tasks/069-verify.sh " ] && pass "AC11.4 the fix commit touches only 069-verify.sh (and the task file)" || fail "AC11.4 the fix commit touches: $fix_files"
-    if ! scope_files="$(G diff --name-only "$PIN_BASE" "$PIN_TIP" 2>&1)"; then fail "AC11.5 cannot compute $PIN_BASE..$PIN_TIP"; else
-        extra="$(printf '%s\n' "$scope_files" | grep -vxE 'docs/tasks/069-verify\.sh|docs/tasks/089c-verify\.sh|docs/tasks/089c-closed-verify-sweep-registry-c\.md|docs/tasks/089-closed-verify-sweep-registry\.md' | tr '\n' ' ')"
-        [ -n "$scope_files" ] && [ -z "$extra" ] && pass "AC11.5 BASE..TIP stays inside the declared file scope (069-verify.sh, 089c-verify.sh, the task files)" || fail "AC11.5 out-of-scope files in BASE..TIP (or the range is empty): $extra"
+    lastmerge="$(G rev-list --first-parent --merges "$PIN_BASE..$PIN_TIP" 2>/dev/null | head -n1)"
+    if [ -n "$lastmerge" ] && [ "$(G rev-parse "$lastmerge^2" 2>/dev/null)" = "$PIN_MAINMERGED" ] && ! G rev-list --first-parent "$PIN_BASE..$PIN_TIP" | grep -qx "$PIN_MAINMERGED"; then
+        pass "AC11.1c PIN_MAINMERGED is the second parent of the last merge on the first-parent chain (${lastmerge:0:7}) and is not itself on that chain"
+    else fail "AC11.1c PIN_MAINMERGED is not the main side of the last merge on the first-parent chain"; fi
+    G cat-file -e "$PIN_MAINMERGED^{commit}" 2>/dev/null && G merge-base --is-ancestor "$PIN_MAINMERGED" "$PIN_TIP" && pass "AC11.1b PIN_MAINMERGED $PIN_MAINMERGED exists and is an ancestor of TIP" || fail "AC11.1b PIN_MAINMERGED is not a commit in TIP's history"
+    SCOPE_RE='docs/tasks/069-verify\.sh|docs/tasks/089c-verify\.sh|docs/tasks/089c-closed-verify-sweep-registry-c\.md|docs/tasks/089-closed-verify-sweep-registry\.md'
+    if ! scope_list="$(scope_files "$ROOT" "$PIN_BASE" "$PIN_TIP" "$PIN_MAINMERGED" 2>&1)" || printf '%s\n' "$scope_list" | grep -q '^OCTOPUS'; then fail "AC11.5 cannot compute the first-parent file list of $PIN_BASE..$PIN_TIP (or an octopus merge): $scope_list"; else
+        extra="$(printf '%s\n' "$scope_list" | grep -vxE "$SCOPE_RE" | tr '\n' ' ')"
+        net_list="$(net_files "$ROOT" "$PIN_MAINMERGED" "$PIN_TIP" 2>&1)"; net_extra="$(printf '%s\n' "$net_list" | grep -vxE "$SCOPE_RE" | tr '\n' ' ')"
+        [ -n "$net_list" ] && [ -z "$net_extra" ] && pass "AC11.5c the net delta PIN_MAINMERGED..TIP (fixed SHAs) stays inside the declared file scope, so a take-ours merge cannot hide a reverted main file" || fail "AC11.5c out-of-scope files in PIN_MAINMERGED..TIP (or the range is empty): $net_extra"
+        [ -n "$scope_list" ] && [ -z "$extra" ] && pass "AC11.5 BASE..TIP (first-parent, main merges contribute only their own files) stays inside the declared file scope (069-verify.sh, 089c-verify.sh, the task files)" || fail "AC11.5 out-of-scope files in BASE..TIP (or the range is empty): $extra"
     fi
     last_src="$(G log -1 --format=%H "$PIN_BASE..$PIN_TIP" -- docs/tasks/069-verify.sh docs/tasks/089c-verify.sh 2>/dev/null)"
     [ -n "$last_src" ] && [ "$last_src" = "$(G rev-parse "$PIN_FINAL^{commit}" 2>/dev/null)" ] && pass "AC11.6a FINAL is the last commit in BASE..TIP that touched a source or script file" || fail "AC11.6 FINAL ${PIN_FINAL:0:12} is not the last source-touching commit (that is ${last_src:0:12})"
