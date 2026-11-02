@@ -69,6 +69,9 @@ PIN_FINAL="84518e5d4349848a9024081423c2a9a339311394"  # last commit touching a s
 PIN_TIP="cc99e5d24d9bcfbab12d30947027cabae4ce8343"      # last commit of the branch before the pin commit (log/task-file only after FINAL)
 # The frame of every later-branch fixture below: a FIXED commit (the 089b tip), never HEAD. Anchors in the fixtures are text of this frame; a later commit to main (R11 configured, 008b rewording ownership.md) cannot remove them.
 FRAMEREV="$PIN_TIP"
+# The registry main commit this branch merged (task 089b merged origin/main at f30dfbd). A merge on the first-parent chain BASE..TIP whose second parent is an
+# ancestor of this commit is "a merge from main": it contributes only the files it changes itself (diff-tree --cc), not main's files (task 089d's rule for 092).
+PIN_MAINMERGED="f30dfbd29ee0d32e1fcc4f4cbadf5b524372811d"
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
@@ -134,6 +137,20 @@ mk_later() {
     git -C "$1" "${GITID[@]}" commit -q -am "synthetic later branch: edit $3" || return 1
     git -C "$1" checkout -q --detach "$2" || return 1
     git -C "$1" "${GITID[@]}" merge --no-ff -q -m "merge of the synthetic later branch ($3)" later-branch >/dev/null 2>&1 || return 1
+}
+# scope_files DIR BASE TIP MAINSHA : the files the part's own commits touch, on FIXED SHAs only. Walks the first-parent chain BASE..TIP. A non-merge commit
+# contributes its files; a merge contributes the files of diff-tree --cc (what it changes against ALL parents), plus, when its second parent is NOT an
+# ancestor of MAINSHA (a side branch of the part, not main), every file the side branch changed (C^1...C^2). An octopus merge prints the marker OCTOPUS. Never HEAD, never origin/main.
+scope_files() {
+    local d="$1" b="$2" t="$3" m="$4" c np
+    for c in $(git -C "$d" rev-list --first-parent "$b..$t"); do
+        np=$(( $(git -C "$d" rev-list --parents -n1 "$c" | wc -w) - 1 ))
+        if [ "$np" -gt 2 ]; then echo "OCTOPUS $c"
+        elif [ "$np" = 2 ]; then
+            git -C "$d" diff-tree --cc --no-commit-id --name-only --no-renames -r "$c"
+            git -C "$d" merge-base --is-ancestor "$c^2" "$m" 2>/dev/null || git -C "$d" diff --name-only --no-renames "$c^1...$c^2"
+        else git -C "$d" diff-tree --root --no-commit-id --name-only --no-renames -r "$c"; fi
+    done | sort -u
 }
 run_in() {   # run_in DIR OUTFILE CMD... : run CMD in DIR (clean of WOM_NODE_MODULES), output to OUTFILE; echo the exit code
     local d="$1" o="$2"; shift 2
@@ -349,9 +366,10 @@ else
     fix_files="$(G diff --name-only "$PIN_RED" "$PIN_FIX" 2>/dev/null | sort | tr '\n' ' ')"
     [ "$fix_files" = "docs/tasks/039a-verify.sh docs/tasks/065-verify.sh docs/tasks/075-verify.sh tests/registry/test_ci_gate.py " ] \
         && pass "AC11.4 the fix commit touches only 039a-verify.sh, 065-verify.sh, 075-verify.sh and test_ci_gate.py" || fail "AC11.4 the fix commit touches: $fix_files"
-    if ! scope_files="$(G diff --name-only "$PIN_BASE" "$PIN_TIP" 2>&1)"; then fail "AC11.5 cannot compute $PIN_BASE..$PIN_TIP"; else
+    G cat-file -e "$PIN_MAINMERGED^{commit}" 2>/dev/null && G merge-base --is-ancestor "$PIN_MAINMERGED" "$PIN_TIP" && pass "AC11.1b PIN_MAINMERGED $PIN_MAINMERGED exists and is an ancestor of TIP" || fail "AC11.1b PIN_MAINMERGED is not a commit in TIP's history"
+    if ! scope_files="$(scope_files "$ROOT" "$PIN_BASE" "$PIN_TIP" "$PIN_MAINMERGED" 2>&1)" || printf '%s\n' "$scope_files" | grep -q '^OCTOPUS'; then fail "AC11.5 cannot compute the first-parent file list of $PIN_BASE..$PIN_TIP (or an octopus merge): $scope_files"; else
         extra="$(printf '%s\n' "$scope_files" | grep -vxE 'docs/tasks/039a-verify\.sh|docs/tasks/065-verify\.sh|docs/tasks/075-verify\.sh|tests/registry/test_ci_gate\.py|docs/tasks/089b-verify\.sh|docs/tasks/089b-closed-verify-sweep-registry-b\.md|docs/tasks/089-closed-verify-sweep-registry\.md' | tr '\n' ' ')"
-        [ -n "$scope_files" ] && [ -z "$extra" ] && pass "AC11.5 BASE..TIP stays inside the declared file scope" || fail "AC11.5 out-of-scope files in BASE..TIP (or the range is empty): $extra"
+        [ -n "$scope_files" ] && [ -z "$extra" ] && pass "AC11.5 BASE..TIP (first-parent, main merges contribute only their own files) stays inside the declared file scope" || fail "AC11.5 out-of-scope files in BASE..TIP (or the range is empty): $extra"
     fi
     last_src="$(G log -1 --format=%H "$PIN_BASE..$PIN_TIP" -- docs/tasks/039a-verify.sh docs/tasks/065-verify.sh docs/tasks/075-verify.sh tests/registry/test_ci_gate.py docs/tasks/089b-verify.sh 2>/dev/null)"
     [ -n "$last_src" ] && [ "$last_src" = "$(G rev-parse "$PIN_FINAL^{commit}" 2>/dev/null)" ] && pass "AC11.6a FINAL is the last commit in BASE..TIP that touched a source or script file" || fail "AC11.6 FINAL ${PIN_FINAL:0:12} is not the last source-touching commit (that is ${last_src:0:12})"
@@ -416,6 +434,24 @@ if [ -n "${FRAMEREV:-}" ] && mk_frame "$TMP/lm" "$FRAMEREV" && git -C "$TMP/lm" 
     if ( FRAME_SRC="$TMP/lm"; mk_later "$TMP/lm-old10" "$LM" config/r11-identity.json "$CFG_OLD" "$CFG_NEW" ) >/dev/null 2>&1; then fail "AC14.2b (control) the config fixture built on the later HEAD although its anchor is gone"; else pass "AC14.2b control: built on the later HEAD, the config fixture cannot build"; fi
     if ( FRAME_SRC="$TMP/lm"; mk_later "$TMP/lm-new9" "$FRAMEREV" contracts/ownership.md "$OWN_OLD" "$OWN_NEW" && mk_later "$TMP/lm-new10" "$FRAMEREV" config/r11-identity.json "$CFG_OLD" "$CFG_NEW" ) >/dev/null 2>&1; then pass "AC14.2c built on the fixed frame $FRAMEREV (the same repository), both fixtures build"; else fail "AC14.2c the fixtures do not build on the fixed frame"; fi
 else fail "AC14.2 cannot build the later-main repository (FRAMEREV='${FRAMEREV:-unset}')"; fi
+
+# ---- AC15: the file-scope range BASE..TIP must not leak main's files when the branch merged main (the 1b7b46b merge), but must keep a merge of a side branch of the part.
+section "AC15 -- scope_files: a merge from main contributes only its own files; a merge of the part's own side branch contributes its files"
+SF="$TMP/sf"; mkdir "$SF" && git -C "$SF" init -q && git -C "$SF" checkout -q -b main 2>/dev/null
+sfw() { printf '%s\n' "$2" > "$SF/$1"; git -C "$SF" add -A; git -C "$SF" "${GITID[@]}" commit -q -m "add $1"; }
+sfw base.txt b; SFB=$(git -C "$SF" rev-parse HEAD)
+git -C "$SF" checkout -q -b part; sfw mine1.txt m                           # the part's own commit
+git -C "$SF" checkout -q main; sfw main-only.txt x; SFM=$(git -C "$SF" rev-parse HEAD)   # main moves on
+git -C "$SF" checkout -q part; git -C "$SF" "${GITID[@]}" merge --no-ff -q -m "merge main into the part" main >/dev/null 2>&1   # a merge from main
+git -C "$SF" checkout -q -b side "$SFB"; sfw side-only.txt s                 # the part's own side branch
+git -C "$SF" checkout -q part; git -C "$SF" "${GITID[@]}" merge --no-ff -q -m "merge a side branch of the part" side >/dev/null 2>&1
+sfw mine2.txt m; SFT=$(git -C "$SF" rev-parse HEAD)
+got="$(scope_files "$SF" "$SFB" "$SFT" "$SFM" | tr '\n' ' ')"
+[ "$got" = "mine1.txt mine2.txt side-only.txt " ] && pass "AC15.1 scope_files lists the part's own files and the side branch's, and NOT main's file: $got" || fail "AC15.1 scope_files returned '$got' (want 'mine1.txt mine2.txt side-only.txt ')"
+old="$(git -C "$SF" diff --name-only "$SFB" "$SFT" | tr '\n' ' ')"
+case "$old" in *main-only.txt*) pass "AC15.2 control: the old 'git diff BASE TIP' does list main's file, so the leak was real ($old)";; *) fail "AC15.2 control: the old range did not leak main's file ($old): the fixture proves nothing";; esac
+got2="$(scope_files "$SF" "$SFB" "$SFT" "$SFB" | tr '\n' ' ')"
+case "$got2" in *main-only.txt*) pass "AC15.3 control: with a main pin that does not contain the merged main commit, the merge is not trusted and main's file is listed (a stale pin is red, never a silent skip)";; *) fail "AC15.3 control: a main merge that is not covered by the pin was silently trusted ($got2)";; esac
 
 # ==================================================================================================
 else
