@@ -68,8 +68,8 @@ OLDREF="32c641b5f56139a86c820f0b16d522c0f991d207"
 PIN_BASE="32c641b5f56139a86c820f0b16d522c0f991d207"   # registry main when 089c was cut
 PIN_RED="3b8db962327ea3f4dd82190551b0833e86e9df04"      # 089c-verify.sh + task file only
 PIN_FIX="1564ad0731ea794bcd286f6dcd08ed5d7a77b509"      # 069-verify.sh
-PIN_FINAL="d7b0edde5dc58d6797249d0c2ec2033d08719246"  # last commit touching a source file of the part
-PIN_TIP="d74b745e23fcd61ebf608593c916d1f47770277e"      # last commit of the branch before the pin commit (task file only after FINAL)
+PIN_FINAL="4a94ee11b5972e0af5dea1b9c327fe82c4336ddb"  # last commit touching a source file of the part
+PIN_TIP="bb51c382fb960a537e440a87c3972f7c9a4a336a"      # last commit of the branch before the pin commit (task file only after FINAL)
 
 # Every fixture (clones, merges) is built from TREE = PIN_FINAL, this task's content commit, never from HEAD: HEAD may be a later merge
 # (item 12), and 089c's own-change checks must not read it (Ludwig 2026-10-29, "fixed SHAs only"; the task 090 pattern). A placeholder
