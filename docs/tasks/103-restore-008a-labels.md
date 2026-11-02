@@ -1,6 +1,6 @@
 # Task 103: restore 008a-verify.sh's two README check labels (089a1 renamed them; closed script 062 is red on main)
 
-- **Mission:** SITE-V1 (verification integrity) — **Status:** spec-approved 2026-11-02 (manager, session 14; repair of the manager's merge of 089a1, small, solo §2b)
+- **Mission:** SITE-V1 (verification integrity) — **Status:** done 2026-11-02 (manager, session 14; repair of the manager's merge of 089a1, small, solo §2b)
 - **Agent / model:** qa-engineer — **Budget:** small
 - **Branch / worktree:** `task/103-restore-008a-labels` / `~/wt/registry-task-103`, from registry main `4eca251`
 
@@ -36,3 +36,7 @@ FAIL); if the pin detail is wanted in the output, print it as a separate line th
     filter widened to comment lines in baab0e9, rerun exit 0. 103's own `ps` listing shows only 103's own process (self-match), the independent `ps` before each run showed none.
   - 103-verify.sh checks: labels byte-identical to 82fa564 (control on 82fa564 and on 4eca251), pin read from blob (emptying worktree README leaves it green,
     unreadable FINAL reddens exactly that check), scope, 062 whole at both SHAs.
+- 2026-11-03 manager (session 14): diff read by the manager (both label strings restored exactly; pinned-blob read kept; pin on a separate non-id line; scope =
+  the three files). Manager fresh-clone re-run at `5eda10d` (after `npm ci`): 008a-verify exit 0 (ran=207 failed=0), 062-verify whole exit 0 with
+  `PASS AC6L.008a`, 103-verify exit 0. Small repair task, no separate review agent (manager review against the checklist; §2b small). Status done; merged
+  on the manager's authority (§7).
