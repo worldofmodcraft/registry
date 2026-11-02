@@ -141,6 +141,8 @@ mk_later() {
 # scope_files DIR BASE TIP MAINSHA : the files the part's own commits touch, on FIXED SHAs only. Walks the first-parent chain BASE..TIP. A non-merge commit
 # contributes its files; a merge contributes the files of diff-tree --cc (what it changes against ALL parents), plus, when its second parent is NOT an
 # ancestor of MAINSHA (a side branch of the part, not main), every file the side branch changed (C^1...C^2). An octopus merge prints the marker OCTOPUS. Never HEAD, never origin/main.
+# Edges (delta review, INFO): a side branch that itself merged main lists main's files (loud FAIL, never a hidden file); a criss-cross merge may print git warnings into the list (loud FAIL).
+# Precondition: every pin must stay reachable, i.e. main merges the PR with a merge commit (not a squash, and not after deleting the branch). scope_files misses a take-ours resolution: AC11.5c covers it.
 scope_files() {
     local d="$1" b="$2" t="$3" m="$4" c np
     for c in $(git -C "$d" rev-list --first-parent "$b..$t"); do
@@ -152,6 +154,9 @@ scope_files() {
         else git -C "$d" diff-tree --root --no-commit-id --name-only --no-renames -r "$c"; fi
     done | sort -u
 }
+# net_files DIR MAINSHA TIP : the part's NET delta against the main it merged (fixed SHAs). Unlike scope_files it also sees a merge that resolves a main file
+# wholly to one parent ("take ours": diff-tree --cc does not list a file equal to a parent), because it compares the final tree with main's.
+net_files() { git -C "$1" diff --name-only --no-renames "$2" "$3"; }
 run_in() {   # run_in DIR OUTFILE CMD... : run CMD in DIR (clean of WOM_NODE_MODULES), output to OUTFILE; echo the exit code
     local d="$1" o="$2"; shift 2
     ( cd "$d" && PYTHONDONTWRITEBYTECODE=1 "$@" ) > "$o" 2>&1
@@ -366,9 +371,15 @@ else
     fix_files="$(G diff --name-only "$PIN_RED" "$PIN_FIX" 2>/dev/null | sort | tr '\n' ' ')"
     [ "$fix_files" = "docs/tasks/039a-verify.sh docs/tasks/065-verify.sh docs/tasks/075-verify.sh tests/registry/test_ci_gate.py " ] \
         && pass "AC11.4 the fix commit touches only 039a-verify.sh, 065-verify.sh, 075-verify.sh and test_ci_gate.py" || fail "AC11.4 the fix commit touches: $fix_files"
+    lastmerge="$(G rev-list --first-parent --merges "$PIN_BASE..$PIN_TIP" 2>/dev/null | head -n1)"
+    if [ -n "$lastmerge" ] && [ "$(G rev-parse "$lastmerge^2" 2>/dev/null)" = "$PIN_MAINMERGED" ] && ! G rev-list --first-parent "$PIN_BASE..$PIN_TIP" | grep -qx "$PIN_MAINMERGED"; then
+        pass "AC11.1c PIN_MAINMERGED is the second parent of the last merge on the first-parent chain (${lastmerge:0:7}) and is not itself on that chain"
+    else fail "AC11.1c PIN_MAINMERGED is not the main side of the last merge on the first-parent chain"; fi
     G cat-file -e "$PIN_MAINMERGED^{commit}" 2>/dev/null && G merge-base --is-ancestor "$PIN_MAINMERGED" "$PIN_TIP" && pass "AC11.1b PIN_MAINMERGED $PIN_MAINMERGED exists and is an ancestor of TIP" || fail "AC11.1b PIN_MAINMERGED is not a commit in TIP's history"
     if ! scope_files="$(scope_files "$ROOT" "$PIN_BASE" "$PIN_TIP" "$PIN_MAINMERGED" 2>&1)" || printf '%s\n' "$scope_files" | grep -q '^OCTOPUS'; then fail "AC11.5 cannot compute the first-parent file list of $PIN_BASE..$PIN_TIP (or an octopus merge): $scope_files"; else
         extra="$(printf '%s\n' "$scope_files" | grep -vxE 'docs/tasks/039a-verify\.sh|docs/tasks/065-verify\.sh|docs/tasks/075-verify\.sh|tests/registry/test_ci_gate\.py|docs/tasks/089b-verify\.sh|docs/tasks/089b-closed-verify-sweep-registry-b\.md|docs/tasks/089-closed-verify-sweep-registry\.md' | tr '\n' ' ')"
+        net_list="$(net_files "$ROOT" "$PIN_MAINMERGED" "$PIN_TIP" 2>&1)"; net_extra="$(printf '%s\n' "$net_list" | grep -vxE 'docs/tasks/039a-verify\.sh|docs/tasks/065-verify\.sh|docs/tasks/075-verify\.sh|tests/registry/test_ci_gate\.py|docs/tasks/089b-verify\.sh|docs/tasks/089b-closed-verify-sweep-registry-b\.md|docs/tasks/089-closed-verify-sweep-registry\.md' | tr '\n' ' ')"
+        [ -n "$net_list" ] && [ -z "$net_extra" ] && pass "AC11.5c the net delta PIN_MAINMERGED..TIP (fixed SHAs) stays inside the declared file scope, so a take-ours merge cannot hide a reverted main file" || fail "AC11.5c out-of-scope files in PIN_MAINMERGED..TIP (or the range is empty): $net_extra"
         [ -n "$scope_files" ] && [ -z "$extra" ] && pass "AC11.5 BASE..TIP (first-parent, main merges contribute only their own files) stays inside the declared file scope" || fail "AC11.5 out-of-scope files in BASE..TIP (or the range is empty): $extra"
     fi
     last_src="$(G log -1 --format=%H "$PIN_BASE..$PIN_TIP" -- docs/tasks/039a-verify.sh docs/tasks/065-verify.sh docs/tasks/075-verify.sh tests/registry/test_ci_gate.py docs/tasks/089b-verify.sh 2>/dev/null)"
@@ -423,7 +434,7 @@ if mk_later "$TMP/t2" "$FRAMEREV" tests/registry/test_hardening.py "no such anch
 section "AC14 -- the fixtures are built on a fixed frame: they still build when a later commit sets r11_identity or rewords the R11 sentence"
 # AC14.1 static, on this script's own text (the running file, not the repo): no fixture builder is called with the HEAD revision. The pattern is assembled so that this line does not match itself.
 self_src="${BASH_SOURCE[0]}"; pat_a="mk_la""ter"; pat_b="TMP/n""11"
-n_head_fixtures=$(grep -E "(${pat_a}|${pat_b})[^#]*[$]HEADREV" "$self_src" | grep -vc '^[[:space:]]*#')
+n_head_fixtures=$(G show "$PIN_FINAL:docs/tasks/089b-verify.sh" 2>/dev/null | grep -E "(${pat_a}|${pat_b})[^#]*[$]HEADREV" | grep -vc '^[[:space:]]*#')   # the committed script at FINAL, not the working file. Limit: only fixture builders with a text anchor (mk_later, the R11 pin frame) are counted; the live HEAD controls AC3/AC5/AC8/mk_frame are allowed on purpose.
 [ "${n_head_fixtures:-9}" = 0 ] && pass "AC14.1 no later-branch fixture (builder calls, the R11 pin frame) is built on \$HEADREV" || fail "AC14.1 $n_head_fixtures fixture line(s) are still built on \$HEADREV (a later commit to main reddens them)"
 # AC14.2 dynamic: a repository whose HEAD is the fixed frame plus ONE later commit (R11 configured, the ownership sentence reworded). Built on that HEAD (the old way) the fixture cannot build; built on the fixed frame it does.
 if [ -n "${FRAMEREV:-}" ] && mk_frame "$TMP/lm" "$FRAMEREV" && git -C "$TMP/lm" checkout -q -b later-main \
@@ -437,21 +448,22 @@ else fail "AC14.2 cannot build the later-main repository (FRAMEREV='${FRAMEREV:-
 
 # ---- AC15: the file-scope range BASE..TIP must not leak main's files when the branch merged main (the 1b7b46b merge), but must keep a merge of a side branch of the part.
 section "AC15 -- scope_files: a merge from main contributes only its own files; a merge of the part's own side branch contributes its files"
-SF="$TMP/sf"; mkdir "$SF" && git -C "$SF" init -q && git -C "$SF" checkout -q -b main 2>/dev/null
-sfw() { printf '%s\n' "$2" > "$SF/$1"; git -C "$SF" add -A; git -C "$SF" "${GITID[@]}" commit -q -m "add $1"; }
-sfw base.txt b; SFB=$(git -C "$SF" rev-parse HEAD)
-git -C "$SF" checkout -q -b part; sfw mine1.txt m                           # the part's own commit
-git -C "$SF" checkout -q main; sfw main-only.txt x; SFM=$(git -C "$SF" rev-parse HEAD)   # main moves on
-git -C "$SF" checkout -q part; git -C "$SF" "${GITID[@]}" merge --no-ff -q -m "merge main into the part" main >/dev/null 2>&1   # a merge from main
-git -C "$SF" checkout -q -b side "$SFB"; sfw side-only.txt s                 # the part's own side branch
-git -C "$SF" checkout -q part; git -C "$SF" "${GITID[@]}" merge --no-ff -q -m "merge a side branch of the part" side >/dev/null 2>&1
-sfw mine2.txt m; SFT=$(git -C "$SF" rev-parse HEAD)
-got="$(scope_files "$SF" "$SFB" "$SFT" "$SFM" | tr '\n' ' ')"
-[ "$got" = "mine1.txt mine2.txt side-only.txt " ] && pass "AC15.1 scope_files lists the part's own files and the side branch's, and NOT main's file: $got" || fail "AC15.1 scope_files returned '$got' (want 'mine1.txt mine2.txt side-only.txt ')"
-old="$(git -C "$SF" diff --name-only "$SFB" "$SFT" | tr '\n' ' ')"
-case "$old" in *main-only.txt*) pass "AC15.2 control: the old 'git diff BASE TIP' does list main's file, so the leak was real ($old)";; *) fail "AC15.2 control: the old range did not leak main's file ($old): the fixture proves nothing";; esac
-got2="$(scope_files "$SF" "$SFB" "$SFT" "$SFB" | tr '\n' ' ')"
-case "$got2" in *main-only.txt*) pass "AC15.3 control: with a main pin that does not contain the merged main commit, the merge is not trusted and main's file is listed (a stale pin is red, never a silent skip)";; *) fail "AC15.3 control: a main merge that is not covered by the pin was silently trusted ($got2)";; esac
+SF="$TMP/sf"
+sfw() { printf '%s\n' "$2" > "$SF/$1" && git -C "$SF" add -A && git -C "$SF" "${GITID[@]}" commit -q -m "add $1"; }
+if mkdir "$SF" && git -C "$SF" init -q && git -C "$SF" checkout -q -b main 2>/dev/null && sfw base.txt b && SFB=$(git -C "$SF" rev-parse HEAD) \
+    && git -C "$SF" checkout -q -b part && sfw mine1.txt m \
+    && git -C "$SF" checkout -q main && sfw main-only.txt x && SFM=$(git -C "$SF" rev-parse HEAD) \
+    && git -C "$SF" checkout -q part && git -C "$SF" "${GITID[@]}" merge --no-ff -q -m "merge main into the part" main >/dev/null 2>&1 \
+    && git -C "$SF" checkout -q -b side "$SFB" && sfw side-only.txt s \
+    && git -C "$SF" checkout -q part && git -C "$SF" "${GITID[@]}" merge --no-ff -q -m "merge a side branch of the part" side >/dev/null 2>&1 \
+    && sfw mine2.txt m && SFT=$(git -C "$SF" rev-parse HEAD); then
+    got="$(scope_files "$SF" "$SFB" "$SFT" "$SFM" | tr '\n' ' ')"
+    [ "$got" = "mine1.txt mine2.txt side-only.txt " ] && pass "AC15.1 scope_files lists the part's own files and the side branch's, and NOT main's file: $got" || fail "AC15.1 scope_files returned '$got' (want 'mine1.txt mine2.txt side-only.txt ')"
+    old="$(git -C "$SF" diff --name-only "$SFB" "$SFT" | tr '\n' ' ')"
+    case "$old" in *main-only.txt*) pass "AC15.2 control: the old 'git diff BASE TIP' does list main's file, so the leak was real ($old)";; *) fail "AC15.2 control: the old range did not leak main's file ($old): the fixture proves nothing";; esac
+    got2="$(scope_files "$SF" "$SFB" "$SFT" "$SFB" | tr '\n' ' ')"
+    case "$got2" in *main-only.txt*) pass "AC15.3 control: with a main pin that does not contain the merged main commit, the merge is not trusted and main's file is listed (a stale pin is red, never a silent skip)";; *) fail "AC15.3 control: a main merge that is not covered by the pin was silently trusted ($got2)";; esac
+else fail "AC15.0 cannot build the synthetic repository (init, branch, commit or merge step failed)"; fi
 # AC15.4 (delta review, MEDIUM): a "take ours" merge from main resolves main's change away; diff-tree --cc does not list a file that equals one parent, so scope_files alone misses it.
 # The net delta against the main the part merged (net_files, fixed SHAs) must see it.
 SF2="$TMP/sf2"
