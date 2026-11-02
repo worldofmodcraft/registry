@@ -1,6 +1,6 @@
 # Task 089a1: registry closed scripts — part A1 (README and namespace pins; findings 1-5, 7, 13)
 
-- **Mission:** SITE-V1 (verification integrity) — **Status:** review 2026-10-28 (cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A)
+- **Mission:** SITE-V1 (verification integrity) — **Status:** done 2026-10-28 (cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A)
 - **Agent / model:** qa-engineer (model per frontmatter) — **Budget:** medium (≤ 3 agent-sessions)
 - **Branch / worktree:** `task/089a1-closed-verify-sweep-registry-a1` / `~/wt/registry-task-089a1`, from registry main `32c641b`
 - **Umbrella (authoritative for findings, pins, criteria, forbidden list, Q1-Q6):** `docs/tasks/089-closed-verify-sweep-registry.md` (copied
@@ -101,3 +101,6 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
     `python3 -B -m unittest discover -s tests/registry -p test_hardening.py`: Ran 20 tests OK (exit 0); `-p test_classify.py`: Ran 19 tests OK (exit 0).
     `007a-verify.sh`: exit 0, SUMMARY failed=0; `007b-verify.sh`: exit 0, SUMMARY failed=0; `008a-verify.sh`: exit 0, SUMMARY ran=207 failed=0 (each alone on plain HEAD).
   No unexpected red; the harness needed no change; the S5 one-off (062 inside 067) was not exercised here (no 067 run). CRITERIA STATUS: umbrella 1-5, 9 (for A1's own scripts/tests, Q6 A) and 11 are DONE for findings 1-5, 7, 13, demonstrated by the runs above. Status set to review.
+- 2026-11-02 manager (session 14): manager fresh-clone re-run at `7aebfdd`: 089a1-verify `--own-only`, default, `--mutate` all exit 0 ALL CHECKS PASSED; 007a, 007b,
+  008a-verify exit 0 SUMMARY failed=0. Delta review (Opus) **PASS** (0 HIGH/MED; 4 LOW, 2 INFO booked — see /home/ludwig/.claude/jobs/4c7483d7/tmp/089a1-delta-review.md,
+  summarised in the mission log). Status done; merged on the manager's authority (§7).
