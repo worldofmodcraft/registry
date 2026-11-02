@@ -117,3 +117,4 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   - (c) AC1.Xe excludes 089a2-verify.sh itself (it contains the short literals as mutation text) - found by reading, fixed in the same fix commit.
   Pins: PIN_RED4=5c39d87e1aca0482edaea959a703a8bc37a98a4a, PIN_FIX4=PIN_FINAL=7cc5e3e3b508fa6ccf1b30d40c9b131ff5fc1931, PIN_TIP = the commit of this entry (pin commit follows). Runs follow in a fresh non-shallow clone; results are logged right after.
 
+- 2026-11-02 qa-engineer: first run `--own-only` on a6810851 (fresh clone, ps empty): 1 FAIL, AC11.12: the script names a /home path in a "code" line = the removed `PLATFORM_REPO=...` line inside the EXP057 exact-hunk heredoc (data, a diff line starting with "-"). Script bug, not a finding against 057. Fix commit `b3e9d166d543f10a6119f64ea1def7530277fb6a` (089a2-verify.sh only; AC11.12 now skips lines starting with + or -). PIN_FIX4 and PIN_FINAL move to it; RED4..FIX4 is still script-only.
