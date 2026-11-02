@@ -1,6 +1,6 @@
 # Task 089d: registry closed scripts — part D (post-TIP merge-into-branch defect in 092-verify.sh)
 
-- **Mission:** SITE-V1 (verification integrity) — **Status:** in-progress 2026-10-28 (cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A; part D spec-approved 2026-10-28 after independent spec review)
+- **Mission:** SITE-V1 (verification integrity) — **Status:** review (2026-11-02; was in-progress 2026-10-28 (cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A; part D spec-approved 2026-10-28 after independent spec review))
 - **Agent / model:** qa-engineer (model per frontmatter) — **Budget:** small (one agent-session)
 - **Branch / worktree:** `task/089d-closed-verify-sweep-registry-d` / `~/wt/registry-task-089d`, from registry main `32c641b`
 - **Umbrella (authoritative for findings, pins, criteria, forbidden list, Q1-Q6):** `docs/tasks/089-closed-verify-sweep-registry.md` (copied
@@ -176,3 +176,11 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   hung at the next script (039b) for about 20 hours: the known S4/Q7 deadlock (on main, 039a runs 039b without `--no-closed`, so 039b's own AC12 sweep waits for its parent 039a forever; fixed in task 089b's branch,
   not yet merged). Stopped by the coordinator's instruction on 2026-10-31 with TaskStop on my own two background jobs (no kill/pkill); `ps` afterwards shows no verify process of mine. Raw output was in `/tmp/tmp.rukX60UIhi/039a.out` (temp dir, not committed).
   **Status: in-progress, (d) blocked on 089b's merge (S4 fix); re-run the standalone 039a after 089b merges.** (a), (b), (c), (e), (f) and the 092 default/selftest runs are green on the merged head. Idle until re-dispatched.
+- 2026-11-02 qa-engineer (phase 2 final): merged `origin/main` (task 089b, 9fb706d) into the branch without conflict, merge commit f9c4fb81fdeba9245b04365c42927f457126e628, pushed. Own-change range note (booked from 089b's review):
+  `PIN_START..PIN_TIP` predates both main merges (089e, 089b), so it is unaffected; a take-ours main merge inside an own-change range can hide a revert, which is not applicable to this range (it is fixed commits, 3 files);
+  092's post-TIP rule has the same hole (booked, not changed here). Fresh non-shallow clone at f9c4fb8 (`is-shallow` false), `npm ci --prefix tools/dev` exit 0, `PYTHONDONTWRITEBYTECODE=1`, `ps` match count 0 before each run.
+  (1) `bash docs/tasks/089d-verify.sh --own-only`: **exit 0, 23 PASS, SUMMARY failed=0.**
+  (2) `bash docs/tasks/039a-verify.sh <clone>/tools/dev/node_modules`: started 2026-11-02T14:22:27Z, ended 2026-11-02T20:17:39Z (about 5 h 55 min, no script hung), **exit 0, 77 PASS, 0 FAIL, "ALL CHECKS PASSED"**.
+  039b's line: `PASS  039b-verify.sh exits 0 on HEAD (--no-closed: its AC12 sweep is this loop)` (the deadlock is gone). Scripts that exited 0 on HEAD in the sweep, in order: 006, 007a, 007b, 008a, 008b1, 008c, 032, 034, 039b, 057, 062,
+  064, 065, 066, 067, 069, 070, 071, 075, 082, 084, 087, 089b, 089d, 089e, 092, 101. Raw output `/tmp/tmp.cMI1oBHgiN/039a.out` (temp dir, not committed).
+  **Criteria: (a), (b), (c), (e), (f), the later-commit stability checks and (d) [092 default and --live-selftest green on ea2567e, 039a green on f9c4fb8] are all demonstrated. Status set to review.**
