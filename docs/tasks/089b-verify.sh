@@ -452,6 +452,19 @@ old="$(git -C "$SF" diff --name-only "$SFB" "$SFT" | tr '\n' ' ')"
 case "$old" in *main-only.txt*) pass "AC15.2 control: the old 'git diff BASE TIP' does list main's file, so the leak was real ($old)";; *) fail "AC15.2 control: the old range did not leak main's file ($old): the fixture proves nothing";; esac
 got2="$(scope_files "$SF" "$SFB" "$SFT" "$SFB" | tr '\n' ' ')"
 case "$got2" in *main-only.txt*) pass "AC15.3 control: with a main pin that does not contain the merged main commit, the merge is not trusted and main's file is listed (a stale pin is red, never a silent skip)";; *) fail "AC15.3 control: a main merge that is not covered by the pin was silently trusted ($got2)";; esac
+# AC15.4 (delta review, MEDIUM): a "take ours" merge from main resolves main's change away; diff-tree --cc does not list a file that equals one parent, so scope_files alone misses it.
+# The net delta against the main the part merged (net_files, fixed SHAs) must see it.
+SF2="$TMP/sf2"
+if mkdir "$SF2" && git -C "$SF2" init -q && git -C "$SF2" checkout -q -b main 2>/dev/null \
+    && printf 'one\n' > "$SF2/main-change.txt" && printf 'b\n' > "$SF2/base.txt" && git -C "$SF2" add -A && git -C "$SF2" "${GITID[@]}" commit -q -m base && SB2=$(git -C "$SF2" rev-parse HEAD) \
+    && git -C "$SF2" checkout -q -b part && printf 'm\n' > "$SF2/mine.txt" && git -C "$SF2" add -A && git -C "$SF2" "${GITID[@]}" commit -q -m "part commit" \
+    && git -C "$SF2" checkout -q main && printf 'two\n' > "$SF2/main-change.txt" && git -C "$SF2" "${GITID[@]}" commit -q -am "main changes a file" && SM2=$(git -C "$SF2" rev-parse HEAD) \
+    && git -C "$SF2" checkout -q part && git -C "$SF2" "${GITID[@]}" merge -s ours --no-ff -q -m "merge main, take ours" main >/dev/null 2>&1 && ST2=$(git -C "$SF2" rev-parse HEAD); then
+    got4="$(scope_files "$SF2" "$SB2" "$ST2" "$SM2" | tr '\n' ' ')"
+    case "$got4" in *main-change.txt*) fail "AC15.4a control: scope_files listed the reverted main file ($got4): the fixture does not show the hole";; *) pass "AC15.4a control: scope_files alone misses the file a take-ours merge reverts ($got4)";; esac
+    net4="$(net_files "$SF2" "$SM2" "$ST2" | tr '\n' ' ')"
+    case "$net4" in *main-change.txt*) pass "AC15.4b net_files (the part's net delta against the merged main) lists the reverted file: $net4";; *) fail "AC15.4b net_files does not list the reverted main file ($net4)";; esac
+else fail "AC15.4 cannot build the take-ours fixture"; fi
 
 # ==================================================================================================
 else
