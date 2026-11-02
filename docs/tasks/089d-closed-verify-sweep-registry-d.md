@@ -1,6 +1,6 @@
 # Task 089d: registry closed scripts — part D (post-TIP merge-into-branch defect in 092-verify.sh)
 
-- **Mission:** SITE-V1 (verification integrity) — **Status:** review (2026-11-02; was in-progress 2026-10-28 (cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A; part D spec-approved 2026-10-28 after independent spec review))
+- **Mission:** SITE-V1 (verification integrity) — **Status:** done (2026-11-02; was in-progress 2026-10-28 (cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A; part D spec-approved 2026-10-28 after independent spec review))
 - **Agent / model:** qa-engineer (model per frontmatter) — **Budget:** small (one agent-session)
 - **Branch / worktree:** `task/089d-closed-verify-sweep-registry-d` / `~/wt/registry-task-089d`, from registry main `32c641b`
 - **Umbrella (authoritative for findings, pins, criteria, forbidden list, Q1-Q6):** `docs/tasks/089-closed-verify-sweep-registry.md` (copied
@@ -184,3 +184,8 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   039b's line: `PASS  039b-verify.sh exits 0 on HEAD (--no-closed: its AC12 sweep is this loop)` (the deadlock is gone). Scripts that exited 0 on HEAD in the sweep, in order: 006, 007a, 007b, 008a, 008b1, 008c, 032, 034, 039b, 057, 062,
   064, 065, 066, 067, 069, 070, 071, 075, 082, 084, 087, 089b, 089d, 089e, 092, 101. Raw output `/tmp/tmp.cMI1oBHgiN/039a.out` (temp dir, not committed).
   **Criteria: (a), (b), (c), (e), (f), the later-commit stability checks and (d) [092 default and --live-selftest green on ea2567e, 039a green on f9c4fb8] are all demonstrated. Status set to review.**
+- 2026-11-02 manager (session 14): standalone 039a on the main-merged head read by the manager (raw output: ALL CHECKS PASSED, 77 PASS, 0 FAIL, 039b once with
+  --no-closed). Manager fresh-clone re-run at `ba902f9`: 089d default + `--mutate` SUMMARY failed=0; 092-verify exit 0 (post-TIP NOT-APPLICABLE (merged); AC9
+  control red as required). Delta review **PASS** (0 blocking). Booked: LOW 1 (092:686 `-lt 3` tidy), LOW 2 (second-mutant check should require PASS and use
+  `other2`), LOW 3 (later-commit checks test a copy of the range, not scope_checks itself); latent MED: 092's post-TIP rule has the take-ours hole (live exposure
+  nil, merged; risk is copying) — add a warning comment when 092-verify.sh is next touched. Status done; merged on the manager's authority (§7).
