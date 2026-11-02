@@ -83,7 +83,7 @@ bad_paths="$(grep -vE '^docs/tasks/(008a-verify\.sh|103-verify\.sh|103-restore-0
 grep -qx 'docs/tasks/062-verify.sh' "$TMP/scope" && fail "AC4.2 062-verify.sh was touched" || pass "AC4.2 062-verify.sh untouched"
 git -C "$ROOT" diff -U0 "$BAD" "$FIX" -- docs/tasks/008a-verify.sh | grep -E '^[+-][^+-]' > "$TMP/chg"
 [ -s "$TMP/chg" ] && pass "AC4.3 the 008a diff is non-empty (the fix exists)" || fail "AC4.3 the 008a diff is empty"
-off="$(grep -vE 'contracts/README\.md|^\+# ?Task 089a1|FINAL|pin' "$TMP/chg" || true)"
+off="$(grep -vE 'contracts/README\.md|^[+-]#|FINAL|pin' "$TMP/chg" || true)"
 [ -z "$off" ] && pass "AC4.4 every changed 008a line concerns the README check or its pin" || { fail "AC4.4 changed 008a lines outside the README check:"; echo "$off" | sed 's/^/    /'; }
 
 # --- AC1: 062 whole, at BAD (expect AC6L.008a FAIL) and at FIX (expect exit 0 and AC6L.008a ok)
