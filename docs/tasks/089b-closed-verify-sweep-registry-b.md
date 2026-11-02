@@ -248,3 +248,17 @@ Criterion 9 (quiet machine) is mandatory: one script at a time, `ps` logged befo
    - LOW 4: the AC15 synthetic repository is built in one `&&` chain; a failed step gives AC15.0 "cannot build the synthetic repository" instead of a misleading AC15.1 mismatch.
    - INFO 5, 6: stated in the scope_files comment (pins need a merge commit on main, never a squash; a side branch that merged main, or a criss-cross merge, gives a loud FAIL, never a hidden file). Not changed otherwise.
    - Fix commit `1a4c8c855511b8c381657e78c4045c792cc978c4`; pins re-set by the commit that follows this entry (FINAL = that fix commit, TIP = this log commit).
+- 2026-11-02 qa-engineer (fix round 4 results; fresh non-shallow clone `/tmp/w089b/p5/head` at head `99a5fe1f4346614e1a2ab9b5e903bd7b09a8250a`, PYTHONDONTWRITEBYTECODE=1, `ps` of `*-verify.sh` empty before each step, `/tmp/w089b/p5/status.txt`; fix commit `1a4c8c8`, red `4faa017`, pins FINAL=1a4c8c8 TIP=70a76b2):
+      == head-default exit 0   13:29:53Z-13:42:23Z   77 PASS, 0 FAIL   == RESULT == ALL CHECKS PASSED
+      == head-mutate  exit 0   13:42:23Z-13:44:33Z    4 PASS, 0 FAIL   == RESULT == ALL CHECKS PASSED
+  Relevant default lines:
+      PASS  AC11.1c PIN_MAINMERGED is the second parent of the last merge on the first-parent chain (1b7b46b) and is not itself on that chain
+      PASS  AC11.1b PIN_MAINMERGED f30dfbd29ee0d32e1fcc4f4cbadf5b524372811d exists and is an ancestor of TIP
+      PASS  AC11.5 BASE..TIP (first-parent, main merges contribute only their own files) stays inside the declared file scope
+      PASS  AC11.5c the net delta PIN_MAINMERGED..TIP (fixed SHAs) stays inside the declared file scope, so a take-ours merge cannot hide a reverted main file
+      PASS  AC14.1 no later-branch fixture (builder calls, the R11 pin frame) is built on $HEADREV
+      PASS  AC15.1-15.3 (as in the previous entry)
+      PASS  AC15.4a control: scope_files alone misses the file a take-ours merge reverts (mine.txt )
+      PASS  AC15.4b net_files (the part's net delta against the merged main) lists the reverted file: main-change.txt mine.txt
+  Red-first for this round: AC15.4 was committed at 4faa017 before net_files/AC11.5c existed (red by construction: `net_files` undefined). Not executed at that commit in this round (the machine was not mine then); the evidence is the construction plus the green control AC15.4a, which shows scope_files alone really does miss the file.
+  State: all delta-review amendments applied (MEDIUM, LOW 2-4) or logged (INFO 5, 6; 092's own take-ours hole is booked for 089d/092). Status: review.
