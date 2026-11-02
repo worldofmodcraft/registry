@@ -332,7 +332,7 @@ section "AC1.H -- round 2: no own-change check reads a moving ref. Red first: on
 evalna() {   # evalna SCRIPTBLOBFILE CLONEDIR : print "na nt" as that script's AC0.9 line computes them in CLONEDIR
     local line; line="$(grep -m1 '^na=' "$1")"
     [ -n "$line" ] || { echo "? ?"; return; }
-    ( G() { git -C "$2" "$@"; }; eval "$line"; echo "$na $nt" )
+    ( cl="$2"; G() { git -C "$cl" "$@"; }; eval "$line"; echo "$na $nt" )
 }
 G show "$PIN_PREV:docs/tasks/089a2-verify.sh" > "$TMP/prev.sh" 2>/dev/null || fail "AC1.H.0 cannot read the previous script at $PIN_PREV"
 G show "$PIN_FINAL:docs/tasks/089a2-verify.sh" > "$TMP/cur.sh" 2>/dev/null || fail "AC1.H.0 cannot read the script at FINAL $PIN_FINAL"
