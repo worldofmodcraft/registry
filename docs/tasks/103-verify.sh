@@ -98,7 +98,7 @@ grep -E '^(FAIL|not ok|.*FAIL).*AC6L\.008a' "$TMP/062.bad.out" | sed 's/^/    /'
 if grep -q 'FAIL.*AC6L\.008a' "$TMP/062.bad.out" && [ $rcb -gt 0 ]; then pass "AC1.1 062-verify.sh at 4eca251 FAILs AC6L.008a (exit $rcb) [whole script run]"; else fail "AC1.1 062 at 4eca251: AC6L.008a not red (exit $rcb)"; fi
 run062 "$FIX" fix; rcf=$?
 grep 'AC6L\.008a' "$TMP/062.fix.out" | sed 's/^/    /'
-grep -q 'ok.*AC6L\.008a' "$TMP/062.fix.out" && ! grep -q 'FAIL.*AC6L\.008a' "$TMP/062.fix.out" && pass "AC1.2 062-verify.sh at FIX passes AC6L.008a" || fail "AC1.2 062 at FIX: AC6L.008a not ok"
+grep -q 'PASS.*AC6L\.008a' "$TMP/062.fix.out" && ! grep -q 'FAIL.*AC6L\.008a' "$TMP/062.fix.out" && pass "AC1.2 062-verify.sh at FIX passes AC6L.008a" || fail "AC1.2 062 at FIX: AC6L.008a not ok"
 [ $rcf = 0 ] && pass "AC1.3 062-verify.sh at FIX exits 0 [whole script run]" || { fail "AC1.3 062-verify.sh at FIX exits $rcf"; grep -E 'FAIL' "$TMP/062.fix.out" | sed 's/^/    /'; }
 
 echo "SUMMARY failed=$FAILS"
