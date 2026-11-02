@@ -121,7 +121,7 @@ trunc_039a "$NEWD/039a.sh" > "$NEWD/039a.trunc.sh" || fail "AC0.0b the NEW 039a-
 
 # mk_frame DEST REV : a clone detached at REV
 mk_frame() {
-    git clone -q --no-hardlinks "$ROOT" "$1" 2>/dev/null || return 1
+    git clone -q --no-hardlinks "${FRAME_SRC:-$ROOT}" "$1" 2>/dev/null || return 1
     git -C "$1" checkout -q --detach "$2" || return 1
 }
 # mk_later DEST REV FILE OLD NEW : a clone at REV plus a --no-ff merge of a synthetic later branch that edits FILE (OLD -> NEW, exactly once)
@@ -402,6 +402,23 @@ else fail "AC13.0 cannot extract the AC0 section of the pre-fix-round or the cur
 # the later-branch fixtures built on HEAD accept a HEAD that already contains the later edit (a real later branch that did it) and still refuse an anchor that matches nothing
 if mk_later "$TMP/t1" "$HEADREV" tests/registry/test_hardening.py "$HARD_NEW" "$HARD_OLD" >/dev/null; then pass "AC13.4 mk_later on HEAD accepts a frame that already contains the later edit"; else fail "AC13.4 mk_later on HEAD refuses a frame that already contains the later edit"; fi
 if mk_later "$TMP/t2" "$HEADREV" tests/registry/test_hardening.py "no such anchor text xyzzy" "no such replacement xyzzy" >/dev/null; then fail "AC13.5 mk_later accepted an anchor that is in neither the old nor the new form"; else pass "AC13.5 positive control: an anchor in neither form is still refused"; fi
+
+# ---- AC14 (REVIEW-CHECKLIST item 12, review of 036420f finding 1): the later-branch fixtures are built on a FIXED frame (FRAMEREV), never on HEAD.
+# A fixture built on HEAD matches literal HEAD text ('"r11_identity": null', the ownership.md R11 sentence) and stops building the day Ludwig configures R11 or 008b rewords the sentence.
+section "AC14 -- the fixtures are built on a fixed frame: they still build when a later commit sets r11_identity or rewords the R11 sentence"
+# AC14.1 static, on this script's own text (the running file, not the repo): no fixture builder is called with the HEAD revision. The pattern is assembled so that this line does not match itself.
+self_src="${BASH_SOURCE[0]}"; pat_a="mk_la""ter"; pat_b="TMP/n""11"
+n_head_fixtures=$(grep -E "(${pat_a}|${pat_b})[^#]*[$]HEADREV" "$self_src" | grep -vc '^[[:space:]]*#')
+[ "${n_head_fixtures:-9}" = 0 ] && pass "AC14.1 no later-branch fixture (builder calls, the R11 pin frame) is built on \$HEADREV" || fail "AC14.1 $n_head_fixtures fixture line(s) are still built on \$HEADREV (a later commit to main reddens them)"
+# AC14.2 dynamic: a repository whose HEAD is the fixed frame plus ONE later commit (R11 configured, the ownership sentence reworded). Built on that HEAD (the old way) the fixture cannot build; built on the fixed frame it does.
+if [ -n "${FRAMEREV:-}" ] && mk_frame "$TMP/lm" "$FRAMEREV" && git -C "$TMP/lm" checkout -q -b later-main \
+    && edit_file "$TMP/lm/config/r11-identity.json" "$CFG_OLD" "$CFG_NEW" && edit_file "$TMP/lm/contracts/ownership.md" "$OWN_OLD" 'and `R11` is the rule that also rejects it' \
+    && git -C "$TMP/lm" "${GITID[@]}" commit -q -am "synthetic later commit on main: R11 configured, the ownership sentence reworded"; then
+    LM=$(git -C "$TMP/lm" rev-parse HEAD)
+    if ( FRAME_SRC="$TMP/lm"; mk_later "$TMP/lm-old9" "$LM" contracts/ownership.md "$OWN_OLD" "$OWN_NEW" ) >/dev/null 2>&1; then fail "AC14.2a (control) the ownership fixture built on the later HEAD although its anchor is gone"; else pass "AC14.2a control: built on the later HEAD, the ownership fixture cannot build"; fi
+    if ( FRAME_SRC="$TMP/lm"; mk_later "$TMP/lm-old10" "$LM" config/r11-identity.json "$CFG_OLD" "$CFG_NEW" ) >/dev/null 2>&1; then fail "AC14.2b (control) the config fixture built on the later HEAD although its anchor is gone"; else pass "AC14.2b control: built on the later HEAD, the config fixture cannot build"; fi
+    if ( FRAME_SRC="$TMP/lm"; mk_later "$TMP/lm-new9" "$FRAMEREV" contracts/ownership.md "$OWN_OLD" "$OWN_NEW" && mk_later "$TMP/lm-new10" "$FRAMEREV" config/r11-identity.json "$CFG_OLD" "$CFG_NEW" ) >/dev/null 2>&1; then pass "AC14.2c built on the fixed frame $FRAMEREV (the same repository), both fixtures build"; else fail "AC14.2c the fixtures do not build on the fixed frame"; fi
+else fail "AC14.2 cannot build the later-main repository (FRAMEREV='${FRAMEREV:-unset}')"; fi
 
 # ==================================================================================================
 else
