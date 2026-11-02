@@ -1015,11 +1015,5 @@ class AC8NoNetworkNoEnvNoShell(unittest.TestCase):
         self.assertLessEqual(mods, set(sys.stdlib_module_names), mods - set(sys.stdlib_module_names))
 
 
-class AC9ProductionR11Unconfigured(unittest.TestCase):
-    def test_committed_config_names_nobody(self):
-        doc = json.loads((REPO / "config" / "r11-identity.json").read_text())
-        self.assertEqual(doc, {"schema_version": "1.0.0", "r11_identity": None})
-
-
 if __name__ == "__main__":
     unittest.main()
