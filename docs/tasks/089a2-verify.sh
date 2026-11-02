@@ -76,10 +76,10 @@ PIN_FIX2="becccdedd9b5b6f9aed930fcb4018be79c086aea"    # fix round 1: 062-verify
 PIN_PREV="790db479c6a6904b6755437c7ede6561cda01fb5"   # the script as it was before fix round 2 (the red-first cell reads its HEAD-dependent check from here)
 PIN_RED3="fd9457fa97d3b631696f79976160a59bffc973db"    # fix round 2 (Ludwig, 2026-10-29: fixed SHAs only), fixtures first: 089a2-verify.sh + task files only
 PIN_FIX3="0ef8c07bf508d4bb499ecc99ec592d40ec640041"    # fix round 2: 089a2-verify.sh only (no --all / HEAD read in an own-change check)
-PIN_RED4="__RED4__"    # phase 2 (lessons of 089b/089c reviews), fixtures first: 089a2-verify.sh + task files only
-PIN_FIX4="__FIX4__"    # phase 2: 089a2-verify.sh only (fixtures on the fixed frame, scope pattern of 089b)
-PIN_FINAL="__FINAL__"  # last commit touching a source file or script of the part (= PIN_FIX4; the NEW blobs are read here)
-PIN_TIP="__TIP__"      # last commit of the branch before the pin commit (task-file only after FINAL)
+PIN_RED4="5c39d87e1aca0482edaea959a703a8bc37a98a4a"    # phase 2 (lessons of 089b/089c reviews), fixtures first: 089a2-verify.sh + task files only
+PIN_FIX4="7cc5e3e3b508fa6ccf1b30d40c9b131ff5fc1931"    # phase 2: 089a2-verify.sh only (fixtures on the fixed frame, scope pattern of 089b)
+PIN_FINAL="7cc5e3e3b508fa6ccf1b30d40c9b131ff5fc1931"  # last commit touching a source file or script of the part (= PIN_FIX4; the NEW blobs are read here)
+PIN_TIP="432c9b54ea480ca8404f9335099168f8ca63c7c8"      # last commit of the branch before the pin commit (task-file only after FINAL)
 # The registry main commit this branch merged in phase 2 (git merge origin/main). A merge on the first-parent chain BASE..TIP whose second parent is an
 # ancestor of this commit is "a merge from main": it contributes only the files it changes itself (diff-tree --cc), not main's files (task 089d's rule for 092).
 PIN_MAINMERGED="4eca2511aeb19871b36e65e6bf417cb0b347f32e"
