@@ -67,6 +67,8 @@ PIN_RED="fcf2ac81ae38e5b53dbeaac425a199050fe52313"      # 089b-verify.sh + task 
 PIN_FIX="0f7f5b0bb9a54d6afcc519974dd4c1fe1dd1cc5e"      # 065-verify.sh, 075-verify.sh, 039a-verify.sh, test_ci_gate.py
 PIN_FINAL="de3ee3a48d4ee3399b6121c8dc828536aa4b03a2"  # last commit touching a source file of the part
 PIN_TIP="7d8eb84386fa2409501399edf57f623ce1ac23ed"      # last commit of the branch before the pin commit (log/task-file only after FINAL)
+# The frame of every later-branch fixture below: a FIXED commit (the 089b tip), never HEAD. Anchors in the fixtures are text of this frame; a later commit to main (R11 configured, 008b rewording ownership.md) cannot remove them.
+FRAMEREV="$PIN_TIP"
 
 TMP="$(mktemp -d)" || exit 99
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
@@ -125,13 +127,8 @@ mk_frame() {
     git -C "$1" checkout -q --detach "$2" || return 1
 }
 # mk_later DEST REV FILE OLD NEW : a clone at REV plus a --no-ff merge of a synthetic later branch that edits FILE (OLD -> NEW, exactly once)
-has_text() { python3 -I -c 'import sys; sys.exit(0 if sys.argv[2] in open(sys.argv[1]).read() else 1)' "$1" "$2"; }   # has_text FILE TEXT
 mk_later() {
     mk_frame "$1" "$2" || return 1
-    # a frame other than OLD (i.e. HEAD) that ALREADY contains the later edit (a real later branch made it): use it as it is. An anchor in neither form is still refused.
-    if [ "$2" != "$OLDREF" ] && ! has_text "$1/$3" "$4" && has_text "$1/$3" "$5"; then
-        printf '  note: %s at %s already contains the later edit; the frame is used as it is\n' "$3" "${2:0:7}"; return 0
-    fi
     git -C "$1" checkout -q -b later-branch || return 1
     edit_file "$1/$3" "$4" "$5" || return 1
     git -C "$1" "${GITID[@]}" commit -q -am "synthetic later branch: edit $3" || return 1
@@ -214,9 +211,9 @@ if ! mk_later "$TMP/o8" "$OLDREF" tests/registry/test_hardening.py "$HARD_OLD" "
 fi
 rc=$(mk_frame "$TMP/c8" "$OLDREF" && place "$TMP/c8" "$OLDD/065.sh" "$S065" && run_in "$TMP/c8" "$TMP/c8.out" bash "$S065" --mutate "$NM")
 expect "AC1.8b control: the OLD 065-verify.sh on plain OLD (the later branch is the cause)" green "$rc" "$TMP/c8.out" '^PASS  AC3\.5 '
-if ! mk_later "$TMP/n8" "$HEADREV" tests/registry/test_hardening.py "$HARD_OLD" "$HARD_NEW"; then fail "AC1.8.1 cannot build the later-branch merge on HEAD"; else
+if ! mk_later "$TMP/n8" "$FRAMEREV" tests/registry/test_hardening.py "$HARD_OLD" "$HARD_NEW"; then fail "AC1.8.1 cannot build the later-branch merge on the fixed frame"; else
     place "$TMP/n8" "$NEWD/065.sh" "$S065"; rc=$(run_in "$TMP/n8" "$TMP/n8.out" bash "$S065" --mutate "$NM")
-    expect "AC1.8c the NEW 065-verify.sh on HEAD + the same later edit" green "$rc" "$TMP/n8.out" '^PASS  AC3\.5 ' '!^FAIL'
+    expect "AC1.8c the NEW 065-verify.sh on the fixed frame + the same later edit" green "$rc" "$TMP/n8.out" '^PASS  AC3\.5 ' '!^FAIL'
 fi
 # ---- finding 9: 075 AC4 (a later branch rewords an ownership.md sentence the check pins)
 if ! mk_later "$TMP/o9" "$OLDREF" contracts/ownership.md "$OWN_OLD" "$OWN_NEW"; then fail "AC1.9.0 cannot build the later-branch merge on OLD"; else
@@ -225,9 +222,9 @@ if ! mk_later "$TMP/o9" "$OLDREF" contracts/ownership.md "$OWN_OLD" "$OWN_NEW"; 
 fi
 rc=$(mk_frame "$TMP/c9" "$OLDREF" && place "$TMP/c9" "$OLDD/075.sh" "$S075" && run_in "$TMP/c9" "$TMP/c9.out" bash "$S075")
 expect "AC1.9b control: the OLD 075-verify.sh on plain OLD" green "$rc" "$TMP/c9.out" '^PASS  R11.s mixed-PR sentence is amended'
-if ! mk_later "$TMP/n9" "$HEADREV" contracts/ownership.md "$OWN_OLD" "$OWN_NEW"; then fail "AC1.9.1 cannot build the later-branch merge on HEAD"; else
+if ! mk_later "$TMP/n9" "$FRAMEREV" contracts/ownership.md "$OWN_OLD" "$OWN_NEW"; then fail "AC1.9.1 cannot build the later-branch merge on the fixed frame"; else
     place "$TMP/n9" "$NEWD/075.sh" "$S075"; rc=$(run_in "$TMP/n9" "$TMP/n9.out" bash "$S075")
-    expect "AC1.9c the NEW 075-verify.sh on HEAD + the same later edit" green "$rc" "$TMP/n9.out" '^PASS  R11.s mixed-PR sentence is amended' '!^FAIL'
+    expect "AC1.9c the NEW 075-verify.sh on the fixed frame + the same later edit" green "$rc" "$TMP/n9.out" '^PASS  R11.s mixed-PR sentence is amended' '!^FAIL'
 fi
 # ---- finding 10 (and 11): 039a, truncated before AC12. A later branch configures R11 (config/r11-identity.json stops being null).
 [ -s "$OLDD/039a.trunc.sh" ] && [ -s "$NEWD/039a.trunc.sh" ] && pass "AC1.10.00 positive control: both truncated copies are non-empty ($(wc -l < "$OLDD/039a.trunc.sh") / $(wc -l < "$NEWD/039a.trunc.sh") lines)"
@@ -237,15 +234,15 @@ if ! mk_later "$TMP/o10" "$OLDREF" config/r11-identity.json "$CFG_OLD" "$CFG_NEW
 fi
 rc=$(mk_frame "$TMP/c10" "$OLDREF" && place "$TMP/c10" "$OLDD/039a.trunc.sh" docs/tasks/039a-trunc.sh && run_in "$TMP/c10" "$TMP/c10.out" bash docs/tasks/039a-trunc.sh)
 expect "AC1.10b control: the OLD 039a-verify.sh (truncated) on plain OLD" green "$rc" "$TMP/c10.out" '^PASS  AC9 config/r11-identity.json at HEAD parses'
-if ! mk_later "$TMP/n10" "$HEADREV" config/r11-identity.json "$CFG_OLD" "$CFG_NEW"; then fail "AC1.10.2 cannot build the config-later-branch merge on HEAD"; else
+if ! mk_later "$TMP/n10" "$FRAMEREV" config/r11-identity.json "$CFG_OLD" "$CFG_NEW"; then fail "AC1.10.2 cannot build the config-later-branch merge on the fixed frame"; else
     place "$TMP/n10" "$NEWD/039a.trunc.sh" docs/tasks/039a-trunc.sh; rc=$(run_in "$TMP/n10" "$TMP/n10.out" bash docs/tasks/039a-trunc.sh)
-    expect "AC1.10c the NEW 039a-verify.sh on HEAD + R11 configured" green "$rc" "$TMP/n10.out" '^PASS  AC9 config/r11-identity.json at FINAL' '!^FAIL'
+    expect "AC1.10c the NEW 039a-verify.sh on the fixed frame + R11 configured" green "$rc" "$TMP/n10.out" '^PASS  AC9 config/r11-identity.json at FINAL' '!^FAIL'
 fi
 # ---- finding 11: the moved assertion is red when the config AT THE PIN is non-null (a synthetic commit, the pin pointed at it in a copy)
-if ! mk_frame "$TMP/n11" "$HEADREV"; then fail "AC1.11.0 cannot clone HEAD"; else
+if ! mk_frame "$TMP/n11" "$FRAMEREV"; then fail "AC1.11.0 cannot clone the fixed frame"; else
     X=""; pinned039=$(pin_of "$NEWD/039a.sh" FINAL)
     git -C "$TMP/n11" checkout -q -b cfg-at-pin "$pinned039" && edit_file "$TMP/n11/config/r11-identity.json" "$CFG_OLD" "$CFG_NEW" \
-        && git -C "$TMP/n11" "${GITID[@]}" commit -q -am "synthetic: R11 configured at the pin" && X=$(git -C "$TMP/n11" rev-parse HEAD) && git -C "$TMP/n11" checkout -q --detach "$HEADREV"
+        && git -C "$TMP/n11" "${GITID[@]}" commit -q -am "synthetic: R11 configured at the pin" && X=$(git -C "$TMP/n11" rev-parse HEAD) && git -C "$TMP/n11" checkout -q --detach "$FRAMEREV"
     if [ -z "${X:-}" ]; then fail "AC1.11.1 cannot build the synthetic non-null commit"; else
         cp "$NEWD/039a.trunc.sh" "$TMP/n11/docs/tasks/039a-trunc.sh" && edit_file "$TMP/n11/docs/tasks/039a-trunc.sh" "FINAL=$pinned039" "FINAL=$X" \
             && rc=$(run_in "$TMP/n11" "$TMP/n11.out" bash docs/tasks/039a-trunc.sh)
@@ -257,11 +254,11 @@ if ! mk_later "$TMP/o12" "$OLDREF" "$TCG" "$ADD_OLD" "$ADD_NEW"; then fail "AC1.
     place "$TMP/o12" "$OLDD/039a.trunc.sh" docs/tasks/039a-trunc.sh; rc=$(run_in "$TMP/o12" "$TMP/o12.out" bash docs/tasks/039a-trunc.sh)
     expect "AC1.12a the OLD 039a-verify.sh on OLD + a test added to AC2PositiveControls" red "$rc" "$TMP/o12.out" '^FAIL  AC2 positive controls: expected 7 ok tests, ran 8'
 fi
-if ! mk_later "$TMP/n12" "$HEADREV" "$TCG" "$ADD_OLD" "$ADD_NEW"; then fail "AC1.12.1 cannot build the test-added later branch on HEAD"; else
+if ! mk_later "$TMP/n12" "$FRAMEREV" "$TCG" "$ADD_OLD" "$ADD_NEW"; then fail "AC1.12.1 cannot build the test-added later branch on the fixed frame"; else
     place "$TMP/n12" "$NEWD/039a.trunc.sh" docs/tasks/039a-trunc.sh; rc=$(run_in "$TMP/n12" "$TMP/n12.out" bash docs/tasks/039a-trunc.sh)
-    expect "AC1.12b the NEW 039a-verify.sh on HEAD + the same added test" green "$rc" "$TMP/n12.out" '^PASS  AC2 positive controls' '!^FAIL'
+    expect "AC1.12b the NEW 039a-verify.sh on the fixed frame + the same added test" green "$rc" "$TMP/n12.out" '^PASS  AC2 positive controls' '!^FAIL'
 fi
-if ! mk_later "$TMP/r12" "$HEADREV" "$TCG" "$REM_OLD" "$REM_NEW"; then fail "AC1.12.2 cannot build the test-removed later branch on HEAD"; else
+if ! mk_later "$TMP/r12" "$FRAMEREV" "$TCG" "$REM_OLD" "$REM_NEW"; then fail "AC1.12.2 cannot build the test-removed later branch on the fixed frame"; else
     place "$TMP/r12" "$NEWD/039a.trunc.sh" docs/tasks/039a-trunc.sh; rc=$(run_in "$TMP/r12" "$TMP/r12.out" bash docs/tasks/039a-trunc.sh)
     expect "AC1.12c positive control: the NEW 039a-verify.sh still fails when a pinned test disappears from a counted class" red "$rc" "$TMP/r12.out" '^FAIL  AC4 identity source'
 fi
@@ -384,24 +381,24 @@ trunc_ac0() {   # FILE : FILE up to (not including) its AC1 section, the open if
     awk '/^section "AC1 -- /{exit} {print}' "$1"
     printf '%s\n' 'fi' 'fi' "printf '\\n== RESULT ==\\n'; exit \"\$FAILURES\""
 }
-if G show "$PIN_PRE:docs/tasks/089b-verify.sh" > "$TMP/pre.sh" 2>/dev/null && trunc_ac0 "$TMP/pre.sh" > "$TMP/pre.trunc.sh" && trunc_ac0 "$ROOT/docs/tasks/089b-verify.sh" > "$TMP/cur.trunc.sh" \
+if G show "$PIN_PRE:docs/tasks/089b-verify.sh" > "$TMP/pre.sh" 2>/dev/null && trunc_ac0 "$TMP/pre.sh" > "$TMP/pre.trunc.sh" && G show "$PIN_FINAL:docs/tasks/089b-verify.sh" > "$TMP/cur.sh" 2>/dev/null && trunc_ac0 "$TMP/cur.sh" > "$TMP/cur.trunc.sh" \
     && [ -s "$TMP/pre.trunc.sh" ] && [ -s "$TMP/cur.trunc.sh" ] && bash -n "$TMP/pre.trunc.sh" && bash -n "$TMP/cur.trunc.sh"; then
     pass "AC13.0 positive control: both AC0 extracts are non-empty and parse ($(wc -l < "$TMP/pre.trunc.sh") / $(wc -l < "$TMP/cur.trunc.sh") lines)"
-    if mk_frame "$TMP/a13" "$HEADREV" && printf '\n\nclass AC9ProductionR11Unconfigured(Base):\n    pass\n' >> "$TMP/a13/$TCG" \
+    if mk_frame "$TMP/a13" "$FRAMEREV" && printf '\n\nclass AC9ProductionR11Unconfigured(Base):\n    pass\n' >> "$TMP/a13/$TCG" \
         && git -C "$TMP/a13" "${GITID[@]}" commit -q -am "synthetic later commit: a class named AC9ProductionR11Unconfigured comes back" \
-        && mk_frame "$TMP/a13p" "$HEADREV"; then
+        && mk_frame "$TMP/a13p" "$FRAMEREV"; then
         cp "$TMP/pre.trunc.sh" "$TMP/a13/docs/tasks/a13-pre.sh"; cp "$TMP/cur.trunc.sh" "$TMP/a13/docs/tasks/a13-cur.sh"; cp "$TMP/pre.trunc.sh" "$TMP/a13p/docs/tasks/a13-pre.sh"
         rc=$(run_in "$TMP/a13p" "$TMP/a13p.out" bash docs/tasks/a13-pre.sh)
-        expect "AC13.1 control: the pre-fix-round AC0 on plain HEAD" green "$rc" "$TMP/a13p.out" '^PASS  AC0\.12 ' '!^FAIL'
+        expect "AC13.1 control: the pre-fix-round AC0 on the plain fixed frame" green "$rc" "$TMP/a13p.out" '^PASS  AC0\.12 ' '!^FAIL'
         rc=$(run_in "$TMP/a13" "$TMP/a13o.out" bash docs/tasks/a13-pre.sh)
-        expect "AC13.2 the pre-fix-round AC0 on HEAD + one later commit" red "$rc" "$TMP/a13o.out" '^FAIL  AC0\.12 '
+        expect "AC13.2 the pre-fix-round AC0 on the fixed frame + one later commit" red "$rc" "$TMP/a13o.out" '^FAIL  AC0\.12 '
+        [ "$(grep -c '^FAIL' "$TMP/a13o.out")" = 1 ] && pass "AC13.2b AC0.12 is the ONLY FAIL line of that run" || fail "AC13.2b the pre-fix-round AC0 run has other FAIL lines: $(first_fail "$TMP/a13o.out")"
         rc=$(run_in "$TMP/a13" "$TMP/a13n.out" bash docs/tasks/a13-cur.sh)
-        expect "AC13.3 the current AC0 on HEAD + the same later commit" green "$rc" "$TMP/a13n.out" '^PASS  AC0\.12 ' '!^FAIL'
-    else fail "AC13.0b cannot build the HEAD + one later commit clone"; fi
+        expect "AC13.3 the current AC0 on the fixed frame + the same later commit" green "$rc" "$TMP/a13n.out" '^PASS  AC0\.12 ' '!^FAIL'
+    else fail "AC13.0b cannot build the fixed frame + one later commit clone"; fi
 else fail "AC13.0 cannot extract the AC0 section of the pre-fix-round or the current script"; fi
-# the later-branch fixtures built on HEAD accept a HEAD that already contains the later edit (a real later branch that did it) and still refuse an anchor that matches nothing
-if mk_later "$TMP/t1" "$HEADREV" tests/registry/test_hardening.py "$HARD_NEW" "$HARD_OLD" >/dev/null; then pass "AC13.4 mk_later on HEAD accepts a frame that already contains the later edit"; else fail "AC13.4 mk_later on HEAD refuses a frame that already contains the later edit"; fi
-if mk_later "$TMP/t2" "$HEADREV" tests/registry/test_hardening.py "no such anchor text xyzzy" "no such replacement xyzzy" >/dev/null; then fail "AC13.5 mk_later accepted an anchor that is in neither the old nor the new form"; else pass "AC13.5 positive control: an anchor in neither form is still refused"; fi
+# negative control: a fixture whose anchor is not in the frame is refused (an anchor that matches nothing must not silently build). The tolerance once added here for a frame that already holds the edit was reverted (Q12-A); AC14 is the fix.
+if mk_later "$TMP/t2" "$FRAMEREV" tests/registry/test_hardening.py "no such anchor text xyzzy" "no such replacement xyzzy" >/dev/null; then fail "AC13.5 mk_later accepted an anchor that is not in the frame"; else pass "AC13.5 positive control: an anchor that is not in the frame is refused"; fi
 
 # ---- AC14 (REVIEW-CHECKLIST item 12, review of 036420f finding 1): the later-branch fixtures are built on a FIXED frame (FRAMEREV), never on HEAD.
 # A fixture built on HEAD matches literal HEAD text ('"r11_identity": null', the ownership.md R11 sentence) and stops building the day Ludwig configures R11 or 008b rewords the sentence.
@@ -422,15 +419,15 @@ else fail "AC14.2 cannot build the later-main repository (FRAMEREV='${FRAMEREV:-
 
 # ==================================================================================================
 else
-section "AC4 mutations (each fixed check widened back to HEAD, on the later-branch merge on HEAD; red, and only that check)"
+section "AC4 mutations (each fixed check widened back to the frame's HEAD, on the later-branch merge on the fixed frame; red, and only that check)"
 mutate_run() {   # mutate_run LABEL FRAMEKIND(8|9|10|12) SCRIPTKEY OLD NEW RUNKIND ONLYREGEX FAILREGEX
     local label="$1" kind="$2" key="$3" old="$4" new="$5" run="$6" fr="$7" rc
     local d="$TMP/m-$kind-$RANDOM" blob
     case "$kind" in
-        8)  mk_later "$d" "$HEADREV" tests/registry/test_hardening.py "$HARD_OLD" "$HARD_NEW" ;;
-        9)  mk_later "$d" "$HEADREV" contracts/ownership.md "$OWN_OLD" "$OWN_NEW" ;;
-        10) mk_later "$d" "$HEADREV" config/r11-identity.json "$CFG_OLD" "$CFG_NEW" ;;
-        12) mk_later "$d" "$HEADREV" "$TCG" "$ADD_OLD" "$ADD_NEW" ;;
+        8)  mk_later "$d" "$FRAMEREV" tests/registry/test_hardening.py "$HARD_OLD" "$HARD_NEW" ;;
+        9)  mk_later "$d" "$FRAMEREV" contracts/ownership.md "$OWN_OLD" "$OWN_NEW" ;;
+        10) mk_later "$d" "$FRAMEREV" config/r11-identity.json "$CFG_OLD" "$CFG_NEW" ;;
+        12) mk_later "$d" "$FRAMEREV" "$TCG" "$ADD_OLD" "$ADD_NEW" ;;
     esac || { fail "$label cannot build the frame"; return; }
     blob="$NEWD/$key.sh"; [ "$key" = 039a ] && blob="$NEWD/039a.trunc.sh"
     cp "$blob" "$TMP/mut.sh"
@@ -448,10 +445,8 @@ mutate_run "AC4.m8 065 AC3.5 widened back to the HEAD clone's test_hardening.py"
     'blob "$FINAL" tests/registry/test_hardening.py > "$TMP/th-final.py"' 'cat "$TMP/head/tests/registry/test_hardening.py" > "$TMP/th-final.py"' 065 '^FAIL  AC3\.5 '
 mutate_run "AC4.m9 075 AC4 widened back to the HEAD clone's ownership.md" 9 075 \
     'G show "$FINAL:contracts/ownership.md" > "$C" 2>/dev/null' 'cp "$TMP/head/contracts/ownership.md" "$C"' 075 '^FAIL  contract text check failed'
-mutate_run "AC4.m10 039a r11-identity.json widened back to HEAD" 10 039a \
+mutate_run "AC4.m10/m11 039a r11-identity.json read widened back to HEAD (finding 10 and finding 11's moved assertion are this one line)" 10 039a \
     'G show "$FINAL:config/r11-identity.json"' 'git -C "$TMP/head" show HEAD:config/r11-identity.json' 039a '^FAIL  AC9 config/r11-identity.json'
-mutate_run "AC4.m11 039a moved AC9 assertion: the same line, widened (finding 11 is this check)" 10 039a \
-    'G show "$FINAL:config/r11-identity.json"' 'git -C "$TMP/head" show HEAD:config/r11-identity.json' 039a '^FAIL  AC9 config/r11-identity.json at'
 mutate_run "AC4.m12 039a class_check widened back to exact counts at HEAD" 12 039a \
     'elif [ -n "$missing" ]; then' 'elif [ "$ran" != "$2" ] || [ "$ok" != "$2" ]; then' 039a '^FAIL  AC2 positive controls: .*'
 fi
