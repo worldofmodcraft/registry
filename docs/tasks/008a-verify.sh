@@ -81,7 +81,10 @@ done
 for h in '^## What it accepts' '^## What it rejects' '^## Projection'; do
   grep -q -E "$h" docs/validation/manifest-reader.md && ok "manifest-reader.md has $h" || fail "manifest-reader.md lacks $h"
 done
-if git show "$FINAL:docs/contracts/README.md" 2>/dev/null | grep -q 'build-pipeline.md'; then ok "docs/contracts/README.md at 008a's pinned FINAL $FINAL points at the pipeline doc"; else fail "docs/contracts/README.md at pinned FINAL $FINAL does not point at the pipeline doc (or the pin is unreadable)"; fi
+if git show "$FINAL:docs/contracts/README.md" 2>/dev/null | grep -q 'build-pipeline.md'; then ok "docs/contracts/README.md points at the pipeline doc"; else fail "docs/contracts/README.md not updated"; fi
+# Task 103: the labels above are check ids that 062-verify.sh (AC6L.008a) guards, so they stay exactly as at 82fa564. The pin is shown
+# on this separate, non-check line (it carries no ok/FAIL prefix, so it is not a check id):
+echo "      (README check above reads docs/contracts/README.md at pinned FINAL $FINAL)"
 
 # 3. hygiene
 if git ls-files | grep -E '(__pycache__|\.pyc$)' >/dev/null; then fail "bytecode is tracked"; else ok "no __pycache__/.pyc tracked"; fi
