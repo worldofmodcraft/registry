@@ -1,6 +1,6 @@
 # Task 089c: registry closed scripts — part C (S1: 069 branch-tip pin)
 
-- **Mission:** SITE-V1 (verification integrity) — **Status:** review 2026-11-02 (phase 2 green; was in-progress 2026-10-28; cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A)
+- **Mission:** SITE-V1 (verification integrity) — **Status:** done 2026-11-02 (phase 2 green; was in-progress 2026-10-28; cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A)
 - **Agent / model:** qa-engineer (model per frontmatter) — **Budget:** small (one agent-session)
 - **Branch / worktree:** `task/089c-closed-verify-sweep-registry-c` / `~/wt/registry-task-089c`, from registry main `32c641b`
 - **Umbrella (authoritative for findings, pins, criteria, forbidden list, Q1-Q6):** `docs/tasks/089-closed-verify-sweep-registry.md` (copied
@@ -134,3 +134,7 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   - `--full` (first attempt passed `tools/dev/node_modules` as a relative path, so the children could not find ajv: exit 3, three AC4.0 messages; an operator error in my command, not a defect; phase-2 commands must give an ABSOLUTE node_modules path). Rerun with the absolute path: **exit 0**: AC9.1 complete NEW 069-verify.sh on the PIN_FINAL tree, branch deleted: exit 0 (about 16 min); AC9.2 the same merged with a later branch editing 034-verify.sh: exit 0; AC9.3 069-verify.sh --mutate: exit 0; ALL CHECKS PASSED. No `FAIL AC1.5` (S5) appeared: 0 occurrences.
   - Criteria status (umbrella 1-3, 6, 9, 11 restricted to S1): 1 red-first DONE (AC1.b, AC13.a, AC12.b); 2 pin = `79d5377^2` and no branch/HEAD read DONE (AC0); 3 deadbee FAIL, 0 skip words with positive control DONE; 4 mutate DONE; 5 item 12 DONE with the Q1 caveat (the unfixed script never goes red on a later merge: its defect is the silent skip, shown red-first by AC1.b); 6 PIN064 ancestor of origin/main DONE (AC0.4), deleted branch passes, bad pin fails; 9 quiet machine, complete 069 one at a time DONE; 11 scope on fixed SHAs incl. the first-parent pattern DONE. Findings during phase 2: (a) quiet_wait self-count (fixed, AC13), (b) AC4.m3 loop reused a directory (fixed), (c) relative node_modules path (usage). Status: review.
 
+- 2026-11-02 manager (session 14): manager fresh-clone re-run at `385325a` (after `npm ci`): `--own-only`, default, `--mutate` all exit 0, ALL CHECKS PASSED.
+  Delta review (Opus) PASS-WITH-AMENDMENTS, 0 blocking: booked LOW 1 (comment at :57 says REALHEAD is banner-only, but AC12.c builds from it and copies the
+  working-tree script — a red-first harness cell, own-only reads fixed SHAs), LOW 2 (AC13 should also show a second separately started 089c counts as "not
+  quiet"), LOW 3 (bound the ancestor walk), INFO 4-5. Status done; merged on the manager's authority (§7).
