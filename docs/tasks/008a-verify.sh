@@ -61,6 +61,16 @@ for pat in test_ac1_ test_ac2_ test_ac3_ test_ac4_ test_ac5_ test_ac6_ test_ac7_
   if [ "$P" -ge 1 ] && [ "$F" -eq 0 ]; then ok "$pat*: $P passing, 0 failing"; else fail "$pat*: $P passing, $F failing"; fi
 done
 
+# Task 062 (D-1): the check measures this task's OWN commit range, pinned at both ends, so it gives the same
+# answer on main, on any later branch and in any fresh clone. BASE is the registry commit the branch was cut
+# from (4d4a204, the merge of task 032). FINAL is the last commit on task/008a-pipeline-core before its merge
+# (registry PR #7: the second parent of merge a50daac, from `git log --first-parent` then `git rev-parse a50daac^2`).
+# An unreachable pin is a FAILURE naming the commit, never a skip.
+BASE=4d4a204fb7368db7947d86c9f0e9abe72bf7bc96
+FINAL=9ccb3ec3451cc3cd18be8b393d5e734734f5bad5
+# Task 089a1 (finding 5): the README check in section 2 is 008a's OWN change to docs/contracts/README.md, so it reads the README
+# blob at FINAL (`git show $FINAL:docs/contracts/README.md`), never the worktree or HEAD (REVIEW-CHECKLIST item 12). An unreadable
+# pin FAILS the check. Pins are full SHAs: BASE = `git merge-base a50daac^1 a50daac^2`, FINAL = `git rev-parse a50daac^2`.
 # 2. AC15 docs: each required section heading is present (prose is read by the reviewer)
 for h in '^## CLI' '^### Exit codes' '^### Outputs' '^## Design decisions' '^## The reference verifier' '^## SSRF note' '^## What is NOT verified' '^## Tests and verification'; do
   grep -q -E "$h" docs/pipeline/build-pipeline.md && ok "build-pipeline.md has $h" || fail "build-pipeline.md lacks $h"
@@ -71,7 +81,7 @@ done
 for h in '^## What it accepts' '^## What it rejects' '^## Projection'; do
   grep -q -E "$h" docs/validation/manifest-reader.md && ok "manifest-reader.md has $h" || fail "manifest-reader.md lacks $h"
 done
-grep -q 'build-pipeline.md' docs/contracts/README.md && ok "docs/contracts/README.md points at the pipeline doc" || fail "docs/contracts/README.md not updated"
+if git show "$FINAL:docs/contracts/README.md" 2>/dev/null | grep -q 'build-pipeline.md'; then ok "docs/contracts/README.md at 008a's pinned FINAL $FINAL points at the pipeline doc"; else fail "docs/contracts/README.md at pinned FINAL $FINAL does not point at the pipeline doc (or the pin is unreadable)"; fi
 
 # 3. hygiene
 if git ls-files | grep -E '(__pycache__|\.pyc$)' >/dev/null; then fail "bytecode is tracked"; else ok "no __pycache__/.pyc tracked"; fi
@@ -81,13 +91,7 @@ TMP_AFTER=$(ls -d "$RUNTMP"/wom008a-* 2>/dev/null | wc -l)
 # no key material tracked
 if git ls-files | grep -E '\.(key|pem)$|minisign\.key' >/dev/null; then fail "a key-like file is tracked"; else ok "no key-like file tracked"; fi
 # file scope: every changed path is inside the declared scope (needs the base ref; missing base = failure, not skip)
-# Task 062 (D-1): the check measures this task's OWN commit range, pinned at both ends, so it gives the same
-# answer on main, on any later branch and in any fresh clone. BASE is the registry commit the branch was cut
-# from (4d4a204, the merge of task 032). FINAL is the last commit on task/008a-pipeline-core before its merge
-# (registry PR #7: the second parent of merge a50daac, from `git log --first-parent` then `git rev-parse a50daac^2`).
-# An unreachable pin is a FAILURE naming the commit, never a skip.
-BASE=4d4a204
-FINAL=9ccb3ec
+# (the pins BASE and FINAL are defined above the docs checks; task 089a1 moved them there)
 PINS_OK=1
 for pin in "$BASE" "$FINAL"; do
   if ! git merge-base --is-ancestor "$pin" HEAD 2>/dev/null; then

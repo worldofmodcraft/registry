@@ -95,8 +95,12 @@ crit "schema        reuses schema_check; unsupported keyword is exit 2"    "test
 # (e009ef0, the merge of task 057); FINAL is the last commit on task/007a-registry-checkers-shape before its merge
 # (registry PR #10: the second parent of merge 3c94cf2, `git rev-parse 3c94cf2^2`). An unreachable pin is a FAILURE
 # naming the commit, never a skip.
-BASE=e009ef0
-FINAL=aaf4260
+# Task 089a1 (findings 1 and 2): the two README checks below are task 007a's OWN change to docs/contracts/README.md, so they
+# read the README blob at FINAL (`git show $FINAL:docs/contracts/README.md`), never the worktree or HEAD; a later task may
+# legitimately reword the README (REVIEW-CHECKLIST item 12). An unreadable pin FAILS both checks (no skip, no vacuous pass).
+# Pins are full 40-character SHAs: BASE = `git merge-base 3c94cf2^1 3c94cf2^2`, FINAL = `git rev-parse 3c94cf2^2`.
+BASE=e009ef0b28413700f0c41470f6e45905bf627cda
+FINAL=aaf426060338776a4556f35c1bb5cb6a20d65ea4
 PINS_OK=1
 for pin in "$BASE" "$FINAL"; do
   if ! git merge-base --is-ancestor "$pin" HEAD 2>/dev/null; then
@@ -114,8 +118,16 @@ if ls tests/registry | grep -q 'fixtures.*json'; then fail "tests/registry holds
 grep -q "057-transition-fixtures.json" tests/registry/support.py && ok "support.py reads the fixture file by path" || fail "support.py does not reference the fixture file"
 python3 tools/registry/cli.py --help | grep -q "never authorises a merge" && ok "CLI help documents that append-only alone is never a merge signal" || fail "CLI help lacks the authority warning"
 python3 tools/registry/cli.py --help | grep -q "2 usage or internal error" && ok "CLI help documents the three exit codes" || fail "CLI help lacks the exit codes"
-grep -q "tools/registry" docs/contracts/README.md && grep -q "task 039" docs/contracts/README.md && ok "criterion 12: docs/contracts/README.md updated (built vs still owed)" || fail "criterion 12: README not updated"
-if grep -n "task 007$" docs/contracts/README.md >/dev/null || grep -nE "task 007 +builds" docs/contracts/README.md >/dev/null; then fail "README still says task 007 builds the gates"; else ok "README no longer says task 007 builds the gates"; fi
+README_PATH=docs/contracts/README.md
+if README_TXT=$(git show "$FINAL:$README_PATH" 2>/dev/null) && [ -n "$README_TXT" ]; then
+  ok "$README_PATH is readable at 007a's pinned FINAL $FINAL (criterion 12 reads that copy, never HEAD)"
+else
+  README_TXT=""
+  fail "pinned commit $FINAL (or $README_PATH at it) is not readable: criterion 12 has no README to read"
+fi
+if printf '%s\n' "$README_TXT" | grep -q "tools/registry" && printf '%s\n' "$README_TXT" | grep -q "task 039"; then ok "criterion 12: docs/contracts/README.md at $FINAL updated (built vs still owed)"; else fail "criterion 12: README at $FINAL not updated (or unreadable)"; fi
+if [ -z "$README_TXT" ]; then fail "README-no-longer-says check cannot run: README at $FINAL unreadable (an empty input proves nothing)"
+elif printf '%s\n' "$README_TXT" | grep -n "task 007$" >/dev/null || printf '%s\n' "$README_TXT" | grep -nE "task 007 +builds" >/dev/null; then fail "README at $FINAL still says task 007 builds the gates"; else ok "README at $FINAL no longer says task 007 builds the gates"; fi
 # real exit codes through the real CLI (not only through unittest)
 RES=$(mktemp)
 echo '{"namespaces": {"mc": {}}}' > "$RES"
