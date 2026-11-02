@@ -1,6 +1,6 @@
 # Task 089a1: registry closed scripts — part A1 (README and namespace pins; findings 1-5, 7, 13)
 
-- **Mission:** SITE-V1 (verification integrity) — **Status:** in-progress 2026-10-28 (cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A)
+- **Mission:** SITE-V1 (verification integrity) — **Status:** review 2026-10-28 (cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A)
 - **Agent / model:** qa-engineer (model per frontmatter) — **Budget:** medium (≤ 3 agent-sessions)
 - **Branch / worktree:** `task/089a1-closed-verify-sweep-registry-a1` / `~/wt/registry-task-089a1`, from registry main `32c641b`
 - **Umbrella (authoritative for findings, pins, criteria, forbidden list, Q1-Q6):** `docs/tasks/089-closed-verify-sweep-registry.md` (copied
@@ -91,3 +91,13 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   the PRE-FIX script (blob at `47eb0558a55c28430b4ce9a2502b1ea7ce196a55`) must go red at AC11.2 (AC12.2), this script must pass (AC12.3); control with one ordinary extra commit on top: both pass (AC12.4/12.5). I cannot construct a failing cell from "one extra commit on top" alone, because the pre-fix script's own-only checks only used HEAD in the TIP<=HEAD ancestry, which an ordinary descendant satisfies; the squash-style main is the honest case where it breaks. The cell is WRITTEN-BUT-NOT-RUN.
   Fix commit: `0f51af29fa46e73c5d8f4cedeecf522e5a7044a1`. PIN_* unchanged (still valid: later commits lie outside BASE..TIP).
   The scripts edited in this part (007a/007b/008a): their own-change checks (README, size, scope, untouched-paths) read BASE/FINAL only. Remaining HEAD use there, unchanged and not own-change: `git merge-base --is-ancestor <pin> HEAD` (pin reachability, the "unreachable pin = FAIL" rule; holds on main because registry merges are merge commits, would fail after a squash merge: for the manager's attention) and live-property checks (suite, CLI help, hygiene).
+- 2026-11-02 qa-engineer PHASE 2 (machine released; sole verify runner; PYTHONDONTWRITEBYTECODE=1; `ps` showed no other *-verify.sh before every run, logged by the script to stderr and by hand before each step below).
+  Merged `origin/main` into the branch (`git merge --no-edit`, no conflicts): head `5fbd668ebbf0146bb9f351e1adf96c0c69214d88`; main did not touch any of the five source files (`git diff --stat` empty); PIN_TIP NOT re-pinned (own-change range BASE..TIP ends before the main merge, AC11.5 unchanged). No script change after the merge.
+  Fresh non-shallow clone (`git rev-parse --is-shallow-repository` = false) of https://github.com/worldofmodcraft/registry at that head. No node_modules needed (nothing here runs 062/065/067/039a), so no `npm ci`.
+  Fixtures confirmed: every frame of AC1/AC3/AC4/AC5 is built from FRAMEREV = PIN_FIX (a fixed commit), none from HEAD text a later change could alter; only AC12 uses the moving HEAD, deliberately.
+    `089a1-verify.sh --own-only`: exit 0, AC11.1-11.10 all PASS.
+    `089a1-verify.sh` (default): exit 0, ALL CHECKS PASSED: AC0 (31 PASS), AC1 (23 PASS, incl. 1.4a-e vacuity cells: OLD 007b green on the not-built README, NEW red), AC5 x5, AC3 x7 (deadbee red in all five; skip-word grep 0 hits + positive control), AC11 x22, AC12 x7 (pre-fix script red at AC11.2 on the squash-style clone, this script green, ordinary later commit green).
+    `089a1-verify.sh --mutate`: exit 0, AC4.m1, m2, m3, m4, m5, m7, m13 each PASS (red, and only that check).
+    `python3 -B -m unittest discover -s tests/registry -p test_hardening.py`: Ran 20 tests OK (exit 0); `-p test_classify.py`: Ran 19 tests OK (exit 0).
+    `007a-verify.sh`: exit 0, SUMMARY failed=0; `007b-verify.sh`: exit 0, SUMMARY failed=0; `008a-verify.sh`: exit 0, SUMMARY ran=207 failed=0 (each alone on plain HEAD).
+  No unexpected red; the harness needed no change; the S5 one-off (062 inside 067) was not exercised here (no 067 run). CRITERIA STATUS: umbrella 1-5, 9 (for A1's own scripts/tests, Q6 A) and 11 are DONE for findings 1-5, 7, 13, demonstrated by the runs above. Status set to review.
