@@ -25,3 +25,8 @@ their ancestor chain and pass inside 039a. Fix both scripts: exclude this proces
 ---
 # Task 106 log
 - 2026-11-03 manager (session 14): created after the hung 039a on main (stopped by the manager with TaskStop).
+- 2026-11-03/04 qa-engineer (phases 1+2): commits 41c1b06 (106-verify.sh, red first: OLD predicates list the ancestor zz-verify.sh, NEW not pinned -> 7 FAIL), f10a00a (fix: 089a1 `others()` and 089a2 `others_list()` now use 089e's PID/PPID shape; diff limited to those two functions, checked by AC3), b8fce76 (PIN_FIX=f10a00a recorded). Fresh non-shallow clone at b8fce76, `npm ci --prefix tools/dev`, absolute node_modules, PYTHONDONTWRITEBYTECODE=1, `ps` showed no verify/npm/node/pytest process before each run.
+  - `106-verify.sh`: exit 0 (8 checks: AC1 OLD red x2 / NEW quiet x2, AC2 control yy-verify.sh listed x2, AC3 x2).
+  - `089a1-verify.sh --own-only`: exit 0. `089a2-verify.sh --own-only`: exit 0.
+  - whole standalone `039a-verify.sh <NM>`: exit 0, ALL CHECKS PASSED; AC12 children (one at a time) all exit 0 on HEAD: 006 007a 007b 008a 008b1 008c 032 034 039b(--no-closed) 057 062 064 065 066 067 069 070 071 075 082 084 087 089a1 089a2 089b 089c 089d 089e 092 101 103 106. No child waited on its parent; the run finished in under the 7 h cap (spanned the date change).
+  - Note: a second concurrent run of 089a1/089a2 now counts as "other" (089e shape); previously excluded by name.
