@@ -1,6 +1,6 @@
 # Task 089a2: registry closed scripts — part A2 (finding 6, S2, S3)
 
-- **Mission:** SITE-V1 (verification integrity) — **Status:** review 2026-11-03 (all criteria demonstrated, see the last log entry); was in-progress 2026-10-28 (cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A)
+- **Mission:** SITE-V1 (verification integrity) — **Status:** done 2026-11-03 (all criteria demonstrated, see the last log entry); was in-progress 2026-10-28 (cut from umbrella 089 at dispatch, session 14; umbrella spec-approved 2026-10-26, parts per Q5 ★ A)
 - **Agent / model:** qa-engineer (model per frontmatter) — **Budget:** small (one agent-session)
 - **Branch / worktree:** `task/089a2-closed-verify-sweep-registry-a2` / `~/wt/registry-task-089a2`, from registry main `32c641b`
 - **Umbrella (authoritative for findings, pins, criteria, forbidden list, Q1-Q6):** `docs/tasks/089-closed-verify-sweep-registry.md` (copied
@@ -139,3 +139,8 @@ Same pattern as part B (`origin/task/089b-closed-verify-sweep-registry-b`, file 
   Earlier in this phase (log above): `--mutate` of 089a2-verify.sh rc=0 12/12, `057-verify.sh` whole rc=0 on HEAD and on the fixed-frame later-branch clone rc=0.
   CRITERIA (umbrella 1-5, 7, 9, 11 restricted to finding 6, S2, S3): 1 red first (AC1.6a/AC1.2a/AC1.S3a/AC1.F/AC1.Xb/AC1.Hb, fixtures before fixes: RED 42d7d46, RED2 4b8151b, RED3 fd9457f, RED4 5c39d87) DONE; 2 pins full 40-char, derived from merge e009ef0 (AC0.1-0.5) DONE; 3 deadbee = FAIL, 0 skip words (AC3) DONE; 4 mutations one per fixed check, red and only that check (12/12) DONE; 5 item-12 control (AC1.6c, AC5.1, 057 whole on the later-branch merge) DONE; 7 S3 header count derived and asserted (AC1.S3) DONE; 9 quiet machine, one script at a time, ps logged DONE; 11 scope on fixed SHAs (AC11, AC15) DONE. Q1-Q5 stay booked with their assumed options; Q3 option A was followed. Status: review.
 
+- 2026-11-03 manager (session 14): manager fresh-clone re-run at `45f72f3` (after `npm ci`, absolute node_modules): 089a2-verify `--own-only` and default exit 0
+  ALL CHECKS PASSED; **062-verify whole exit 0 (0 FAIL) and 070-verify whole exit 0 (0 FAIL) on the head that merges** (the cross-script rule after the 089a1
+  slip). Delta review (Opus) PASS-WITH-AMENDMENTS, 0 blocking: booked LOW (labels/header text still say "HEAD" for fixtures now on PIN_FINAL: lines 303, 317,
+  348, 403, 552, 19/24/27; phase-2 step 7 wording), INFO 1 (pin commit and second main merge checked by hand: clean), INFO 2 (AC1.X compares fixed blobs; the live
+  guard against pin-literal drift is 062 --mutate's `applies`). Status done; merged on the manager's authority (§7).
