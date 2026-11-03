@@ -5,6 +5,8 @@
   python3 -I docs/tasks/057-textchecks.py --old-present --rules FILE    positive control: every OLD sentence must be FOUND (run on the pre-change blob)
   python3 -I docs/tasks/057-textchecks.py --bless                       rewrite 057-pinned-sections.json from the current rules file
 
+--readme: the default (docs/contracts/README.md in the working copy) is for live use. 057-verify.sh passes the README blob AT
+057's pinned FINAL commit, because the "README names task 057" check measures 057's own change (task 089a2, finding 6).
 Exit code = number of failed checks. Text is normalised (markdown bold removed, whitespace collapsed)
 before matching so line wrapping does not matter; wording does. Sentences are pinned by FULL text.
 """

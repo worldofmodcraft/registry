@@ -6,11 +6,16 @@
 #   NODE_MODULES_DIR  a node_modules directory containing ajv 8. Resolution order (task 066): this argument, then env
 #                     WOM_NODE_MODULES, then <repo root>/tools/dev/node_modules (install: npm ci --prefix tools/dev).
 #                     Without ajv or node, criterion 4 prints SKIPPED and COUNTS AS A FAILURE: a skip never yields green.
-#   PLATFORM_REPO     env, default /home/ludwig/wom: the platform checkout that holds docs/decisions/0121-*.md
-#                     (criterion 1 reads it from that repo's main; the registry itself has no ADR directory).
-#   The scope and pre-change checks (T2, S1, S2, S4) measure this task's OWN commit range, pinned at both ends
-#   (task 062, D-1): BASE_COMMIT a50daac (the registry main this task was cut from) .. FINAL_COMMIT 3ab8f43 (the
-#   last commit on task/057-version-lifecycle before its merge, registry PR #8: `git rev-parse e009ef0^2`).
+#   ADR-0121 (criterion 1, A1): the registry has no ADR directory and its history never contained one, so the status is
+#                     read from a fixture blob embedded below (task 089a2, Q4 option B): the title and Status lines of
+#                     docs/decisions/0121-version-lifecycle-pending.md at PLATFORM-repo commit 84064c9cf1c858844477701f32f42adea438bc6b
+#                     (git blob 16064b511c422acca2d3f628bdfa7614c85440e6). No working copy is read and no path or env var names one.
+#   The scope and pre-change checks (T1 README, T2, S1, S2, S4) measure this task's OWN commit range, pinned at both ends
+#   (task 062, D-1; full 40-character SHAs since task 089a2): BASE_COMMIT a50daacd7e26235d1acdeadc7d19265f1b2d04e3 (the
+#   registry main this task was cut from) .. FINAL_COMMIT 3ab8f43d96013889a48e2005c57a75731b3d655f (the last commit on
+#   task/057-version-lifecycle before its merge, registry PR #8: `git rev-parse e009ef0b28413700f0c41470f6e45905bf627cda^2`).
+#   T1 hands 057-textchecks.py the docs/contracts/README.md blob AT FINAL_COMMIT (`--readme`), not the HEAD file: a later task
+#   may legitimately edit that README (task 089a2, finding 6). An unreadable pin is a FAIL, never a skip.
 #   The range never moves, so they answer the same on main, on any later branch and in a fresh clone.
 # Exit code: the number of failed checks. Every check that decides the verdict reads committed repository
 # content only and makes no network call.
@@ -22,21 +27,32 @@ pass() { echo "PASS  $1"; }
 fail() { echo "FAIL  $1"; FAILURES=$((FAILURES + 1)); }
 PY="python3 -I"
 NM="${1:-${WOM_NODE_MODULES:-$(git rev-parse --show-toplevel)/tools/dev/node_modules}}"
-PLATFORM_REPO="${PLATFORM_REPO:-/home/ludwig/wom}"
-BASE_COMMIT="a50daac"
-FINAL_COMMIT="3ab8f43"
+BASE_COMMIT="a50daacd7e26235d1acdeadc7d19265f1b2d04e3"
+FINAL_COMMIT="3ab8f43d96013889a48e2005c57a75731b3d655f"
 
 echo "== 1 authority (criterion 1)"
-ADR="$(git -C "$PLATFORM_REPO" show main:docs/decisions/0121-version-lifecycle-pending.md 2>/dev/null)"
-if [ -n "$ADR" ] && printf '%s\n' "$ADR" | grep -q 'Status:\*\* Accepted'; then pass "A1 ADR-0121 on $PLATFORM_REPO main carries 'Status:** Accepted'"; else fail "A1 ADR-0121 not found or not Accepted on $PLATFORM_REPO main"; fi
+# Fixture blob (task 089a2, Q4 option B): lines 1 and 3 of the ADR at platform commit 84064c9cf1c858844477701f32f42adea438bc6b.
+ADR="$(cat <<'ADR0121'
+# ADR-0121: Version lifecycle — a `pending` state, a one-time pipeline write-back, and a post-merge build
+- **Status:** Accepted (Ludwig, in session, 2026-10-15: "Stjärna på allt")
+ADR0121
+)"
+if printf '%s\n' "$ADR" | grep -q '^# ADR-0121:' && printf '%s\n' "$ADR" | grep -q 'Status:\*\* Accepted'; then pass "A1 ADR-0121 (fixture blob of platform commit 84064c9, ADR blob 16064b5) carries 'Status:** Accepted'"; else fail "A1 the ADR-0121 fixture does not carry 'Status:** Accepted'"; fi
 grep -q 'ADR-0121' docs/tasks/057-version-lifecycle-contract.md && pass "A2 the task file cites ADR-0121" || fail "A2 task file does not cite ADR-0121"
 
 echo "== 2 contract text (criteria 2, 7)"
-$PY docs/tasks/057-textchecks.py > /tmp/057-text.$$ ; rc=$?
-grep -c '^PASS' /tmp/057-text.$$ | sed 's/^/  passing text checks: /'
-grep '^FAIL' /tmp/057-text.$$
-[ $rc -eq 0 ] && pass "T1 all text checks (old sentences gone, new sentences present, sections equal their full-text pins)" || fail "T1 $rc text check(s) failed"
-rm -f /tmp/057-text.$$
+# The contracts README is read AT FINAL_COMMIT (task 089a2, finding 6): the "names task 057" check is 057's own change.
+README_BLOB="$(mktemp)"
+if git show "$FINAL_COMMIT:docs/contracts/README.md" > "$README_BLOB" 2>/dev/null && [ -s "$README_BLOB" ]; then
+  $PY docs/tasks/057-textchecks.py --readme "$README_BLOB" > /tmp/057-text.$$ ; rc=$?
+  grep -c '^PASS' /tmp/057-text.$$ | sed 's/^/  passing text checks: /'
+  grep '^FAIL' /tmp/057-text.$$
+  [ $rc -eq 0 ] && pass "T1 all text checks (old sentences gone, new sentences present, sections equal their full-text pins, README at $FINAL_COMMIT names task 057)" || fail "T1 $rc text check(s) failed"
+  rm -f /tmp/057-text.$$
+else
+  fail "T1 cannot read docs/contracts/README.md at pinned FINAL_COMMIT $FINAL_COMMIT: the text checks cannot run"
+fi
+rm -f "$README_BLOB"
 # An unreachable pin FAILS naming the commit; it never skips (MANAGER.md Section 2c rule 1).
 PINS_OK=1
 for pin in "$BASE_COMMIT" "$FINAL_COMMIT"; do
