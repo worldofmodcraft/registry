@@ -129,7 +129,23 @@ expect() {
 
 # quiet machine (criterion 9): no other docs/tasks/*-verify.sh process (this script and its own children are not counted: children are
 # only started after this predicate was evaluated, one at a time)
-others_list() { ps -eo pid,args 2>/dev/null | grep -E 'docs/tasks/[^ ]*-verify\.sh' | grep -v grep | grep -v '089a2-verify\.sh'; }
+others_list() {   # every *-verify.sh process that is not this script's PID, a descendant of it, or an ancestor of it (a second run of this script counts)
+    ps -eo pid=,ppid=,args= 2>/dev/null | awk -v me="$$" '
+        { pid=$1; ppid[pid]=$2; line[pid]=$0; ord[++n]=pid }
+        END {
+            for (i = 1; i <= n; i++) { pid = ord[i]; skip = (pid == me)
+                for (q = pid; !skip && q != "" && q > 1; q = ppid[q]) { if (q == me) skip = 1 }
+                if (!skip && line[pid] ~ /docs\/tasks\/[^ ]*-verify[.]sh/ && line[pid] !~ /awk -v me=/) { sub(/^ *[0-9]+ +[0-9]+ +/, "", line[pid]); print pid " " line[pid] }
+            }
+        }' | while read -r pid rest; do
+        anc=0; p=$$
+        while [ -n "$p" ] && [ "$p" -gt 1 ] 2>/dev/null; do
+            [ "$p" = "$pid" ] && { anc=1; break; }
+            nxt=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' '); [ "$nxt" = "$p" ] && break; p="$nxt"
+        done
+        [ "$anc" = 1 ] || printf '%s %s\n' "$pid" "$rest"
+    done
+}
 wait_quiet() {   # wait_quiet LABEL : log the ps reading; wait up to six hours; return 1 on timeout
     local waited=0 n
     n=$(others_list | grep -c .)

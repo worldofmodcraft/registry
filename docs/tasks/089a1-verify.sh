@@ -116,7 +116,23 @@ expect() {
 }
 
 # ---- quiet machine: log ps, wait until no other *-verify.sh runs (this script's own name excluded)
-others() { ps -eo pid,args 2>/dev/null | grep -E '[0-9A-Za-z]+-verify\.sh' | grep -v -e '089a1-verify\.sh' -e 'grep -E'; }
+others() {   # every *-verify.sh process that is not this script's PID, a descendant of it, or an ancestor of it (a second run of this script counts)
+    ps -eo pid=,ppid=,args= 2>/dev/null | awk -v me="$$" '
+        { pid=$1; ppid[pid]=$2; line[pid]=$0; ord[++n]=pid }
+        END {
+            for (i = 1; i <= n; i++) { pid = ord[i]; skip = (pid == me)
+                for (q = pid; !skip && q != "" && q > 1; q = ppid[q]) { if (q == me) skip = 1 }
+                if (!skip && line[pid] ~ /[0-9A-Za-z]+-verify[.]sh/ && line[pid] !~ /awk -v me=/) { sub(/^ *[0-9]+ +[0-9]+ +/, "", line[pid]); print pid " " line[pid] }
+            }
+        }' | while read -r pid rest; do
+        anc=0; p=$$
+        while [ -n "$p" ] && [ "$p" -gt 1 ] 2>/dev/null; do
+            [ "$p" = "$pid" ] && { anc=1; break; }
+            nxt=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' '); [ "$nxt" = "$p" ] && break; p="$nxt"
+        done
+        [ "$anc" = 1 ] || printf '%s %s\n' "$pid" "$rest"
+    done
+}
 wait_quiet() {   # wait_quiet LABEL : messages go to stderr (the callers capture stdout)
     local waited=0
     if [ -n "$(others)" ]; then
