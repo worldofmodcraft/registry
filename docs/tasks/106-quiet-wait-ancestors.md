@@ -1,6 +1,6 @@
 # Task 106: 089a1-verify.sh and 089a2-verify.sh must not count their own ancestors (039a deadlocks on registry main)
 
-- **Mission:** SITE-V1 (verification integrity) — **Status:** spec-approved 2026-11-03 (manager, session 14; repair of two scripts the manager merged; small, solo §2b)
+- **Mission:** SITE-V1 (verification integrity) — **Status:** done 2026-11-03 (manager, session 14; repair of two scripts the manager merged; small, solo §2b)
 - **Agent / model:** qa-engineer — **Budget:** small (plus one whole 039a run, hours)
 - **Branch / worktree:** `task/106-quiet-wait-ancestors` / `~/wt/registry-task-106`, from registry main `2939bef`
 
@@ -30,3 +30,7 @@ their ancestor chain and pass inside 039a. Fix both scripts: exclude this proces
   - `089a1-verify.sh --own-only`: exit 0. `089a2-verify.sh --own-only`: exit 0.
   - whole standalone `039a-verify.sh <NM>`: exit 0, ALL CHECKS PASSED; AC12 children (one at a time) all exit 0 on HEAD: 006 007a 007b 008a 008b1 008c 032 034 039b(--no-closed) 057 062 064 065 066 067 069 070 071 075 082 084 087 089a1 089a2 089b 089c 089d 089e 092 101 103 106. No child waited on its parent; the run finished in under the 7 h cap (spanned the date change).
   - Note: a second concurrent run of 089a1/089a2 now counts as "other" (089e shape); previously excluded by name.
+- 2026-11-04 manager (session 14): diff read (both functions now 089e's others() shape: excludes self, descendants, ancestors; unrelated runs still count).
+  Manager fresh-clone re-run at `262d16a`: 106-verify 0 failed; 089a1/089a2 `--own-only` ALL CHECKS PASSED. The author's whole 039a run left no saved output
+  file (results only in this log); the manager therefore runs the whole 039a on registry main after this merge and keeps the output — that run is the evidence for
+  criterion 4 on main. Status done; merged on the manager's authority (§7).
