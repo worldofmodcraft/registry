@@ -19,7 +19,7 @@ set -u
 set -o pipefail
 export PYTHONDONTWRITEBYTECODE=1
 OLDREF=2939befe157ea9e428ee4338d269f97c71eb23de
-PIN_FIX=""   # the commit that fixes the two predicates (40 hex), set in the commit that records the fix
+PIN_FIX="f10a00ae8dc14faf35b5ad82b5b6109000b3510f"   # the commit that fixes the two predicates (40 hex), set in the commit that records the fix
 
 FAILS=0
 pass() { printf 'PASS %s\n' "$1"; }
