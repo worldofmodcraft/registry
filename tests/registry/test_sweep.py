@@ -349,6 +349,8 @@ class ChildCleanup(unittest.TestCase):
         d = by_name(r)
         self.assertIsNone(d["t-verify.sh"]["exit"])
         self.assertEqual(d["t-verify.sh"]["error"], "timeout")
+        # the group is killed at the timeout, not when the 15 s sleeper happens to finish
+        self.assertLess(d["t-verify.sh"]["seconds"], 8)
         self.assertEqual(d["g-verify.sh"]["exit"], 0)
         self.assertFalse(alive(int((s.markers / "pid").read_text())), "the sleeping grandchild survived the timeout")
         self.assertEqual(s.clones(), [])
