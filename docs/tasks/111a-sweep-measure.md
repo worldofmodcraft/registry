@@ -44,3 +44,18 @@ Editing any existing verify script, workflow, tool or test; running a whole swee
 # Task 111a log
 - 2026-11-04 manager (session 15): spec written, gate passed solo.
 - 2026-11-04 implementer: tools/dev/sweep.py, tests/registry/test_sweep.py (19 tests, stubs only) and docs/tasks/111a-verify.sh done; FINAL=c18d6da. Verify default and --mutate green (7s). Additions beyond the spec's argument list: `--no-wait` (skips the quiet-wait; needed so tests on a shared machine do not block; the production run omits it), `nested_total` and `output_tail` (last 6 lines, non-zero scripts only) per script, `totals.nested_starts_total`, and the report is rewritten after every script so a hang loses nothing. `--list` needs no --nm/--out. The quiet-wait polls every 30 s for at most 6 h; on timeout the script is recorded with `error` and `exit: null` and counts as failed. Nested counting skips only the top-level process (PID match), so a script that runs itself recursively counts its inner starts. Real measurement not run (reserved for the manager after merge).
+- 2026-11-04 implementer (fix round, review findings 1-5): fixtures written FIRST and run against the pushed code (cf6e0e2), red output:
+  ```
+  ERROR: test_complete_report (test_sweep.ReportCompleteness.test_complete_report)
+  ERROR: test_partial_report_is_marked_incomplete (test_sweep.ReportCompleteness.test_partial_report_is_marked_incomplete)
+  ERROR: test_no_wait_never_calls_the_waiter (test_sweep.WaitLoop.test_no_wait_never_calls_the_waiter)
+  ERROR: test_timeout_records_error_and_null_exit (test_sweep.WaitLoop.test_timeout_records_error_and_null_exit)
+  ERROR: test_timeout_returns_false (test_sweep.WaitLoop.test_timeout_returns_false)
+  ERROR: test_wait_is_used_when_not_no_wait (test_sweep.WaitLoop.test_wait_is_used_when_not_no_wait)
+  ERROR: test_waits_until_quiet (test_sweep.WaitLoop.test_waits_until_quiet)
+  FAIL: test_env_unset_and_node_modules_is_a_real_directory (test_sweep.GateEnvironment.test_env_unset_and_node_modules_is_a_real_directory)
+  FAIL: test_untracked_files_in_the_clone_before_the_first_script_exit_2 (test_sweep.GateEnvironment.test_untracked_files_in_the_clone_before_the_first_script_exit_2)
+  Ran 28 tests in 1.836s
+  FAILED (failures=2, errors=7)
+  ```
+  Then fixed in sweep.py; 28 tests green. Changes: (1) report has `planned` (written to disk before the first script), `complete` (false until the last script is recorded), `finished` null until then; a test kills the driver mid-sweep and the file says complete=false. (2) per-script `waited_seconds`, top-level `quiet_wait` (false under --no-wait). (3) scripts run in 039a's environment: node_modules copied with `cp -a` into tools/dev/node_modules, WOM_NODE_MODULES and NODE_MODULES_DIR unset (the test sets both in the parent; the stub sees UNSET). (4) the driver exits 2 if the clone's `git status --porcelain` is non-empty before the first script (a stub without .gitignore proves it; the real repo ignores node_modules/). (5) wait_quiet/run_script take injected others_fn/sleep/waiter: tests for wait-until-quiet, timeout, error plus null exit, and the no_wait guard; the --mutate item 'quiet-wait guard removed' reddens test_no_wait_never_calls_the_waiter. FINAL re-pinned to 0bc7b8a. Findings 6 and 7: no change.

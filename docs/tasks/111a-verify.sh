@@ -18,7 +18,7 @@ set -u
 set -o pipefail
 
 BASE=428df021bf89738768bc2a13f82461479318ab35   # registry origin/main (task 008b-2 merged) the branch was cut from
-FINAL=dbf228bcbf68045f4ab149c9c24ec67ebd9eaaa6  # last commit that changes sweep.py or its tests (later commits: this script and the log only)
+FINAL=0bc7b8a2ee8f75ec7546f11e87dc50ba1d99ac05  # last commit that changes sweep.py or its tests (later commits: this script and the log only)
 
 MUTATE=0
 for a in "$@"; do
