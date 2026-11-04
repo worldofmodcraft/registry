@@ -4,6 +4,8 @@
     python3 tools/pipeline/build_version.py --entry <entry.json> --version <semver> \
         --workdir <empty dir> --key <minisign secret key file> --pubkey <public key file> \
         --out <dir> [--allow-local-source]
+    python3 tools/pipeline/build_version.py --entry <entry.json> --version <semver> \
+        --workdir <empty dir> --out <dir> --no-sign          # task 008b-2: the build job's mode
 
 Exit codes (never conflated, OPERATIONS.md):
     0  built
@@ -13,6 +15,9 @@ Exit codes (never conflated, OPERATIONS.md):
 The commit and source URL are read from the entry's version object; there is no commit argument.
 Outputs in --out: <tag>.tar.gz, <tag>.tar.gz.minisig, result.json, build.log.
 Pre-flight rejections (before any clone) leave --out untouched and report on stderr only.
+--no-sign (task 008b-2, design 8): no key is given or accepted (--key/--pubkey with --no-sign is an
+argparse error, exit 2, before any clone); --out holds <tag>.tar.gz, result.json ("signed": false, no
+artifact.signature or artifact.key_id) and build.log, and no .minisig. tools/pipeline/sign_built.py signs later.
 See docs/pipeline/build-pipeline.md.
 """
 
@@ -203,6 +208,13 @@ def make_plan(args) -> dict:
             "tarball_name": tarball_name, "sig_name": sig_name}
 
 
+def _built_at() -> str:
+    built_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if not _fullmatch(_PAT_PUBLISHED_AT, built_at):
+        raise PipelineError(f"internal error: built_at {built_at!r} violates the RFC 3339 pattern")
+    return built_at
+
+
 def execute(args, log: Log, plan: dict) -> dict:
     version = args.version
     work = os.path.abspath(args.workdir)
@@ -246,6 +258,17 @@ def execute(args, log: Log, plan: dict) -> dict:
 
     sha = sha256_file(tgz_path)
     log(f"source_sha256: {sha}")
+    if args.no_sign:
+        log("not signed (--no-sign): signing is a separate job (tools/pipeline/sign_built.py)")
+        return {
+            "id": plan["mod_id"], "version": version, "tag": plan["tag"],
+            "assets": {"tarball": plan["tarball_name"], "signature": plan["sig_name"]},
+            "built_at": _built_at(),
+            "artifact": {"source_sha256": sha},
+            "signed": False,
+            "scan": report,
+            "_files": (tgz_path, None),
+        }
     key_id = signing.pubkey_key_id(args.pubkey)
     sig_path = os.path.join(work, plan["sig_name"])
     signing.sign(args.key, tgz_path, sig_path, signing.trusted_comment(plan["mod_id"], version, sha))
@@ -257,9 +280,7 @@ def execute(args, log: Log, plan: dict) -> dict:
         raise PipelineError(f"the signature just produced fails the reference verifier ({exc}); is --key the secret half of --pubkey?")
     log(f"signed: key_id {key_id}; verified by minisign and the reference verifier")
 
-    built_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    if not _fullmatch(_PAT_PUBLISHED_AT, built_at):
-        raise PipelineError(f"internal error: built_at {built_at!r} violates the RFC 3339 pattern")
+    built_at = _built_at()
     return {
         "id": plan["mod_id"], "version": version, "tag": plan["tag"],
         "assets": {"tarball": plan["tarball_name"], "signature": plan["sig_name"]},
@@ -275,8 +296,9 @@ def parse_args(argv):
     p.add_argument("--entry", required=True, help="path to the mod's entry.json")
     p.add_argument("--version", required=True, help="semver of the version object to build")
     p.add_argument("--workdir", required=True, help="an existing EMPTY directory for scratch space")
-    p.add_argument("--key", required=True, help="PATH to the minisign secret key file (never key bytes)")
-    p.add_argument("--pubkey", required=True, help="PATH to the matching public key file")
+    p.add_argument("--key", help="PATH to the minisign secret key file (never key bytes); required unless --no-sign")
+    p.add_argument("--pubkey", help="PATH to the matching public key file; required unless --no-sign")
+    p.add_argument("--no-sign", action="store_true", help="build and archive only; accepts neither --key nor --pubkey (the build job holds no key)")
     p.add_argument("--out", required=True, help="output directory (must not exist or be empty)")
     p.add_argument("--allow-local-source", action="store_true", help="TESTS ONLY: accept file:// URLs and local paths; the workflow never passes this")
     # Test-only knobs. Defaults are the documented constants; tests lower them.
@@ -286,7 +308,13 @@ def parse_args(argv):
     p.add_argument("--max-uncompressed-bytes", type=int, default=archive.MAX_UNCOMPRESSED_BYTES, help=argparse.SUPPRESS)
     p.add_argument("--max-entries", type=int, default=archive.MAX_ENTRIES, help=argparse.SUPPRESS)
     p.add_argument("--scanner", default=DEFAULT_SCANNER, help=argparse.SUPPRESS)
-    return p.parse_args(argv)
+    args = p.parse_args(argv)
+    if args.no_sign:
+        if args.key is not None or args.pubkey is not None:
+            p.error("--no-sign does not accept --key or --pubkey (the build step holds no key)")
+    elif args.key is None or args.pubkey is None:
+        p.error("--key and --pubkey are required unless --no-sign is given")
+    return args
 
 
 def main(argv=None) -> int:
@@ -294,7 +322,8 @@ def main(argv=None) -> int:
     log = Log()
     started = False
     try:
-        for label, path in (("--entry", args.entry), ("--key", args.key), ("--pubkey", args.pubkey)):
+        needed = [("--entry", args.entry)] + ([] if args.no_sign else [("--key", args.key), ("--pubkey", args.pubkey)])
+        for label, path in needed:
             if not os.path.isfile(path):
                 raise PipelineError(f"{label} is not a readable file")
         plan = make_plan(args)   # pre-flight; raises before anything is created
@@ -307,7 +336,8 @@ def main(argv=None) -> int:
         tgz, sig = result.pop("_files")
         os.makedirs(args.out, exist_ok=True)
         shutil.copyfile(tgz, os.path.join(args.out, plan["tarball_name"]))
-        shutil.copyfile(sig, os.path.join(args.out, plan["sig_name"]))
+        if sig is not None:
+            shutil.copyfile(sig, os.path.join(args.out, plan["sig_name"]))
         log(f"result: exit 0 (built {plan['tag']})")
         with open(os.path.join(args.out, "result.json"), "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2, sort_keys=True)
