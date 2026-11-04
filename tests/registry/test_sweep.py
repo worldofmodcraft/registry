@@ -334,8 +334,8 @@ def alive(pid, wait=3.0):
         time.sleep(0.05)
 
 
-SLEEPER_WAIT = '#!/usr/bin/env bash\nsleep 60 &\necho $! > "$WOM_STUB_OUT/pid"\nwait\nexit 0\n'
-SLEEPER_LEAVE = '#!/usr/bin/env bash\nsleep 60 &\necho $! > "$WOM_STUB_OUT/pid"\nexit 0\n'
+SLEEPER_WAIT = '#!/usr/bin/env bash\nsleep 15 &\necho $! > "$WOM_STUB_OUT/pid"\nwait\nexit 0\n'
+SLEEPER_LEAVE = '#!/usr/bin/env bash\nsleep 15 &\necho $! > "$WOM_STUB_OUT/pid"\nexit 0\n'
 
 
 class ChildCleanup(unittest.TestCase):
