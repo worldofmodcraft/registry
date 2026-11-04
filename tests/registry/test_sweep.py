@@ -4,6 +4,8 @@ Run:  python3 -I -B -m unittest discover -s tests/registry -p 'test_sweep.py'
 No real closed verify script is run: every sweep below uses stub scripts and --only / --no-wait.
 """
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -256,14 +258,16 @@ class WaitLoop(unittest.TestCase):
     def test_waits_until_quiet(self):
         seq = [["1 busy"], ["1 busy"], []]
         slept = []
-        ok, waited = sweep.wait_quiet("x", others_fn=lambda: seq.pop(0), sleep=slept.append)
+        with contextlib.redirect_stdout(io.StringIO()):
+            ok, waited = sweep.wait_quiet("x", others_fn=lambda: seq.pop(0), sleep=slept.append)
         self.assertTrue(ok)
         self.assertEqual(waited, 2 * sweep.QUIET_POLL_S)
         self.assertEqual(slept, [sweep.QUIET_POLL_S] * 2)
 
     def test_timeout_returns_false(self):
         slept = []
-        ok, waited = sweep.wait_quiet("x", others_fn=lambda: ["1 busy"], sleep=slept.append)
+        with contextlib.redirect_stdout(io.StringIO()):
+            ok, waited = sweep.wait_quiet("x", others_fn=lambda: ["1 busy"], sleep=slept.append)
         self.assertFalse(ok)
         self.assertGreaterEqual(waited, sweep.QUIET_LIMIT_S)
 
