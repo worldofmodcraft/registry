@@ -8,7 +8,7 @@
 # machine) is a sequential run done by hand and logged; it is not repeated here.
 #
 # Usage:  docs/tasks/070-verify.sh [--mutate] [NODE_MODULES_DIR]      (any cwd inside the repository)
-#   (no flag)  AC1 (the re-pinned FINAL commits are the tasks' own), AC2 (all ten closed scripts are green on a throw-away
+#   (no flag)  AC1 (the re-pinned FINAL commits are the tasks' own), AC2 (all twelve closed scripts are green on a throw-away
 #              later branch that edits every file an own-change check guards; the named own-change checks pass there).
 #   --mutate   AC3 (widening a re-pinned range to HEAD, an unreachable pin, removing the ajv default: each red),
 #              AC4 (live-property checks still bite on HEAD-shaped breakage).
@@ -17,7 +17,7 @@
 # Everything runs on the COMMITTED state (HEAD) in temporary clones; the caller's worktree is never modified.
 # Network: only 066-verify.sh (it runs `npm ci` anonymously against the public registry, as its own spec says).
 # Exit code: the number of failed checks. Run it with no other registry suite running (it runs the scripts one at a time).
-# Requires: git, python3, node, plus everything the ten closed scripts require (minisign, ...).
+# Requires: git, python3, node, plus everything the twelve closed scripts require (minisign, ...).
 
 set -u
 set -o pipefail
