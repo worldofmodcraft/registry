@@ -24,6 +24,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -41,6 +42,7 @@ BASH_ENV_TEXT = (
 )
 QUIET_LIMIT_S = 21600
 QUIET_POLL_S = 30
+SCRIPT_TIMEOUT_S = 21600
 VERIFY_RE = re.compile(r"[0-9A-Za-z]+-verify[.]sh")
 
 
@@ -124,7 +126,15 @@ def count_nested(log_path, top_pid):
     return dict(sorted(counts.items()))
 
 
-def run_script(clone, name, nm, work, no_wait, waiter=wait_quiet):
+def kill_group(proc):
+    """SIGKILL the script's whole process group (it is its own session); a group that is already gone is fine."""
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
+def run_script(clone, name, nm, work, no_wait, waiter=wait_quiet, timeout=SCRIPT_TIMEOUT_S):
     rec = {"name": name, "seconds": None, "exit": None, "nested_starts": {}, "waited_seconds": 0}
     if not no_wait:
         quiet, rec["waited_seconds"] = waiter(name)
@@ -141,10 +151,21 @@ def run_script(clone, name, nm, work, no_wait, waiter=wait_quiet):
     outfile = work / (name + ".out")
     t0 = time.monotonic()
     with open(outfile, "wb") as fh:
-        proc = subprocess.Popen(cmd, cwd=clone, env=env, stdin=subprocess.DEVNULL, stdout=fh, stderr=subprocess.STDOUT)
-        proc.wait()
+        proc = subprocess.Popen(cmd, cwd=clone, env=env, stdin=subprocess.DEVNULL, stdout=fh, stderr=subprocess.STDOUT,
+                                start_new_session=True)
+        timed_out = False
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+        finally:
+            # timeout, interrupt, exception or a normal exit that left background children: nothing survives the script
+            kill_group(proc)
+            proc.wait()
     rec["seconds"] = round(time.monotonic() - t0, 4)
-    rec["exit"] = proc.returncode
+    rec["exit"] = None if timed_out else proc.returncode
+    if timed_out:
+        rec["error"] = "timeout"
     rec["nested_starts"] = count_nested(log, proc.pid)
     rec["nested_total"] = sum(rec["nested_starts"].values())
     if rec["exit"] != 0:
@@ -176,11 +197,16 @@ def main(argv):
     ap.add_argument("--out", help="report file, outside the repository")
     ap.add_argument("--only", help="comma-separated basenames to run (tests)")
     ap.add_argument("--list", action="store_true", help="print the scripts and exit")
+    ap.add_argument("--script-timeout", type=float, default=SCRIPT_TIMEOUT_S, metavar="SECONDS",
+                    help="kill a script's process group after this many seconds and record error=timeout, exit=null (default 21600)")
     ap.add_argument("--no-wait", action="store_true", help="skip the quiet-machine wait (tests only)")
     try:
         a = ap.parse_args(argv)
     except SystemExit as e:
         return 2 if e.code else 0
+    def on_term(signum, frame):
+        raise SystemExit(128 + signum)  # unwinds through run()'s finally: the script's group is killed, the clone removed
+    signal.signal(signal.SIGTERM, on_term)
     try:
         return run(a)
     except EnvError as e:
@@ -203,6 +229,10 @@ def run(a):
     if not a.nm or not a.out:
         raise EnvError("--nm and --out are required")
     nm, out = Path(a.nm), Path(a.out)
+    if a.script_timeout <= 0:
+        raise EnvError("--script-timeout must be positive")
+    if nm.is_absolute():
+        nm = Path(os.path.realpath(nm))  # a symlinked --nm would make `cp -a` copy the link
     if not nm.is_absolute() or not (nm / "ajv").is_dir():
         raise EnvError("--nm must be an absolute path of a directory containing ajv (npm ci --prefix tools/dev): %s" % a.nm)
     out = out.resolve()
@@ -246,6 +276,8 @@ def run(a):
             "started": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "finished": None,
             "complete": False,
+            "measured": [],
+            "unmeasured": [],
             "quiet_wait": not a.no_wait,
             "planned": todo,
             "nested_visibility": NESTED_VISIBILITY,
@@ -256,9 +288,11 @@ def run(a):
         write_report(out, report)  # `planned` is on disk before the first script runs
         for n in todo:
             print("run   %s" % n, flush=True)
-            rec = run_script(clone, n, nm, work, a.no_wait)
+            rec = run_script(clone, n, nm, work, a.no_wait, timeout=a.script_timeout)
             report["scripts"].append(rec)
             report["totals"] = totals(report["scripts"])
+            report["measured"] = [s["name"] for s in report["scripts"] if s["exit"] is not None]
+            report["unmeasured"] = [s["name"] for s in report["scripts"] if s["exit"] is None]
             if len(report["scripts"]) == len(todo):
                 report["complete"] = True
                 report["finished"] = datetime.now(timezone.utc).isoformat(timespec="seconds")

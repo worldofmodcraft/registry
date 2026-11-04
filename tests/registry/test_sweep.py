@@ -47,17 +47,39 @@ class Stub:
         (self.nm / "ajv" / "package.json").write_text("{}\n")
         self.out = self.dir / "report.json"
         self.markers = self.dir / "markers"
+        self.tmp = self.dir / "tmp"
+        self.tmp.mkdir()
+        test.addCleanup(self.reap)
         self.markers.mkdir()
         subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
         subprocess.run(GIT + ["-C", str(self.repo), "add", "-A"], check=True)
         subprocess.run(GIT + ["-C", str(self.repo), "commit", "-q", "-m", "stub"], check=True)
 
-    def run(self, *args, nm=None, out=None, use_defaults=True):
+    def cmd(self, args, nm=None, out=None, use_defaults=True):
         cmd = [sys.executable, "-I", "-B", str(self.repo / "tools" / "dev" / "sweep.py")]
         if use_defaults:
             cmd += ["--nm", str(nm or self.nm), "--out", str(out or self.out), "--no-wait"]
-        env = dict(os.environ, WOM_STUB_OUT=str(self.markers), WOM_NODE_MODULES="/nonexistent/leak", NODE_MODULES_DIR="/nonexistent/leak2")
-        return subprocess.run(cmd + list(args), capture_output=True, text=True, env=env, cwd=str(self.dir))
+        return cmd + list(args)
+
+    def env(self):
+        # TMPDIR is this stub's own directory: the driver's wom-sweep.* clone never lands in the real /tmp
+        return dict(os.environ, TMPDIR=str(self.tmp), WOM_STUB_OUT=str(self.markers),
+                    WOM_NODE_MODULES="/nonexistent/leak", NODE_MODULES_DIR="/nonexistent/leak2")
+
+    def run(self, *args, nm=None, out=None, use_defaults=True):
+        return subprocess.run(self.cmd(args, nm, out, use_defaults), capture_output=True, text=True, env=self.env(), cwd=str(self.dir))
+
+    def reap(self):
+        """Cleanup: a sleeper recorded by a stub that a (mutated) driver failed to kill is this test's own process; stop it."""
+        import signal
+        try:
+            pid = int((self.markers / "pid").read_text())
+            os.kill(pid, signal.SIGKILL)
+        except (FileNotFoundError, ValueError, ProcessLookupError):
+            pass
+
+    def clones(self):
+        return sorted(self.tmp.glob("wom-sweep.*"))
 
     def report(self):
         return json.loads(self.out.read_text())
@@ -250,6 +272,8 @@ class ReportCompleteness(unittest.TestCase):
         self.assertIs(r["complete"], False)
         self.assertIsNone(r["finished"])
         self.assertEqual([x["name"] for x in r["scripts"]], ["a-verify.sh"])
+        # finding C: the SIGKILLed driver leaves its clone, but only inside this test's own TMPDIR (removed with the stub)
+        self.assertEqual(len(s.clones()), 1)
 
 
 class WaitLoop(unittest.TestCase):
@@ -292,6 +316,96 @@ class WaitLoop(unittest.TestCase):
         rec = sweep.run_script(s.repo, "a-verify.sh", s.nm, s.dir, False, waiter=lambda label: calls.append(label) or (True, 7))
         self.assertEqual(calls, ["a-verify.sh"])
         self.assertEqual(rec["waited_seconds"], 7)
+
+
+def alive(pid, wait=3.0):
+    """True if the process still exists (not a zombie) after up to `wait` seconds of polling."""
+    import time
+    end = time.monotonic() + wait
+    while True:
+        try:
+            state = Path("/proc/%d/stat" % pid).read_text().rsplit(")", 1)[1].split()[0]
+        except (FileNotFoundError, ProcessLookupError):
+            return False
+        if state in ("Z", "X"):
+            return False
+        if time.monotonic() > end:
+            return True
+        time.sleep(0.05)
+
+
+SLEEPER_WAIT = '#!/usr/bin/env bash\nsleep 60 &\necho $! > "$WOM_STUB_OUT/pid"\nwait\nexit 0\n'
+SLEEPER_LEAVE = '#!/usr/bin/env bash\nsleep 60 &\necho $! > "$WOM_STUB_OUT/pid"\nexit 0\n'
+
+
+class ChildCleanup(unittest.TestCase):
+    """Finding A: scripts run in their own process group; timeout, normal exit and SIGTERM leave no survivor."""
+
+    def test_timeout_kills_the_group_and_records_it(self):
+        s = Stub(self, {"t-verify.sh": SLEEPER_WAIT, "g-verify.sh": GREEN})
+        p = s.run("--script-timeout", "1")
+        self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+        r = s.report()
+        d = by_name(r)
+        self.assertIsNone(d["t-verify.sh"]["exit"])
+        self.assertEqual(d["t-verify.sh"]["error"], "timeout")
+        self.assertEqual(d["g-verify.sh"]["exit"], 0)
+        self.assertFalse(alive(int((s.markers / "pid").read_text())), "the sleeping grandchild survived the timeout")
+        self.assertEqual(s.clones(), [])
+
+    def test_grandchild_left_behind_by_a_finished_script_is_killed(self):
+        s = Stub(self, {"l-verify.sh": SLEEPER_LEAVE})
+        p = s.run()
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertFalse(alive(int((s.markers / "pid").read_text())), "a grandchild survived its script")
+
+    def test_sigterm_to_the_driver_leaves_no_child_and_no_clone(self):
+        import signal
+        import time
+        s = Stub(self, {"t-verify.sh": SLEEPER_WAIT})
+        proc = subprocess.Popen(s.cmd([]), env=s.env(), cwd=str(s.dir), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.addCleanup(proc.wait)
+        pidfile = s.markers / "pid"
+        end = time.monotonic() + 20
+        while not (pidfile.exists() and pidfile.read_text().strip()):
+            self.assertLess(time.monotonic(), end, "the stub never started")
+            time.sleep(0.05)
+        child = int(pidfile.read_text())
+        proc.send_signal(signal.SIGTERM)
+        proc.wait(timeout=20)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertFalse(alive(child), "the script's child survived SIGTERM to the driver")
+        self.assertEqual(s.clones(), [])
+
+
+class Unmeasured(unittest.TestCase):
+    """Finding B: complete=true does not hide scripts that were not measured (exit null)."""
+
+    def test_timed_out_script_is_unmeasured_and_complete_stays_true(self):
+        s = Stub(self, {"t-verify.sh": SLEEPER_WAIT, "g-verify.sh": GREEN})
+        s.run("--script-timeout", "1")
+        r = s.report()
+        self.assertIs(r["complete"], True)
+        self.assertEqual(r["unmeasured"], ["t-verify.sh"])
+        self.assertEqual(r["measured"], ["g-verify.sh"])
+
+    def test_all_measured(self):
+        s = Stub(self, {"g-verify.sh": GREEN})
+        s.run()
+        r = s.report()
+        self.assertEqual((r["measured"], r["unmeasured"]), (["g-verify.sh"], []))
+
+
+class SymlinkedNm(unittest.TestCase):
+    """Finding D: a symlinked --nm is resolved, so the clone gets a real directory."""
+
+    def test_symlinked_nm_gives_a_real_directory(self):
+        s = Stub(self, {"e-verify.sh": ENVPROBE})
+        link = s.dir / "nm-link"
+        os.symlink(s.nm, link)
+        p = s.run(nm=link)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertEqual((s.markers / "nm").read_text().strip(), "real")
 
 
 class QuietWait(unittest.TestCase):
