@@ -180,3 +180,7 @@ Workflow (without the write-back job, push-gated) + `sign_built.py` + `handoff.p
   - Unit suite `python3 -B -m unittest discover -s tests/pipeline`: **exit 0**, `Ran 238 tests ... OK`.
   - Cross-script: `bash docs/tasks/039a-verify.sh <NM>`: **exit 0**, start 2026-11-04T09:13:26, end about 16:32 (7 h 19 min total, no single child over 7 h), 0 `FAIL`, 83 `PASS`, last lines `PASS  106-verify.sh exits 0 on HEAD`, `== RESULT ==`, `ALL CHECKS PASSED`.
   - [script] criteria stay done; [live] 7, 8, 10, 11 and the 25 live clause stay pending. Status: review.
+- 2026-11-04 manager (session 14): manager fresh-clone re-run at `d0daee8` (main merged in): `008b2-verify.sh` SUMMARY failed=0; `--mutate` SUMMARY mutate failed=0, 41
+  red. The author's whole 039a on the merged head: 83 PASS, 0 FAIL (cross-script rule). Static security review + delta review PASS-WITH-AMENDMENTS, all fixed.
+  Ludwig approved the merge ("Merge", 2026-11-03). [live] criteria 7, 8, 10, 11 and 25's live clause: pending the dry-run dispatch after merge. Status done for the
+  [script] part; merged by the manager.
