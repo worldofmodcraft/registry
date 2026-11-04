@@ -85,26 +85,28 @@ def others_from(ps_text, me):
     return result
 
 
-def others():
+def others():  # noqa: D401
     r = subprocess.run(["ps", "-eo", "pid=,ppid=,args="], capture_output=True, text=True)
     if r.returncode != 0 or not r.stdout.strip():
         raise EnvError("ps failed (exit %d): %s" % (r.returncode, r.stderr.strip()[:200]))
     return others_from(r.stdout, os.getpid())
 
 
-def wait_quiet(label):
+def wait_quiet(label, others_fn=None, sleep=time.sleep):
+    """Block until no other *-verify.sh runs. Returns (quiet, waited_seconds); quiet is False after QUIET_LIMIT_S."""
+    others_fn = others_fn or others
     waited = 0
     while True:
-        o = others()
+        o = others_fn()
         if not o:
             print("ps    %s: no other *-verify.sh process running (waited %ds)" % (label, waited), flush=True)
-            return True
+            return True, waited
         print("ps    %s: waiting, %d other process(es):" % (label, len(o)), flush=True)
         for line in o:
             print("        " + line[:160], flush=True)
         if waited >= QUIET_LIMIT_S:
-            return False
-        time.sleep(QUIET_POLL_S)
+            return False, waited
+        sleep(QUIET_POLL_S)
         waited += QUIET_POLL_S
 
 
@@ -122,15 +124,17 @@ def count_nested(log_path, top_pid):
     return dict(sorted(counts.items()))
 
 
-def run_script(clone, name, nm, work, no_wait):
-    rec = {"name": name, "seconds": None, "exit": None, "nested_starts": {}}
-    if not no_wait and not wait_quiet(name):
-        rec["error"] = "another *-verify.sh kept running for six hours"
-        return rec
+def run_script(clone, name, nm, work, no_wait, waiter=wait_quiet):
+    rec = {"name": name, "seconds": None, "exit": None, "nested_starts": {}, "waited_seconds": 0}
+    if not no_wait:
+        quiet, rec["waited_seconds"] = waiter(name)
+        if not quiet:
+            rec["error"] = "another *-verify.sh kept running for six hours"
+            return rec
     log = work / (name + ".nested.log")
     env = dict(os.environ)
-    env.pop("NODE_MODULES_DIR", None)
-    env["WOM_NODE_MODULES"] = str(nm)
+    env.pop("NODE_MODULES_DIR", None)  # 039a runs `env -u WOM_NODE_MODULES -u NODE_MODULES_DIR bash "$f"`
+    env.pop("WOM_NODE_MODULES", None)
     env["WOM_SWEEP_LOG"] = str(log)
     env["BASH_ENV"] = str(work / "bash_env.sh")
     cmd = ["bash", str(clone / "docs" / "tasks" / name)] + EXTRA_ARGS.get(name, [])
@@ -230,23 +234,34 @@ def run(a):
         if chead != head:
             raise EnvError("clone HEAD %s differs from source HEAD %s" % (chead, head))
         (clone / "tools" / "dev").mkdir(parents=True, exist_ok=True)
-        os.symlink(nm, clone / "tools" / "dev" / "node_modules")
+        r = subprocess.run(["cp", "-a", str(nm), str(clone / "tools" / "dev" / "node_modules")], capture_output=True, text=True)
+        if r.returncode != 0:
+            raise EnvError("cp -a node_modules failed: %s" % r.stderr.strip()[:200])
+        dirty = subprocess.run(["git", "-C", str(clone), "status", "--porcelain"], capture_output=True, text=True)
+        if dirty.returncode != 0 or dirty.stdout.strip():
+            raise EnvError("clone is not clean before the first script (git status --porcelain): %s" % (dirty.stdout.strip()[:200] or dirty.stderr.strip()[:200]))
         (work / "bash_env.sh").write_text(BASH_ENV_TEXT)
         report = {
             "head": head,
             "started": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "finished": None,
+            "complete": False,
+            "quiet_wait": not a.no_wait,
+            "planned": todo,
             "nested_visibility": NESTED_VISIBILITY,
             "scripts": [],
             "skipped": skipped,
             "totals": totals([]),
         }
+        write_report(out, report)  # `planned` is on disk before the first script runs
         for n in todo:
             print("run   %s" % n, flush=True)
             rec = run_script(clone, n, nm, work, a.no_wait)
             report["scripts"].append(rec)
             report["totals"] = totals(report["scripts"])
-            report["finished"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            if len(report["scripts"]) == len(todo):
+                report["complete"] = True
+                report["finished"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
             write_report(out, report)
             print("done  %s exit=%s seconds=%s nested=%s" % (n, rec["exit"], rec["seconds"], rec.get("nested_total")), flush=True)
         failed = [s["name"] for s in report["scripts"] if s["exit"] != 0]

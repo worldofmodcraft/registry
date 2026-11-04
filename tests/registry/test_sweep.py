@@ -29,7 +29,7 @@ RUNNER = '#!/usr/bin/env bash\nbash "$(dirname "$0")/a-verify.sh"\nbash "$(dirna
 class Stub:
     """A throwaway git repository holding a copy of sweep.py and the given verify scripts."""
 
-    def __init__(self, test, scripts):
+    def __init__(self, test, scripts, gitignore=True):
         self.dir = Path(tempfile.mkdtemp(prefix="sweep-test."))
         test.addCleanup(shutil.rmtree, self.dir, True)
         self.repo = self.dir / "repo"
@@ -38,8 +38,11 @@ class Stub:
         shutil.copy(SWEEP_SRC, self.repo / "tools" / "dev" / "sweep.py")
         for name, text in scripts.items():
             (self.repo / "docs" / "tasks" / name).write_text(text)
+        if gitignore:
+            (self.repo / ".gitignore").write_text("node_modules/\n")
         self.nm = self.dir / "nm"
         (self.nm / "ajv").mkdir(parents=True)
+        (self.nm / "ajv" / "package.json").write_text("{}\n")
         self.out = self.dir / "report.json"
         self.markers = self.dir / "markers"
         self.markers.mkdir()
@@ -51,7 +54,7 @@ class Stub:
         cmd = [sys.executable, "-I", "-B", str(self.repo / "tools" / "dev" / "sweep.py")]
         if use_defaults:
             cmd += ["--nm", str(nm or self.nm), "--out", str(out or self.out), "--no-wait"]
-        env = dict(os.environ, WOM_STUB_OUT=str(self.markers))
+        env = dict(os.environ, WOM_STUB_OUT=str(self.markers), WOM_NODE_MODULES="/nonexistent/leak", NODE_MODULES_DIR="/nonexistent/leak2")
         return subprocess.run(cmd + list(args), capture_output=True, text=True, env=env, cwd=str(self.dir))
 
     def report(self):
@@ -193,6 +196,98 @@ class ListReal(unittest.TestCase):
         self.assertEqual(lines[-1], "%d scripts, 1 skipped" % len(want))
         self.assertIn("039a-verify.sh  [skipped: it is the sweep]", lines)
         self.assertIn("039b-verify.sh  args: --no-closed", lines)
+
+
+ENVPROBE = (
+    '#!/usr/bin/env bash\n'
+    'echo "${WOM_NODE_MODULES-UNSET}/${NODE_MODULES_DIR-UNSET}" > "$WOM_STUB_OUT/env"\n'
+    'if [ -d tools/dev/node_modules ] && [ ! -L tools/dev/node_modules ] && [ -d tools/dev/node_modules/ajv ]; then echo real > "$WOM_STUB_OUT/nm"; else echo bad > "$WOM_STUB_OUT/nm"; fi\n'
+    'exit 0\n'
+)
+
+
+class GateEnvironment(unittest.TestCase):
+    """Finding 3/4: scripts get 039a's environment: node_modules copied (cp -a), WOM_NODE_MODULES and NODE_MODULES_DIR unset."""
+
+    def test_env_unset_and_node_modules_is_a_real_directory(self):
+        s = Stub(self, {"e-verify.sh": ENVPROBE})
+        p = s.run()
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertEqual((s.markers / "env").read_text().strip(), "UNSET/UNSET")
+        self.assertEqual((s.markers / "nm").read_text().strip(), "real")
+
+    def test_untracked_files_in_the_clone_before_the_first_script_exit_2(self):
+        s = Stub(self, {"a-verify.sh": GREEN}, gitignore=False)
+        p = s.run()
+        self.assertEqual(p.returncode, 2, p.stdout + p.stderr)
+        self.assertIn("porcelain", p.stderr)
+        self.assertFalse((s.markers / "ran").exists())
+
+
+class ReportCompleteness(unittest.TestCase):
+    """Findings 1/2: the report says whether it is complete and whether the quiet-wait was on."""
+
+    def test_complete_report(self):
+        s = Stub(self, {"a-verify.sh": GREEN, "c-verify.sh": RUNNER})
+        s.run()
+        r = s.report()
+        self.assertEqual(r["planned"], ["a-verify.sh", "c-verify.sh"])
+        self.assertIs(r["complete"], True)
+        self.assertTrue(r["finished"])
+        self.assertIs(r["quiet_wait"], False)
+        for x in r["scripts"]:
+            self.assertEqual(x["waited_seconds"], 0)
+
+    def test_partial_report_is_marked_incomplete(self):
+        # the second script kills the driver (its parent) mid-sweep: the report written after script 1 must say incomplete
+        killer = '#!/usr/bin/env bash\nkill -9 $PPID\nexit 0\n'
+        s = Stub(self, {"a-verify.sh": GREEN, "b-verify.sh": killer, "c-verify.sh": GREEN})
+        s.run()
+        r = s.report()
+        self.assertEqual(r["planned"], ["a-verify.sh", "b-verify.sh", "c-verify.sh"])
+        self.assertIs(r["complete"], False)
+        self.assertIsNone(r["finished"])
+        self.assertEqual([x["name"] for x in r["scripts"]], ["a-verify.sh"])
+
+
+class WaitLoop(unittest.TestCase):
+    """Finding 5: the wait loop, its timeout and the no_wait guard, with injected others() and sleep."""
+
+    def test_waits_until_quiet(self):
+        seq = [["1 busy"], ["1 busy"], []]
+        slept = []
+        ok, waited = sweep.wait_quiet("x", others_fn=lambda: seq.pop(0), sleep=slept.append)
+        self.assertTrue(ok)
+        self.assertEqual(waited, 2 * sweep.QUIET_POLL_S)
+        self.assertEqual(slept, [sweep.QUIET_POLL_S] * 2)
+
+    def test_timeout_returns_false(self):
+        slept = []
+        ok, waited = sweep.wait_quiet("x", others_fn=lambda: ["1 busy"], sleep=slept.append)
+        self.assertFalse(ok)
+        self.assertGreaterEqual(waited, sweep.QUIET_LIMIT_S)
+
+    def test_timeout_records_error_and_null_exit(self):
+        d = Path(tempfile.mkdtemp(prefix="sweep-w."))
+        self.addCleanup(shutil.rmtree, d, True)
+        rec = sweep.run_script(d, "x-verify.sh", d, d, False, waiter=lambda label: (False, 99))
+        self.assertIsNone(rec["exit"])
+        self.assertIn("six hours", rec["error"])
+        self.assertEqual(rec["waited_seconds"], 99)
+
+    def test_no_wait_never_calls_the_waiter(self):
+        s = Stub(self, {"a-verify.sh": GREEN})
+        calls = []
+        rec = sweep.run_script(s.repo, "a-verify.sh", s.nm, s.dir, True, waiter=lambda label: calls.append(label) or (True, 0))
+        self.assertEqual(calls, [])
+        self.assertEqual(rec["exit"], 0)
+
+    def test_wait_is_used_when_not_no_wait(self):
+        s = Stub(self, {"a-verify.sh": GREEN})
+        calls = []
+        rec = sweep.run_script(s.repo, "a-verify.sh", s.nm, s.dir, False, waiter=lambda label: calls.append(label) or (True, 7))
+        self.assertEqual(calls, ["a-verify.sh"])
+        self.assertEqual(rec["waited_seconds"], 7)
 
 
 class QuietWait(unittest.TestCase):
