@@ -18,7 +18,7 @@ set -u
 set -o pipefail
 
 BASE=428df021bf89738768bc2a13f82461479318ab35   # registry origin/main (task 008b-2 merged) the branch was cut from
-FINAL=0bc7b8a2ee8f75ec7546f11e87dc50ba1d99ac05  # last commit that changes sweep.py or its tests (later commits: this script and the log only)
+FINAL=4f2130b9489db628f0416003ecba1d3d0f15a6a8  # last commit that changes sweep.py or its tests (later commits: this script and the log only)
 
 MUTATE=0
 for a in "$@"; do
@@ -41,8 +41,9 @@ HEADREV="$(G rev-parse HEAD)" || exit 99
 SCOPE='^(tools/dev/sweep\.py|tests/registry/test_sweep\.py|docs/tasks/111a-sweep-measure\.md|docs/tasks/111a-verify\.sh)$'
 
 new_clone() { git clone -q --no-hardlinks "$ROOT" "$1" && git -C "$1" checkout -q --detach "$HEADREV"; }
+mkdir -p "$TMP/tt"
 run_tests() {   # run_tests CLONE OUTFILE : the sweep test file only, python3 -I -B, from the clone
-    ( cd "$1" && env -i PATH="$PATH" HOME="$TMP" LANG=C.UTF-8 python3 -I -B -m unittest discover -s tests/registry -p test_sweep.py -v ) > "$2" 2>&1
+    ( cd "$1" && env -i PATH="$PATH" HOME="$TMP" TMPDIR="$TMP/tt" LANG=C.UTF-8 python3 -I -B -m unittest discover -s tests/registry -p test_sweep.py -v ) > "$2" 2>&1
 }
 test_ok() {   # test_ok OUTFILE CLASS.TEST : the named test reported ok
     grep -Eq "^test_${2#*.} \(test_sweep\.${2%%.*}\.test_${2#*.}\) \.\.\. ok$" "$1"
@@ -80,6 +81,14 @@ check "Fix5 wait loop timeout" WaitLoop.timeout_returns_false
 check "Fix5 timeout records error and null exit" WaitLoop.timeout_records_error_and_null_exit
 check "Fix5 no-wait never calls the waiter" WaitLoop.no_wait_never_calls_the_waiter
 check "Fix5 waiter is used when waiting is on" WaitLoop.wait_is_used_when_not_no_wait
+check "FixA a timeout kills the group, records error=timeout/exit=null" ChildCleanup.timeout_kills_the_group_and_records_it
+check "FixA a grandchild left by a finished script is killed" ChildCleanup.grandchild_left_behind_by_a_finished_script_is_killed
+check "FixA SIGTERM to the driver leaves no child and no clone" ChildCleanup.sigterm_to_the_driver_leaves_no_child_and_no_clone
+check "FixB a timed-out script is unmeasured, complete stays true" Unmeasured.timed_out_script_is_unmeasured_and_complete_stays_true
+check "FixB measured/unmeasured on an all-green sweep" Unmeasured.all_measured
+check "FixD a symlinked --nm gives a real directory in the clone" SymlinkedNm.symlinked_nm_gives_a_real_directory
+nleft="$(find "$TMP/tt" -name 'wom-sweep.*' | wc -l)"
+[ "$nleft" = 0 ] && pass "FixC the test run leaves no wom-sweep.* in the TMPDIR it sets" || fail "FixC $nleft wom-sweep.* directories left in the TMPDIR the run set"
 check "AC4 stub source checkout unchanged, no __pycache__" MixedSweep.source_checkout_unchanged_and_no_pycache
 [ "$(git -C "$TMP/head" status --porcelain)" = "$before" ] && pass "AC4 the real clone is unchanged by the test run (git status --porcelain: '${before}')" || fail "AC4 the test run changed the clone"
 n="$(find "$TMP/head" -name __pycache__ | wc -l)"
@@ -141,6 +150,8 @@ mutation "AC5c --no-closed argument dropped" 'NO_CLOSED_ARGS = ["--no-closed"]' 
 mutation "Fix5 quiet-wait guard removed (waiter always called)" '    if not no_wait:
         quiet, rec' '    if True:
         quiet, rec' no_wait_never_calls_the_waiter
+mutation "FixA child cleanup removed (killpg is a no-op)" '        os.killpg(proc.pid, signal.SIGKILL)' '        pass' timeout_kills_the_group_and_records_it
+mutation "FixB unmeasured scripts not reported" 'report["unmeasured"] = [s["name"] for s in report["scripts"] if s["exit"] is None]' 'report["unmeasured"] = []' timed_out_script_is_unmeasured_and_complete_stays_true
 run_tests "$TMP/head" "$TMP/r.out"; rc=$?
 [ "$rc" = 0 ] && pass "restore: unmutated clone is green again ($(grep -E '^Ran ' "$TMP/r.out"))" || fail "restore: unmutated clone is red"
 fi
