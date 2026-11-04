@@ -18,7 +18,7 @@ set -u
 set -o pipefail
 
 BASE=428df021bf89738768bc2a13f82461479318ab35   # registry origin/main (task 008b-2 merged) the branch was cut from
-FINAL=c18d6da8ce47eae568408aa8ac98517af2f359ea  # last commit that changes sweep.py or its tests (later commits: this script and the log only)
+FINAL=dbf228bcbf68045f4ab149c9c24ec67ebd9eaaa6  # last commit that changes sweep.py or its tests (later commits: this script and the log only)
 
 MUTATE=0
 for a in "$@"; do
@@ -70,6 +70,16 @@ check "AC2 missing ajv exits 2" FailureModes.missing_ajv_exits_2
 check "AC2 --out inside the repository exits 2" FailureModes.out_inside_repository_exits_2
 check "AC2 broken search (unknown --only name) exits 2" FailureModes.unknown_only_name_exits_2
 check "AC2 broken search (garbled ps table) is an error" QuietWait.garbled_table_is_an_error
+check "Fix1 report carries planned/complete; finished set only when complete" ReportCompleteness.complete_report
+check "Fix1 a sweep killed mid-way leaves complete=false, finished=null" ReportCompleteness.partial_report_is_marked_incomplete
+check "Fix2 quiet_wait and waited_seconds recorded" ReportCompleteness.complete_report
+check "Fix3 scripts get 039a's environment (env unset, node_modules copied)" GateEnvironment.env_unset_and_node_modules_is_a_real_directory
+check "Fix4 a dirty clone before the first script exits 2" GateEnvironment.untracked_files_in_the_clone_before_the_first_script_exit_2
+check "Fix5 wait loop waits until quiet" WaitLoop.waits_until_quiet
+check "Fix5 wait loop timeout" WaitLoop.timeout_returns_false
+check "Fix5 timeout records error and null exit" WaitLoop.timeout_records_error_and_null_exit
+check "Fix5 no-wait never calls the waiter" WaitLoop.no_wait_never_calls_the_waiter
+check "Fix5 waiter is used when waiting is on" WaitLoop.wait_is_used_when_not_no_wait
 check "AC4 stub source checkout unchanged, no __pycache__" MixedSweep.source_checkout_unchanged_and_no_pycache
 [ "$(git -C "$TMP/head" status --porcelain)" = "$before" ] && pass "AC4 the real clone is unchanged by the test run (git status --porcelain: '${before}')" || fail "AC4 the test run changed the clone"
 n="$(find "$TMP/head" -name __pycache__ | wc -l)"
@@ -128,6 +138,9 @@ mutation "AC5a nested counting removed (BASH_ENV not exported)" '    env["BASH_E
 ' '' exit_seconds_and_nested
 mutation "AC5b exit code ignored" 'rec["exit"] = proc.returncode' 'rec["exit"] = 0' exit_seconds_and_nested
 mutation "AC5c --no-closed argument dropped" 'NO_CLOSED_ARGS = ["--no-closed"]' 'NO_CLOSED_ARGS = []' 039a_skipped_with_reason_and_039b_gets_no_closed
+mutation "Fix5 quiet-wait guard removed (waiter always called)" '    if not no_wait:
+        quiet, rec' '    if True:
+        quiet, rec' no_wait_never_calls_the_waiter
 run_tests "$TMP/head" "$TMP/r.out"; rc=$?
 [ "$rc" = 0 ] && pass "restore: unmutated clone is green again ($(grep -E '^Ran ' "$TMP/r.out"))" || fail "restore: unmutated clone is red"
 fi
