@@ -18,7 +18,7 @@ set -u
 set -o pipefail
 
 BASE=428df021bf89738768bc2a13f82461479318ab35   # registry origin/main (task 008b-2 merged) the branch was cut from
-FINAL=4f2130b9489db628f0416003ecba1d3d0f15a6a8  # last commit that changes sweep.py or its tests (later commits: this script and the log only)
+FINAL=1fdf6e73727b6b44f5b4ca4c833cea98106238e3  # last commit that changes sweep.py or its tests (later commits: this script and the log only)
 
 MUTATE=0
 for a in "$@"; do
@@ -42,8 +42,8 @@ SCOPE='^(tools/dev/sweep\.py|tests/registry/test_sweep\.py|docs/tasks/111a-sweep
 
 new_clone() { git clone -q --no-hardlinks "$ROOT" "$1" && git -C "$1" checkout -q --detach "$HEADREV"; }
 mkdir -p "$TMP/tt"
-run_tests() {   # run_tests CLONE OUTFILE : the sweep test file only, python3 -I -B, from the clone
-    ( cd "$1" && env -i PATH="$PATH" HOME="$TMP" TMPDIR="$TMP/tt" LANG=C.UTF-8 python3 -I -B -m unittest discover -s tests/registry -p test_sweep.py -v ) > "$2" 2>&1
+run_tests() {   # run_tests CLONE OUTFILE [unittest -k PATTERN] : the sweep test file only, python3 -I -B, from the clone
+    ( cd "$1" && env -i PATH="$PATH" HOME="$TMP" TMPDIR="$TMP/tt" LANG=C.UTF-8 python3 -I -B -m unittest discover -s tests/registry -p test_sweep.py -v ${3:+-k "$3"} ) > "$2" 2>&1
 }
 test_ok() {   # test_ok OUTFILE CLASS.TEST : the named test reported ok
     grep -Eq "^test_${2#*.} \(test_sweep\.${2%%.*}\.test_${2#*.}\) \.\.\. ok$" "$1"
@@ -132,10 +132,10 @@ if text.count(old) != 1:
     print("search found %d matches (a broken search is a failure): %r" % (text.count(old), old)); sys.exit(2)
 open(path, "w").write(text.replace(old, new))
 PY
-mutation() {   # mutation LABEL OLD NEW TESTNAME
-    local label="$1" old="$2" new="$3" want="$4" rc
+mutation() {   # mutation LABEL OLD NEW TESTNAME [ONLY]  (ONLY: run just that test; the guard mutation makes every driver run really wait, which blocks on a busy machine)
+    local label="$1" old="$2" new="$3" want="$4" only="${5:-}" rc
     python3 -I -B "$H" "$TMP/head/tools/dev/sweep.py" "$old" "$new" || { fail "$label: the mutation did not apply"; return; }
-    run_tests "$TMP/head" "$TMP/m.out"; rc=$?
+    run_tests "$TMP/head" "$TMP/m.out" "$only"; rc=$?
     if [ "$rc" != 0 ] && grep -Eq "^(FAIL|ERROR): test_${want}\b" "$TMP/m.out"; then
         pass "$label turns red: exit $rc, failing: $(grep -E '^(FAIL|ERROR):' "$TMP/m.out" | sed -E 's/ \(.*//' | tr '\n' ' ')"
     else
@@ -145,11 +145,11 @@ mutation() {   # mutation LABEL OLD NEW TESTNAME
 }
 mutation "AC5a nested counting removed (BASH_ENV not exported)" '    env["BASH_ENV"] = str(work / "bash_env.sh")
 ' '' exit_seconds_and_nested
-mutation "AC5b exit code ignored" 'rec["exit"] = proc.returncode' 'rec["exit"] = 0' exit_seconds_and_nested
+mutation "AC5b exit code ignored" 'rec["exit"] = None if timed_out else proc.returncode' 'rec["exit"] = 0' exit_seconds_and_nested
 mutation "AC5c --no-closed argument dropped" 'NO_CLOSED_ARGS = ["--no-closed"]' 'NO_CLOSED_ARGS = []' 039a_skipped_with_reason_and_039b_gets_no_closed
 mutation "Fix5 quiet-wait guard removed (waiter always called)" '    if not no_wait:
         quiet, rec' '    if True:
-        quiet, rec' no_wait_never_calls_the_waiter
+        quiet, rec' no_wait_never_calls_the_waiter no_wait_never_calls_the_waiter
 mutation "FixA child cleanup removed (killpg is a no-op)" '        os.killpg(proc.pid, signal.SIGKILL)' '        pass' timeout_kills_the_group_and_records_it
 mutation "FixB unmeasured scripts not reported" 'report["unmeasured"] = [s["name"] for s in report["scripts"] if s["exit"] is None]' 'report["unmeasured"] = []' timed_out_script_is_unmeasured_and_complete_stays_true
 run_tests "$TMP/head" "$TMP/r.out"; rc=$?
