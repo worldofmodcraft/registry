@@ -30,7 +30,7 @@ A=f257a53552cbb661b0bf6f7d388b24303f2721a0
 # Review round (2026-11-06, scope extended): FINAL is the fix-round content commit. OLDFINAL is the first review's FINAL (a5710ed): the tree on
 # which the F3 hygiene check must be red. E01 is the pushed head e01a0d7, whose docs/tasks/008b1-verify.sh and 008c-verify.sh are the OLD
 # scripts of F1.
-FINAL=46234a922148bcb0ba9f25d0bc3450a5ca0ddf6b
+FINAL=eb303ed2a13700313e10cce99dd8228936354651
 OLDFINAL=a5710ed0aaae5b7a547e3509363cec55beb2474b
 E01=e01a0d7c08df5837ec991375f489b1417fa8d8fa
 # TIP: the last commit the FINAL..TIP name-list check measures, i.e. the commit before the one that records this line. The pin commit and the
@@ -103,11 +103,19 @@ import difflib, sys
 old, new, want = open(sys.argv[1], encoding="utf-8").read().split("\n"), open(sys.argv[2], encoding="utf-8").read().split("\n"), sys.argv[3].split(",")
 def ids(lines):
     return [l.split()[1] for l in lines if l.startswith("  run_mut ")]
+# R2-2 (approved): 008c's real-tree hash lines may gain exactly tools/registry/schema.py and tools/pipeline/ecma.py (new mutation targets).
+ALLOWED = {}
+if len(sys.argv) > 4 and sys.argv[4] == "hash8c":
+    for k in ("BEFORE", "AFTER"):
+        a = '  %s=$(sha256sum "$MOD" "$TST" docs/tasks/008c-verify.sh contracts/artifact-naming.md | sha256sum)' % k
+        ALLOWED[a] = a.replace(" | sha256sum)", " tools/registry/schema.py tools/pipeline/ecma.py | sha256sum)")
 got_old, got_new, bad = [], [], []
 for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, old, new, autojunk=False).get_opcodes():
     if tag == "equal":
         continue
     o, n = old[i1:i2], new[j1:j2]
+    if len(o) == 1 and len(n) == 1 and ALLOWED.get(o[0]) == n[0]:
+        continue
     if not (o and n and o[0].startswith("  run_mut ") and n[0].startswith("  run_mut ")):
         bad.append((tag, o[:1], n[:1]))
     got_old += ids(o); got_new += ids(n)
@@ -118,8 +126,11 @@ PYEOF
 git show "$E01:docs/tasks/008c-verify.sh" > "$RUNTMP/008c.old"; git show "$FINAL:docs/tasks/008c-verify.sh" > "$RUNTMP/008c.new"
 git show "$E01:docs/tasks/008b1-verify.sh" > "$RUNTMP/008b1.old"; git show "$FINAL:docs/tasks/008b1-verify.sh" > "$RUNTMP/008b1.new"
 W8C=ascii-flag-dropped,digit-translation-dropped,digit-translation-dropped-published-at,digit-translation-mangles-escaped-backslash
-$PY "$RUNTMP/anchors.py" "$RUNTMP/008c.old" "$RUNTMP/008c.new" "$W8C" > "$RUNTMP/a1.out" 2>&1 && ok "008c-verify.sh: only the four mutation anchors changed ($(cat "$RUNTMP/a1.out"))" || fail "008c-verify.sh changed outside the four mutation anchors: $(cat "$RUNTMP/a1.out")"
+$PY "$RUNTMP/anchors.py" "$RUNTMP/008c.old" "$RUNTMP/008c.new" "$W8C" hash8c > "$RUNTMP/a1.out" 2>&1 && ok "008c-verify.sh: only the four mutation anchors and the two real-tree hash lines (R2-2) changed ($(cat "$RUNTMP/a1.out"))" || fail "008c-verify.sh changed outside the four mutation anchors: $(cat "$RUNTMP/a1.out")"
 $PY "$RUNTMP/anchors.py" "$RUNTMP/008b1.old" "$RUNTMP/008b1.new" c17b-ecma-digits-dropped > "$RUNTMP/a2.out" 2>&1 && ok "008b1-verify.sh: only the c17b mutation anchor changed ($(cat "$RUNTMP/a2.out"))" || fail "008b1-verify.sh changed outside the c17b mutation anchor: $(cat "$RUNTMP/a2.out")"
+# control: a hash line that gains anything beyond the two approved files, or an ordinary extra line, must be flagged
+sed 's#tools/pipeline/ecma.py | sha256sum#tools/pipeline/ecma.py README.md | sha256sum#' "$RUNTMP/008c.new" > "$RUNTMP/008c.ctl"
+$PY "$RUNTMP/anchors.py" "$RUNTMP/008c.old" "$RUNTMP/008c.ctl" "$W8C" hash8c > /dev/null 2>&1 && fail "control: the anchors check passes a hash line with an unapproved extra file" || ok "control: the anchors check flags a hash line with an unapproved extra file"
 # control: one extra changed line outside any run_mut line must be flagged
 { cat "$RUNTMP/008b1.new"; echo 'echo stray'; } > "$RUNTMP/008b1.ctl"
 $PY "$RUNTMP/anchors.py" "$RUNTMP/008b1.old" "$RUNTMP/008b1.ctl" c17b-ecma-digits-dropped > /dev/null 2>&1 && fail "control: the anchors-only check passes a script with a stray added line" || ok "control: the anchors-only check flags a stray added line"
@@ -368,6 +379,108 @@ PYEOF
   extract "$FINAL" "$RUNTMP/hy-new" && ( cd "$RUNTMP/hy-new" && $PY tests/pipeline/run_checks.py > "$RUNTMP/hy-new.out" 2>&1 )
   grep -q '^SUMMARY ran=[0-9]* failed=0$' "$RUNTMP/hy-new.out" && ok "F3: the suite is green at FINAL" || fail "F3: the suite at FINAL is not green"
   [ -z "$(pycache_leaks "$RUNTMP/hy-new")" ] && ok "F3 green: at FINAL the suite leaves no __pycache__ in tools/registry or tests/contracts" || fail "F3: at FINAL the suite still leaves $(pycache_leaks "$RUNTMP/hy-new" | tr '\n' ' ')"
+  # R2-1 (review round 2): the 008c mutation digit-translation-mangles-escaped-backslash must break ONLY the escaped-backslash cases (see r21.py below):
+  # with the reviewer's anchor the three escaped-backslash cases fail and the plain \d, [\d.] and \. cases pass; the test is red; with those cases
+  # removed from the test the mutation is NOT red; the previous round's anchor (i += 1) is still red without them.
+  git show "$FINAL:docs/tasks/008c-verify.sh" | grep -qF 'i += 1 if e == "\\" else 2' && ok "R2-1: 008c-verify.sh uses the reviewer's anchor (i += 1 if e is a backslash else 2)" || fail "R2-1: 008c-verify.sh does not use the reviewer's anchor"
+  cat > "$RUNTMP/r21.py" <<'PYEOF2'
+"""R2-1 (review round 2): the 008c mutation digit-translation-mangles-escaped-backslash must isolate the escaped-backslash property.
+argv: FINAL-sha. Prints one `R21 ...` line per result; exit code = number of unexpected results."""
+import json
+import os
+import subprocess
+import sys
+import tempfile
+
+final = sys.argv[1]
+OLD = '            i += 2\n            continue\n        if in_class:'
+NEW_REVIEWER = '            i += 1 if e == "\\\\" else 2\n            continue\n        if in_class:'   # the text 008c-verify.sh uses (python source: e == "\\")
+NEW_OLDROUND = '            i += 1\n            continue\n        if in_class:'
+TEST = "test_fix3_digit_translation_leaves_escaped_backslash_alone"
+ARABIC = "٣"
+CASES = [(r"^\d$", "5", True), (r"^\d$", ARABIC, False), (r"^\\d$", "\\d", True), (r"^\\d$", "5", False),
+         (r"^\\\d$", "\\5", True), (r"^\\\d$", "\\" + ARABIC, False), (r"^\\\\d$", "\\\\d", True),
+         (r"^[\d.]$", "5", True), (r"^[\d.]$", ".", True), (r"^[\d.]$", ARABIC, False), (r"^a\.b$", "axb", False)]
+ESCAPED = {r"^\\d$", r"^\\\d$", r"^\\\\d$"}
+bad = 0
+
+
+def say(ok, text):
+    global bad
+    print(("R21 ok    " if ok else "R21 FAIL  ") + text, flush=True)
+    bad += not ok
+
+
+def export(td):
+    p = subprocess.run(f"git archive {final} | tar -x -C '{td}'", shell=True, capture_output=True, text=True)
+    if p.returncode:
+        print("cannot export", p.stderr)
+        sys.exit(99)
+
+
+def mutate_schema(td, new):
+    path = os.path.join(td, "tools", "registry", "schema.py")
+    text = open(path, encoding="utf-8").read()
+    if text.count(OLD) != 1:
+        print(f"R21 ANCHOR BROKEN: {text.count(OLD)} occurrences")
+        sys.exit(99)
+    open(path, "w", encoding="utf-8").write(text.replace(OLD, new))
+
+
+def drop_escaped_cases(td):
+    path = os.path.join(td, "tests", "pipeline", "test_write_back.py")
+    text = open(path, encoding="utf-8").read()
+    start = text.index('(r"^\\\\d$", "\\\\d", True)')
+    end = text.index('(r"^[\\d.]$", "5", True)')
+    assert start < end and text.count(TEST) == 1
+    open(path, "w", encoding="utf-8").write(text[:start] + text[end:])
+
+
+def run_test(td):
+    r = subprocess.run([sys.executable, "-I", "-B", os.path.join(td, "tests", "pipeline", "run_checks.py"), "--only", TEST],
+                       capture_output=True, text=True, cwd=td)
+    lines = [l for l in r.stdout.splitlines() if l.startswith("CHECK ") and TEST in l]
+    return "MISSING" if not lines else ("FAIL" if all(l.endswith(" FAIL") for l in lines) else "PASS")
+
+
+PROBE = r'''
+import json, sys
+sys.path.insert(0, sys.argv[1] + "/tools/pipeline")
+import ecma
+cases = json.loads(sys.argv[2])
+print(json.dumps([[p, v, w, ecma.matches(p, v)] for p, v, w in cases]))
+'''
+
+
+def mismatches(td):
+    r = subprocess.run([sys.executable, "-I", "-B", "-c", PROBE, td, json.dumps(CASES)], capture_output=True, text=True)
+    return [(p, v) for p, v, w, got in json.loads(r.stdout) if got is not w]
+
+
+with tempfile.TemporaryDirectory(prefix="w094-r21-") as td:
+    export(td)
+    say(mismatches(td) == [] and run_test(td) == "PASS", "control: unmutated tree, every case of the test passes and the test is PASS")
+    mutate_schema(td, NEW_REVIEWER)
+    mm = mismatches(td)
+    say({p for p, v in mm} == ESCAPED and len(mm) == 3, f"reviewer's anchor: exactly the three want-True escaped-backslash cases fail ({[p for p, v in mm]}); `^\\d$`, `[\\d.]` and `a\\.b` still pass")
+    say(run_test(td) == "FAIL", "reviewer's anchor: the test (all cases) is RED")
+with tempfile.TemporaryDirectory(prefix="w094-r21-") as td:
+    export(td)
+    mutate_schema(td, NEW_REVIEWER)
+    drop_escaped_cases(td)
+    say(run_test(td) == "PASS", "reviewer's anchor with the escaped-backslash cases REMOVED from the test: NOT red (the mutation isolates exactly that property)")
+with tempfile.TemporaryDirectory(prefix="w094-r21-") as td:
+    export(td)
+    mutate_schema(td, NEW_OLDROUND)
+    drop_escaped_cases(td)
+    say(run_test(td) == "FAIL", "the previous round's anchor (`i += 1`) with those cases removed stays RED: it broke every escape (the finding)")
+print(f"R21 SUMMARY unexpected={bad}")
+sys.exit(bad)
+PYEOF2
+  $PY "$RUNTMP/r21.py" "$FINAL" > "$RUNTMP/r21.out" 2>&1; rc=$?
+  cat "$RUNTMP/r21.out"
+  [ "$rc" -eq 0 ] && grep -q '^R21 SUMMARY unexpected=0$' "$RUNTMP/r21.out" && ok "R2-1: the mutation is red only on the escaped-backslash cases, and not red without them" || fail "R2-1: the isolation check reports $rc unexpected result(s)"
+
 fi
 
 echo "SUMMARY failed=$FAILS"
