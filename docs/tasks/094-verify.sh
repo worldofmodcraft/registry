@@ -183,6 +183,16 @@ hits=$(n3_imports_n5 tools/registry)
 
 # Criterion 5: the pipeline suite (the invocation 008a-verify.sh uses) at HEAD.
 SUITE_FLOOR=$((147 + 26))
+# F3 hygiene, part 1 (sweep fix): the caller's tree may already hold __pycache__ written by OTHER scripts that ran before this one in the same
+# clone (a sweep runs every closed script in one clone; several run `python3 -I` without -B). Only what THIS run leaves is counted: the state of
+# tools/registry and tests/contracts (pycache directories by path; pyc files by path and mtime) is recorded before the suite and compared after.
+pycache_state() {  # $1 = a tree root; one line per __pycache__ dir (path) and per file inside one (path + mtime), sorted
+  find "$1/tools/registry" "$1/tests/contracts" -path '*__pycache__*' \( -type d -printf '%p d\n' -o -type f -printf '%p f %T@\n' \) 2>/dev/null | sort
+}
+new_entries() {  # new_entries BEFORE AFTER : the lines of AFTER that are not in BEFORE
+  comm -13 <(printf '%s\n' "$1" | sort) <(printf '%s\n' "$2" | sort) | grep -v '^$'
+}
+PRE_STATE=$(pycache_state .)
 OUT=$($PY tests/pipeline/run_checks.py 2>"$RUNTMP/suite-stderr")
 PASSN=$(echo "$OUT" | grep -c '^CHECK .* PASS$')
 FAILN=$(echo "$OUT" | grep -c '^CHECK .* FAIL$')
@@ -199,11 +209,21 @@ done
 # F3 hygiene: importing tools/pipeline/ecma.py (which loads tools/registry/schema.py and tests/contracts/schema_check.py by path) must leave no
 # __pycache__ in tools/registry or tests/contracts. tools/pipeline/__pycache__ is NOT counted: it is written by tests/pipeline/test_plan_pending.py,
 # which runs `python3 -I` without -B (-I ignores PYTHONDONTWRITEBYTECODE); that file is outside task 094 (booked).
-pycache_leaks() { find "$1/tools/registry" "$1/tests/contracts" -name __pycache__ 2>/dev/null; }   # $1 = a tree root
+pycache_leaks() { find "$1/tools/registry" "$1/tests/contracts" -name __pycache__ 2>/dev/null; }   # $1 = a tree root (a whole fresh export: everything counts)
 mkdir -p "$RUNTMP/hyctl/tools/registry/__pycache__" "$RUNTMP/hyctl/tests/contracts"
 [ -n "$(pycache_leaks "$RUNTMP/hyctl")" ] && ok "control: the hygiene check finds a planted tools/registry/__pycache__" || fail "control: the hygiene check is blind to a planted __pycache__"
-leaks=$(pycache_leaks .)
-[ -z "$leaks" ] && ok "after the suite run there is no __pycache__ in tools/registry or tests/contracts" || fail "__pycache__ left behind by the suite: $(echo "$leaks" | tr '\n' ' ')"
+# control: an entry that exists before the run is NOT counted; a directory or file created during the run IS.
+mkdir -p "$RUNTMP/hy2/tools/registry/__pycache__" "$RUNTMP/hy2/tests/contracts"
+echo old > "$RUNTMP/hy2/tools/registry/__pycache__/old.pyc"
+S0=$(pycache_state "$RUNTMP/hy2")
+echo new > "$RUNTMP/hy2/tools/registry/__pycache__/new.pyc"; mkdir "$RUNTMP/hy2/tests/contracts/__pycache__"
+N=$(new_entries "$S0" "$(pycache_state "$RUNTMP/hy2")")
+[ "$(echo "$N" | wc -l)" -eq 2 ] && echo "$N" | grep -q 'registry/__pycache__/new.pyc f' && echo "$N" | grep -q 'contracts/__pycache__ d' && ! echo "$N" | grep -q 'old.pyc' \
+  && ok "control: a pre-existing __pycache__ dir and pyc are not counted; a pyc and a dir created during the run are" || fail "control: the before/after comparison is wrong (new: $(echo "$N" | tr '\n' '|'))"
+[ -z "$(new_entries "$S0" "$S0")" ] && ok "control: an unchanged tree has no new entries" || fail "control: an unchanged tree reports new entries"
+leaks=$(new_entries "$PRE_STATE" "$(pycache_state .)")
+if [ -n "$PRE_STATE" ]; then note "tools/registry or tests/contracts already held __pycache__ entries before this run (written by other scripts, not counted): $(echo "$PRE_STATE" | awk '{print $1}' | tr '\n' ' ')"; fi
+[ -z "$leaks" ] && ok "this run left no new __pycache__ in tools/registry or tests/contracts" || fail "__pycache__ left behind by this run: $(echo "$leaks" | tr '\n' ' ')"
 note "other __pycache__ dirs in this tree after the run (informational): $(find . -name __pycache__ -not -path './.git/*' | tr '\n' ' ')"
 
 # ------------------------------------------------------------------------------------------------ red first at A, green at FINAL
