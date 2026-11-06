@@ -101,7 +101,7 @@ if [ "${1:-}" = "--mutate" ]; then
     echo "SUMMARY failed=$FAILS"; exit "$FAILS"
   fi
   SCR=$(mktemp -d "${TMPDIR:-/tmp}/w008c-mut.XXXXXX"); trap 'rm -r "$SCR"' EXIT
-  BEFORE=$(sha256sum "$MOD" "$TST" docs/tasks/008c-verify.sh contracts/artifact-naming.md | sha256sum)
+  BEFORE=$(sha256sum "$MOD" "$TST" docs/tasks/008c-verify.sh contracts/artifact-naming.md tools/registry/schema.py tools/pipeline/ecma.py | sha256sum)
   # baseline must be green, or red means nothing
   git archive HEAD | tar -x -C "$SCR"
   ( cd "$SCR" && python3 tests/pipeline/run_checks.py --only test_write_back >"$SCR/base.out" 2>/dev/null )
@@ -158,7 +158,7 @@ import subprocess
   run_mut digit-translation-dropped-published-at $MOD '        if not _fullmatch(pat, values[k]):' '        if not __import__("re").fullmatch(pat, values[k]):' test_fix1_non_ascii_digit_in_published_at_refused
   run_mut digit-translation-mangles-escaped-backslash tools/registry/schema.py '            i += 2
             continue
-        if in_class:' '            i += 1
+        if in_class:' '            i += 1 if e == "\\" else 2
             continue
         if in_class:' test_fix3_digit_translation_leaves_escaped_backslash_alone
   run_mut pending-shape-dropped $MOD 'if set(entry["versions"][idx]) != PENDING_KEYS:' 'if False:' test_fix2_pending_shape_stray_and_preexisting_keys_refused test_fix2_missing_pending_key_refused
@@ -183,7 +183,7 @@ s=open(os.environ["SRC"]).read(); open(os.environ["DST"],"w").write(s.replace(os
   ( cd "$SCR/t" && python3 tests/pipeline/run_checks.py --only test_write_back >"$SCR/m.out" 2>/dev/null )
   grep -q "^CHECK .*test_ac5_host_is_written_only_in_write_back_py_under_tools FAIL$" "$SCR/m.out" \
     && ok "mutation second-module-hardcodes-host: red" || fail "mutation second-module-hardcodes-host not red"
-  AFTER=$(sha256sum "$MOD" "$TST" docs/tasks/008c-verify.sh contracts/artifact-naming.md | sha256sum)
+  AFTER=$(sha256sum "$MOD" "$TST" docs/tasks/008c-verify.sh contracts/artifact-naming.md tools/registry/schema.py tools/pipeline/ecma.py | sha256sum)
   [ "$BEFORE" = "$AFTER" ] && ok "real tree byte-identical before/after (mutations ran in scratch copies)" || fail "real tree changed"
   echo "SUMMARY mutate failed=$FAILS"; exit "$FAILS"
 fi
