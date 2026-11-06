@@ -191,7 +191,7 @@ PY
   run_mut c17-accept-published $MOD 'if v["status"] != "pending":' 'if v["status"] not in ("pending", "published"):' test_c12_published_removed_rejected_appear_nowhere test_c17_version_input_refused_exit_1
   run_mut c17a-drop-branch-check $MOD 'if branch in branches:' 'if False:' test_c17a_existing_branch_is_skipped_not_built test_c17a_summarize_over_a_skip_plan
   run_mut c17b-invalid-entry-treated-valid $MOD '        _validate(entry, schema, "$")' '        pass' test_c17b_invalid_entry_is_a_fault test_c17b_each_kind_of_invalid_entry
-  run_mut c17b-ecma-digits-dropped $MOD '_PATTERN_CACHE[p] = wb._ecma_digits(p)' '_PATTERN_CACHE[p] = p' test_c17b_each_kind_of_invalid_entry
+  run_mut c17b-ecma-digits-dropped $MOD 'not ecma.matches(sch["pattern"], inst)' 'not __import__("re").fullmatch(sch["pattern"], inst)' test_c17b_each_kind_of_invalid_entry
   run_mut c17b-duplicate-version-allowed $MOD 'if v["version"] in seen:' 'if False:' test_c17b_each_kind_of_invalid_entry
   run_mut c17c-green-for-skip $MOD 'for e in plan_doc["skip"]:' 'for e in []:' test_c17c_a_skip_entry_is_non_green test_c17a_summarize_over_a_skip_plan
   run_mut c17c-exit2-not-counted $MOD 'elif by_id[vid] == 2:' 'elif False:' test_c17c_three_versions_ok_fault_ok

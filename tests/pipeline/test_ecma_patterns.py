@@ -485,6 +485,23 @@ class Helper(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertIs(ecma.matches("^abc$", value), False)
 
+    def test_loading_the_gate_restores_the_bytecode_flag_and_the_shadowable_module_names(self):
+        # F3: the load switches bytecode writing off while it runs and puts the caller's setting back; classify/report/schema_check
+        # in sys.modules are the caller's own afterwards (present stays present and identical, absent stays absent).
+        ecma = helper()
+        names = ("classify", "report", "schema_check")
+        before = {n: sys.modules.get(n) for n in names}
+        original = sys.dont_write_bytecode
+        try:
+            for flag in (True, False):
+                sys.dont_write_bytecode = flag
+                module = ecma._load_gate_schema()
+                self.assertIs(sys.dont_write_bytecode, flag)
+                self.assertTrue(callable(module.ecma_pattern))
+                self.assertEqual({n: sys.modules.get(n) for n in names}, before)
+        finally:
+            sys.dont_write_bytecode = original
+
     def test_write_back_has_no_private_digit_translator(self):
         # The name is built from two halves so that a grep for the removed function finds no hit in tests/ (criterion 6).
         self.assertFalse(hasattr(wb, "_ecma" + "_digits"))

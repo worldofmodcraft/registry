@@ -27,11 +27,14 @@ def _load_gate_schema():
     """Load tools/registry/schema.py by path under a private module name. The file imports `classify` and `report` (next to it)
     and `schema_check` (tests/contracts) by bare name, so sys.path is extended for the import only, and those three names in
     sys.modules are put back afterwards: this loader cannot shadow, or be shadowed by, another module of the same name
-    (tests/validation/schema_check.py is one)."""
+    (tests/validation/schema_check.py is one). Bytecode writing is switched off for the load and restored afterwards, so merely
+    importing this module never leaves a __pycache__ in tools/registry or tests/contracts (task 094 review F3)."""
     registry = os.path.join(REPO, "tools", "registry")
     names = ("classify", "report", "schema_check")
     saved_modules = {n: sys.modules.pop(n, None) for n in names}
     saved_path = list(sys.path)
+    saved_bytecode = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
     sys.path[:0] = [registry, os.path.join(REPO, "tests", "contracts")]
     try:
         spec = importlib.util.spec_from_file_location("wom_pipeline_gate_schema", os.path.join(registry, "schema.py"))
@@ -39,6 +42,7 @@ def _load_gate_schema():
         spec.loader.exec_module(module)
         return module
     finally:
+        sys.dont_write_bytecode = saved_bytecode
         sys.path[:] = saved_path
         for name, previous in saved_modules.items():
             if previous is None:
