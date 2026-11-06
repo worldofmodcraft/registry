@@ -11,9 +11,12 @@
 #              AC1/3 064 and 065 with and without --no-closed, run as stubbed slices (see below), nested starts counted via BASH_ENV;
 #              AC2   standalone unchanged: the diff of 064 and 065 has additions only, all of them around the flag;
 #              AC4   --list on the real tree, the sweep gives 064 and 065 the flag, 039a's case does too;
-#              AC5   the missing-main fixture (exit 2) and its positive control; AC6/7 scope at pinned SHAs, time bound, no __pycache__.
-#   --mutate   AC6: five mutations in a temporary clone (flag ignored in 064; in 065; sweep.py not passing it; missing-main check
-#              removed; 039a not passing it), each must redden its named check; the restore must be green.
+#              AC5   the missing-main fixture (exit 2) and its positive control; AC6/7 scope at pinned SHAs, time bound, no __pycache__;
+#              AC8   (scope extension) 111a-verify.sh's own-change range is FINAL..TIP, not FINAL..HEAD: the OLD blob (at BASE) is red on this
+#                    head with the out-of-scope FAIL line, the new one is green on it and on a frame with a later out-of-scope commit.
+#   --mutate   AC6: six mutations in a temporary clone (flag ignored in 064; in 065; sweep.py not passing it; missing-main check
+#              removed; 039a not passing it; 111a-verify.sh's TIP set back to HEAD, run on a frame with a later out-of-scope commit),
+#              each must redden its named check; the restore must be green. (111a-verify.sh's own --mutate takes ~77 s and is not run here.)
 # How 064 and 065 are exercised WITHOUT running them end to end: the real script text is cut into a PRELUDE (everything before its
 # TMP=, including the real argument parsing and the real pins), the lines of the check that runs 057 (AC3.2 / AC2.4), the real
 # AC4 section, and the real RESULT tail. That slice runs in a temporary tree whose docs/tasks/*-verify.sh are stubs that do nothing
@@ -30,7 +33,9 @@ export PYTHONDONTWRITEBYTECODE=1
 
 BASE=ab5fcba6d26436a7c87df191eb85d9323f83052d   # registry origin/main (111a merged, PR #40) the branch was cut from
 RED=62fc5bed6568cf25987ddab832308de8ea7c7698    # tests/registry/test_sweep.py only: the new fixtures, no fix
-FIX=b19bf12b1d13d16a4e6c5efd0f5a10886889c5cc    # last commit that changes sweep.py, 064, 065 or 039a (later commits: this script and the log only)
+FIX=b19bf12b1d13d16a4e6c5efd0f5a10886889c5cc    # last commit that changes sweep.py, 064, 065 or 039a
+FIX2=23d32e7c85012143c808e8c918e44b13cce24960   # the commit that re-pins 111a-verify.sh (FINAL..HEAD -> FINAL..TIP); the TIP of this script: nothing after it is range-checked
+                                                # (a FIX2..HEAD check would be the very HEAD read this script's AC8 removes from 111a; later commits: this script and the log only)
 
 MUTATE=0
 for a in "$@"; do
@@ -50,10 +55,10 @@ trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP" 2>/dev/null' EXIT
 G() { git -C "$ROOT" "$@"; }
 START=$SECONDS
 HEADREV="$(G rev-parse HEAD)" || exit 99
-SCOPE='^(docs/tasks/064-verify\.sh|docs/tasks/065-verify\.sh|docs/tasks/039a-verify\.sh|tools/dev/sweep\.py|tests/registry/test_sweep\.py|docs/tasks/111a-sweep-measure\.md|docs/tasks/111b-sweep-dedup\.md|docs/tasks/111b-verify\.sh)$'
+SCOPE='^(docs/tasks/064-verify\.sh|docs/tasks/065-verify\.sh|docs/tasks/039a-verify\.sh|tools/dev/sweep\.py|tests/registry/test_sweep\.py|docs/tasks/111a-sweep-measure\.md|docs/tasks/111a-verify\.sh|docs/tasks/111b-sweep-dedup\.md|docs/tasks/111b-verify\.sh)$'
 scope_bad() { grep -Ev "$SCOPE"; }   # reads file names on stdin, prints those outside the scope
 
-for c in "$BASE" "$RED" "$FIX"; do
+for c in "$BASE" "$RED" "$FIX" "$FIX2"; do
     G cat-file -e "$c^{commit}" 2>/dev/null || { fail "P0 pinned commit $c is not reachable"; exit "$FAILURES"; }
 done
 NEWTESTS="NoClosedArguments.064_and_065_get_no_closed_and_other_scripts_get_none NoClosedArguments.the_flag_list_is_one_named_constant_and_a_list_of_three ListReal.list_shows_no_closed_for_039b_064_065_only MissingMain.source_cloned_with_branch_has_no_local_main_exit_2 MissingMain.source_on_a_branch_named_trunk_exit_2"
@@ -71,6 +76,14 @@ case_args() {   # case_args FILE NAME : the args array the file's case line give
     local line; line="$(case_line "$1")"
     [ "$(printf '%s\n' "$line" | grep -c .)" = 1 ] || { echo "ERR"; return; }
     env F="docs/tasks/$2-verify.sh" CL="$line" bash -c 'f="$F"; args=(); note=""; eval "$CL"; echo "${args[*]-}"'
+}
+
+run_111a() {   # run_111a FRAME OUTFILE : the FRAME's own docs/tasks/111a-verify.sh, default mode; sets V_RC
+    bash "$1/docs/tasks/111a-verify.sh" > "$2" 2>&1; V_RC=$?
+}
+make_later() {   # make_later DIR : a frame = HEAD plus one later commit that touches an out-of-scope file (a later task's file)
+    new_clone "$1" "$HEADREV" && printf 'a later task\n' > "$1/docs/tasks/999-later-task.txt" && git -C "$1" add docs/tasks/999-later-task.txt \
+        && git -C "$1" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false commit -q -m "a later task touches an out-of-scope file"
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -266,9 +279,34 @@ want="docs/tasks/039a-verify.sh docs/tasks/064-verify.sh docs/tasks/065-verify.s
 [ -z "$(printf '%s\n' "$files" | scope_bad)" ] && pass "every file BASE..FIX changes is in the declared scope (no other closed script, 070 and 069 untouched)" || fail "out of scope: $(printf '%s\n' "$files" | scope_bad | tr '\n' ' ')"
 ctl="$(printf '%s\n' "$files" docs/tasks/070-verify.sh | scope_bad)"
 [ "$ctl" = "docs/tasks/070-verify.sh" ] && pass "control: an edit of 070-verify.sh would be flagged" || fail "control: the scope check cannot fail"
-[ -z "$(G diff --name-only "$FIX" "$HEADREV" | scope_bad)" ] && pass "FIX..HEAD touches only in-scope files" || fail "FIX..HEAD touches out-of-scope files: $(G diff --name-only "$FIX" "$HEADREV" | scope_bad | tr '\n' ' ')"
+G merge-base --is-ancestor "$FIX" "$FIX2" && G merge-base --is-ancestor "$FIX2" "$HEADREV" && pass "FIX < FIX2 (this script's TIP) are ancestors of HEAD in that order" || fail "FIX < FIX2 < HEAD does not hold"
+G diff --name-only "$FIX" "$FIX2" > "$TMP/fix2.files"
+[ -z "$(scope_bad < "$TMP/fix2.files")" ] && grep -qx 'docs/tasks/111a-verify.sh' "$TMP/fix2.files" && pass "FIX..FIX2 (fixed range) touches only in-scope files and includes docs/tasks/111a-verify.sh ($(tr '\n' ' ' < "$TMP/fix2.files"))" || fail "FIX..FIX2 changes: $(tr '\n' ' ' < "$TMP/fix2.files")"
+[ -z "$(G diff --name-only "$FIX" "$FIX2" | grep 'verify\.sh$' | grep -vE '^docs/tasks/111[ab]-verify\.sh$')" ] && pass "FIX..FIX2 changes no closed verify script except 111a-verify.sh (and this one)" || fail "FIX..FIX2 touches another verify script"
+[ "$(G diff --numstat "$FIX" "$FIX2" -- docs/tasks/111a-verify.sh | cut -f1,2)" = "$(printf '8\t1')" ] && pass "111a-verify.sh: 8 lines added, 1 removed (the FINAL..HEAD check line); the live guards (tests, --list, timing) are untouched" || fail "111a-verify.sh FIX..FIX2 numstat: $(G diff --numstat "$FIX" "$FIX2" -- docs/tasks/111a-verify.sh | cut -f1,2 | tr '\t' '/')"
+G diff -U0 "$FIX" "$FIX2" -- docs/tasks/111a-verify.sh | grep -E '^-[^-]' | grep -qF 'FINAL..HEAD touches only in-scope files' && pass "the one removed line is the FINAL..HEAD check" || fail "the removed line of 111a-verify.sh is not the FINAL..HEAD check"
 [ "$(G diff --numstat "$BASE" "$FIX" -- tests/registry/test_sweep.py | cut -f2)" = 2 ] && pass "no test was removed or weakened: test_sweep.py loses exactly 2 lines (the Stub's git init line and its signature), both replaced" || fail "test_sweep.py BASE..FIX removes $(G diff --numstat "$BASE" "$FIX" -- tests/registry/test_sweep.py | cut -f2) lines"
 G diff -U0 "$BASE" "$FIX" -- tests/registry/test_sweep.py | grep -E '^-[^-]' | sed 's/^/        removed: /'
+
+# ---------------------------------------------------------------------------------------------------------------------
+section "AC8 -- 111a-verify.sh reads FINAL..TIP: the OLD blob is red on this head, the new one is green on it and after a later out-of-scope commit"
+new_clone "$TMP/a-old" "$HEADREV" && G show "$BASE:docs/tasks/111a-verify.sh" > "$TMP/a-old/docs/tasks/111a-verify.sh" || fail "AC8 cannot build the OLD-blob frame"
+run_111a "$TMP/a-old" "$TMP/a-old.out"
+grep -E '^FAIL' "$TMP/a-old.out" | sed 's/^/        old 111a-verify.sh: /'
+[ "$V_RC" = 1 ] && [ "$(grep -c '^FAIL' "$TMP/a-old.out")" = 1 ] && grep -qx 'FAIL  FINAL..HEAD touches out-of-scope files' "$TMP/a-old.out" \
+    && pass "AC8 red first: the OLD 111a-verify.sh (blob at BASE) on this head exits 1 with exactly one FAIL, 'FINAL..HEAD touches out-of-scope files'" || fail "AC8 the OLD 111a-verify.sh on this head: exit $V_RC, FAIL lines: $(grep '^FAIL' "$TMP/a-old.out" | tr '\n' '|')"
+new_clone "$TMP/a-new" "$HEADREV" || fail "AC8 cannot clone HEAD"
+run_111a "$TMP/a-new" "$TMP/a-new.out"
+tail -2 "$TMP/a-new.out" | sed 's/^/        new 111a-verify.sh: /'
+[ "$V_RC" = 0 ] && grep -qx 'ALL PASS' "$TMP/a-new.out" && ! grep -q '^FAIL' "$TMP/a-new.out" && pass "AC8 green: the new 111a-verify.sh on the same head exits 0, ALL PASS" || fail "AC8 the new 111a-verify.sh on this head: exit $V_RC, FAIL lines: $(grep '^FAIL' "$TMP/a-new.out" | tr '\n' '|')"
+grep -qx 'PASS  FINAL..TIP touches only in-scope files' "$TMP/a-new.out" && grep -q '^PASS  TIP is reachable' "$TMP/a-new.out" && pass "AC8 the new run prints the FINAL..TIP check and the TIP ancestry check" || fail "AC8 the new run lacks the FINAL..TIP or the TIP ancestry line"
+make_later "$TMP/a-later" || fail "AC8 cannot build the later-commit frame"
+run_111a "$TMP/a-later" "$TMP/a-later.out"
+[ "$V_RC" = 0 ] && grep -qx 'ALL PASS' "$TMP/a-later.out" && pass "AC8 the new 111a-verify.sh stays green on a frame where a later commit touches an out-of-scope file (TIP is fixed)" || fail "AC8 the new 111a-verify.sh on the later-commit frame: exit $V_RC, FAIL lines: $(grep '^FAIL' "$TMP/a-later.out" | tr '\n' '|')"
+G show "$BASE:docs/tasks/111a-verify.sh" > "$TMP/a-later/docs/tasks/111a-verify.sh"
+run_111a "$TMP/a-later" "$TMP/a-later-old.out"
+[ "$V_RC" != 0 ] && grep -qx 'FAIL  FINAL..HEAD touches out-of-scope files' "$TMP/a-later-old.out" && pass "AC8 control: the OLD blob is red on that later-commit frame too (the frame discriminates)" || fail "AC8 control: the OLD blob on the later-commit frame: exit $V_RC"
+[ "$(find "$TMP/a-old" "$TMP/a-new" "$TMP/a-later" -name __pycache__ | wc -l)" = 0 ] && pass "AC8 the 111a runs left no __pycache__ in their frames" || fail "AC8 __pycache__ left by the 111a runs"
 fi
 
 if [ "$MUTATE" = 1 ]; then
@@ -311,6 +349,12 @@ git -C "$M" checkout -q -- .
 mutate "$M/docs/tasks/039a-verify.sh" '*064-verify.sh|*065-verify.sh) args=(--no-closed)' '*064-verify.sh|*065-verify.sh) args=()' || fail "AC6 039a not passing the flag: the mutation did not apply"
 if [ "$(case_args "$M/docs/tasks/039a-verify.sh" 064)" = "--no-closed" ]; then fail "AC6 039a not passing the flag stayed green"; else pass "AC6 039a's case no longer giving 064 and 065 the flag turns the AC4 check red"; fi
 git -C "$M" checkout -q -- .
+make_later "$TMP/lf" || fail "AC6 cannot build the later-commit frame"
+run_111a "$TMP/lf" "$TMP/lf0.out"
+[ "$V_RC" = 0 ] && pass "AC6.0 control: the unmutated 111a-verify.sh is green on a frame whose later commit touches an out-of-scope file" || fail "AC6.0 control: unmutated 111a-verify.sh exit $V_RC on the later-commit frame"
+mutate "$TMP/lf/docs/tasks/111a-verify.sh" 'TIP=58c75c033cbddc506f55358e6716682e9bfe9a53' 'TIP="$(git -C "$(dirname "$0")" rev-parse HEAD)"' || fail "AC6 111a TIP mutation did not apply"
+run_111a "$TMP/lf" "$TMP/lf1.out"
+if [ "$V_RC" != 0 ] && grep -qx 'FAIL  FINAL..TIP touches out-of-scope files' "$TMP/lf1.out"; then pass "AC6 111a-verify.sh with TIP set back to HEAD turns red on the later-commit frame: exit $V_RC, 'FINAL..TIP touches out-of-scope files'"; else fail "AC6 111a-verify.sh with TIP set back to HEAD stayed green or missed the FAIL line (exit $V_RC)"; fi
 run_tests "$M" "$TMP/r.out"; rc=$?
 [ "$rc" = 0 ] && pass "AC6 restore: unmutated clone is green again ($(grep -E '^Ran ' "$TMP/r.out"))" || fail "AC6 restore: unmutated clone is red"
 for kind in 064 065; do
