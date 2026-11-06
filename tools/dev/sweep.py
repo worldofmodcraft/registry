@@ -12,10 +12,12 @@ Nested starts are counted without touching any script: BASH_ENV points at a gene
 PPID and `$0` to a per-script log whenever `$0` matches *-verify.sh. A script that clears its environment hides its
 children; the report says so in `nested_visibility`.
 
-039a is listed as skipped ("it is the sweep"; it has no skip flag yet, task 111b). 039b runs with --no-closed.
+039a is listed as skipped ("it is the sweep"). 039b, 064 and 065 run with --no-closed (NO_CLOSED_ARGS, task 111b): the sweep
+already runs every closed script once, so those three do not re-run the other closed scripts underneath themselves.
 Before each script the driver waits until no other *-verify.sh runs on the machine (this process, its descendants
 and its ancestors do not count; OPERATIONS.md, 089e's others() shape). --no-wait turns that off (tests only).
-Exit: 0 all scripts green; 1 at least one script failed; 2 usage or environment error (never 0 on an empty list).
+Exit: 0 all scripts green; 1 at least one script failed; 2 usage or environment error (never 0 on an empty list, and
+never 0 when the source clone has no local `main`: the inner clone would have no origin/main, task 111b).
 Python 3 standard library only.
 """
 
@@ -35,7 +37,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SKIP = {"039a-verify.sh": "it is the sweep"}
 NO_CLOSED_ARGS = ["--no-closed"]
-EXTRA_ARGS = {"039b-verify.sh": NO_CLOSED_ARGS}
+EXTRA_ARGS = {
+    "039b-verify.sh": NO_CLOSED_ARGS,
+    "064-verify.sh": NO_CLOSED_ARGS,
+    "065-verify.sh": NO_CLOSED_ARGS,
+}
 NESTED_VISIBILITY = "BASH_ENV; children of a cleared environment are not counted"
 BASH_ENV_TEXT = (
     'case "$0" in *-verify.sh) printf \'%s %s %s\\n\' "$$" "$PPID" "$0" >> "$WOM_SWEEP_LOG" ;; esac\n'
@@ -254,6 +260,12 @@ def run(a):
     if head.returncode != 0:
         raise EnvError("cannot read HEAD of %s" % ROOT)
     head = head.stdout.strip()
+    # The inner clone gets origin/main only if the source clone has a local main (found 2026-11-05: 089c AC0.4 went red when the
+    # driver ran from a clone made with `git clone --branch`). A clean refusal, before anything is cloned or run.
+    has_main = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--verify", "-q", "refs/heads/main"], capture_output=True, text=True)
+    if has_main.returncode != 0:
+        raise EnvError("the source clone %s has no local branch 'main', so the inner clone would have no origin/main "
+                       "(closed scripts such as 089c need it); create it first: git -C %s branch main origin/main" % (ROOT, ROOT))
     work = Path(tempfile.mkdtemp(prefix="wom-sweep."))
     try:
         clone = work / "clone"
