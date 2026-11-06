@@ -19,6 +19,7 @@ set -o pipefail
 
 BASE=428df021bf89738768bc2a13f82461479318ab35   # registry origin/main (task 008b-2 merged) the branch was cut from
 FINAL=1fdf6e73727b6b44f5b4ca4c833cea98106238e3  # last commit that changes sweep.py or its tests (later commits: this script and the log only)
+TIP=58c75c033cbddc506f55358e6716682e9bfe9a53    # 111a's merged head (ab5fcba^2): FINAL..TIP is the scope-checked range, so a later task cannot redden it (task 111b)
 
 MUTATE=0
 for a in "$@"; do
@@ -119,7 +120,13 @@ else
     fail "pins BASE/FINAL unreachable (BASE=$BASE FINAL=$FINAL)"
 fi
 G merge-base --is-ancestor "$FINAL" "$HEADREV" && pass "FINAL is an ancestor of HEAD" || fail "FINAL is not an ancestor of HEAD"
-[ -z "$(G diff --name-only "$FINAL" "$HEADREV" | scope_bad)" ] && pass "FINAL..HEAD touches only in-scope files" || fail "FINAL..HEAD touches out-of-scope files"
+G cat-file -e "$TIP^{commit}" 2>/dev/null && G merge-base --is-ancestor "$FINAL" "$TIP" && G merge-base --is-ancestor "$TIP" "$HEADREV" \
+    && pass "TIP is reachable: FINAL is an ancestor of TIP and TIP is an ancestor of HEAD" || fail "TIP $TIP is not reachable in the order FINAL < TIP < HEAD"
+if tipfiles="$(G diff --name-only "$FINAL" "$TIP" 2>/dev/null)" && [ -n "$tipfiles" ]; then
+    [ -z "$(printf '%s\n' "$tipfiles" | scope_bad)" ] && pass "FINAL..TIP touches only in-scope files" || fail "FINAL..TIP touches out-of-scope files"
+else
+    fail "FINAL..TIP is empty or unreadable"
+fi
 else
 # ---------------------------------------------------------------------------------------------------------------------
 section "AC5 -- mutations of sweep.py in a temporary clone (each must redden its named test; the restore must be green)"
