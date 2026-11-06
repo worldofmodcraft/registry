@@ -6,6 +6,7 @@
 # Demonstrates acceptance criteria 1-6 of docs/tasks/065-entry-schema-key-id-format.md (criterion 7 is the site PR).
 #
 # Usage:  docs/tasks/065-verify.sh [--mutate] [NODE_MODULES_DIR]      (any cwd inside the repository)
+# Usage:  docs/tasks/065-verify.sh --no-closed [--mutate] [NODE_MODULES_DIR]      (opt-in; --no-closed must be the first argument; see below)
 #   (no flag)  AC1 (red on the red commit), AC2 (HEAD rejects/accepts, three validators), AC3 (diff integrity of
 #              the fix range), AC4 (every closed verify script on HEAD, one at a time), AC5 (rules-document examples).
 #   --mutate   AC1-AC3, AC5 and AC6 (AC4, the long run of every closed script, is skipped): three mutations of the schema

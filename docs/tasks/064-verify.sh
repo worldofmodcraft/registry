@@ -6,6 +6,7 @@
 # Demonstrates acceptance criteria 1-6 of docs/tasks/064-schema-check-end-anchor.md.
 #
 # Usage:  docs/tasks/064-verify.sh [--mutate] [NODE_MODULES_DIR]      (any cwd inside the repository)
+# Usage:  docs/tasks/064-verify.sh --no-closed [--mutate] [NODE_MODULES_DIR]      (opt-in; --no-closed must be the first argument; see below)
 #   (no flag)  AC1 (red on the red commit), AC2 (fixed at HEAD, controls kept), AC3 (Ajv agreement),
 #              AC4 (other suites and the closed verify scripts), AC5 (034 C3.3 re-pinned only), file scope.
 #   --mutate   AC6: fifteen mutations in a temporary clone, each must turn the new tests red.
