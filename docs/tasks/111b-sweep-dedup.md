@@ -64,3 +64,22 @@ Weakening any check that runs in standalone mode; removing a loop rather than gu
     The new script (the committed blob) on the same head: exit 0, `ALL PASS`, printing `PASS  FINAL..TIP touches only in-scope files` and `PASS  TIP is reachable: ...`. It is also green on a frame where a later commit touches an out-of-scope file (`docs/tasks/999-later-task.txt`), where the OLD blob is red again (the control that the frame discriminates).
   - `111b-verify.sh` itself no longer reads HEAD for a range: the former `FIX..HEAD in scope` check is replaced by `FIX..FIX2` (fixed; FIX2 = 23d32e7 is this script's TIP, 101's pattern: nothing after it is range-checked) plus the ancestry order. New mutation (sixth): TIP in 111a-verify.sh set back to HEAD, run on the later-commit frame, reddens with `FINAL..TIP touches out-of-scope files`; its control (unmutated, same frame) is green. 111a's own `--mutate` (about 77 s) is not run from 111b-verify.sh; it was run separately (see the report).
   - The item "(2)" under "FOR THE MANAGER" in the previous entry is resolved by this extension.
+- 2026-11-06 manager (recorded by the manager; copied by 111b): fresh-clone run of `e4e4d99`: `111b-verify.sh` default 96 PASS / 0 FAIL, `--mutate` 14 / 0; `111a-verify.sh` default 44 / 0, `--mutate` 8 / 0 (review finding 3).
+- 2026-11-06 implementer (last fix round, review findings 1, 4, 6): `111b-verify.sh` read HEAD text to judge 111b's own change (the same class as the 111a defect). Now every own-change assertion reads a fixed blob or a frame built from one: a clone at TIP (= FIX3 `04b0d76`, the commit that adds the Usage lines) supplies `--list`, 039a's case line, the guard labels, the stubbed slices of 064/065, the named tests, and the 111a frames (old blob and new blob both on the TIP frame); the mutation clone is also cut at TIP. Live guards on HEAD, and nothing else: the whole `test_sweep.py` suite, and "`111a-verify.sh` exits 0" (no count, no text pinned).
+  - Red first (before any change to the script): the then-current script (`e4e4d99`) on a frame where a 111c-like later commit (a) adds `"089c-verify.sh": NO_CLOSED_ARGS` as a fourth entry and updates the two tests that count them, (b) rewords 039a's case line (arm order, `*064-verify.sh|*065-verify.sh|*039b-verify.sh|*089c-verify.sh`), (c) rewords 064's section title `AC4 -- no other suite moves`. Frame (a)+(b) only (exit 8, no fault in the tree):
+    ```
+    FAIL  AC4 --list shows arguments for 4 scripts
+    FAIL  AC4 039a's case does not give 039b --no-closed (ERR)
+    FAIL  AC4 039a's case does not give 064 --no-closed (ERR)
+    FAIL  AC4 039a's case does not give 065 --no-closed (ERR)
+    FAIL  AC4 039a's case gives 069 an argument
+    FAIL  AC4 039a's case gives 070 an argument
+    FAIL  AC4 039a's case gives 057 an argument
+    FAIL  AC4 039a's case gives 062 an argument
+    8 FAILED
+    ```
+    Frame (a)+(b)+(c): `FAIL  AC1 064 --no-closed: slice exit 98` (`slicer: section AC4 found 0 times`), then the script aborts with `line 194: S_NAMES: unbound variable`, exit 1.
+  - Green on the same kind of frame: the new script (AC9, run under `--mutate`; frame = TIP + that later commit, with the HEAD blob of the script in it, default mode, in parallel with the previous version): this script `ALL PASS (96 checks)`; the previous version (`e4e4d99`, pinned as PREV) exit 1 with `FAIL  AC1 064 --no-closed: slice exit 98`.
+  - Finding 4: the AC2 filter is now an exact set. The added non-comment lines of 064 and 065 must equal the expected flag lines (the `NOCLOSED=0` line, the parse line, the guard line, the NOTE line, `fi`) character for character; a line that merely contains `NOCLOSED` no longer passes. Controls: the exact set passes; an extra `+NOCLOSED=1; true`, a missing `+fi` and a removed line are each detected.
+  - Finding 6: the Usage lines of 064 and 065 now list `--no-closed` (commit `04b0d76`, one added comment line each, nothing removed, no behaviour change; the AC2 check requires exactly that line once). 064 now has 8 added lines in total against BASE, 065 has 9, 0 removed.
+  - Timing (AC7), fresh clone of `d1eab5c` from GitHub through a neutral wrapper: default 51 s (96 PASS / 0 FAIL); `--mutate` 73 s (16 PASS / 0 FAIL; it includes the two parallel default-mode runs of AC9). Both under 120 s.
