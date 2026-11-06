@@ -27,7 +27,15 @@ note() { echo "note  $*"; }
 
 BASE=235fea1980a98ab9f7c75ca856b78425975d6a4b
 A=f257a53552cbb661b0bf6f7d388b24303f2721a0
-FINAL=a5710ed0aaae5b7a547e3509363cec55beb2474b
+# Review round (2026-11-06, scope extended): FINAL is the fix-round content commit. OLDFINAL is the first review's FINAL (a5710ed): the tree on
+# which the F3 hygiene check must be red. E01 is the pushed head e01a0d7, whose docs/tasks/008b1-verify.sh and 008c-verify.sh are the OLD
+# scripts of F1.
+FINAL=46234a922148bcb0ba9f25d0bc3450a5ca0ddf6b
+OLDFINAL=a5710ed0aaae5b7a547e3509363cec55beb2474b
+E01=e01a0d7c08df5837ec991375f489b1417fa8d8fa
+# TIP: the last commit the FINAL..TIP name-list check measures, i.e. the commit before the one that records this line. The pin commit and the
+# log entries after it change only docs/tasks/094-* files and are not range-checked (101's pattern). Empty until recorded; empty FAILS.
+TIP=
 
 export PYTHONDONTWRITEBYTECODE=1
 PY="python3 -I -B"
@@ -45,13 +53,26 @@ export TMPDIR="$RUNTMP"
 
 # ------------------------------------------------------------------------------------------------ own-change checks (pins)
 pin_ok() { [[ "$1" =~ ^[0-9a-f]{40}$ ]] && git cat-file -e "$1^{commit}" 2>/dev/null; }
-for pin in BASE A FINAL; do
+for pin in BASE A OLDFINAL E01 FINAL TIP; do
   if pin_ok "${!pin}"; then ok "pin $pin is a full SHA and resolves (${!pin:0:7})"; else fail "pin $pin (${!pin}) is not a full SHA or does not resolve"; fi
 done
 [ "$FAILS" -eq 0 ] || { echo "SUMMARY failed=$FAILS (a pin is unreachable: fetch the branch)"; exit "$FAILS"; }
 
-git merge-base --is-ancestor "$BASE" "$A" && git merge-base --is-ancestor "$A" "$FINAL" && git merge-base --is-ancestor "$FINAL" HEAD \
-  && ok "BASE <= A <= FINAL <= HEAD" || fail "the pins are not in order BASE <= A <= FINAL <= HEAD"
+git merge-base --is-ancestor "$BASE" "$A" && git merge-base --is-ancestor "$A" "$OLDFINAL" && git merge-base --is-ancestor "$OLDFINAL" "$E01" \
+  && git merge-base --is-ancestor "$E01" "$FINAL" && git merge-base --is-ancestor "$FINAL" "$TIP" && git merge-base --is-ancestor "$TIP" HEAD \
+  && ok "BASE <= A <= OLDFINAL <= E01 <= FINAL <= TIP <= HEAD" || fail "the pins are not in order BASE <= A <= OLDFINAL <= E01 <= FINAL <= TIP <= HEAD"
+
+# F4 (part): after FINAL, up to the fixed TIP, only docs/tasks/094-* files change. A name list over every commit in the range (a file touched
+# and reverted still shows), no merges, with a positive control for the matcher.
+outside_094() { grep -vE '^docs/tasks/094-[A-Za-z0-9._-]+$' || true; }   # stdin: file names; prints those that are not docs/tasks/094-*
+ctl=$(printf 'docs/tasks/094-verify.sh\ndocs/tasks/094-pipeline-ecma-patterns.md\ntools/pipeline/ecma.py\ndocs/tasks/008c-verify.sh\n' | outside_094 | tr '\n' ' ')
+[ "$ctl" = "tools/pipeline/ecma.py docs/tasks/008c-verify.sh " ] && ok "control: the FINAL..TIP matcher flags tools/pipeline/ecma.py and docs/tasks/008c-verify.sh and passes docs/tasks/094-*" \
+  || fail "control: the FINAL..TIP matcher is wrong (flagged: $ctl)"
+range_names=$(git log --no-renames --name-only --format= "$FINAL..$TIP")
+[ -n "$range_names" ] && ok "FINAL..TIP changes something (the range is not empty)" || fail "FINAL..TIP is empty (broken search)"
+[ -z "$(git rev-list --merges "$FINAL..$TIP")" ] && ok "FINAL..TIP holds no merge commit" || fail "FINAL..TIP holds a merge commit"
+out=$(printf '%s\n' "$range_names" | outside_094)
+[ -z "$out" ] && ok "FINAL..TIP changes only docs/tasks/094-* files ($(printf '%s\n' "$range_names" | sort -u | wc -l) names)" || fail "FINAL..TIP touches: $(echo "$out" | tr '\n' ' ')"
 
 # Criterion 1: commit A is tests only.
 a_files=$(git diff --name-only "$A^" "$A")
@@ -61,7 +82,7 @@ a_files=$(git diff --name-only "$A^" "$A")
   || fail "BASE..A^ holds more than the spec copy"
 
 # File scope (spec). handoff.py and sign_built.py are NOT in it: if either needs an edit the task stops and reports.
-SCOPE_RE='^(tools/pipeline/(ecma|build_version|write_back|plan_pending)\.py|tests/pipeline/(test_ecma_patterns|test_write_back|mutate)\.py|docs/pipeline/build-pipeline\.md|docs/tasks/094-pipeline-ecma-patterns\.md)$'
+SCOPE_RE='^(tools/pipeline/(ecma|build_version|write_back|plan_pending)\.py|tests/pipeline/(test_ecma_patterns|test_write_back|mutate)\.py|docs/pipeline/build-pipeline\.md|docs/tasks/094-pipeline-ecma-patterns\.md|docs/tasks/(008b1|008c)-verify\.sh)$'
 files=$(git diff --name-only "$BASE" "$FINAL")
 bad=$(printf '%s\n' "$files" | grep -vE "$SCOPE_RE")
 [ -n "$files" ] && [ -z "$bad" ] && ok "git diff --name-only BASE FINAL is non-empty and inside the file scope ($(printf '%s\n' "$files" | wc -l) files)" \
@@ -73,8 +94,35 @@ for forbidden in tools/registry/schema.py tests/contracts/schema_check.py tools/
   [ -z "$(git diff --name-only "$BASE" "$FINAL" -- "$forbidden")" ] && ok "BASE..FINAL leaves $forbidden untouched" || fail "BASE..FINAL touches $forbidden"
 done
 [ -z "$(git diff --name-only "$BASE" "$FINAL" -- contracts)" ] && ok "BASE..FINAL leaves contracts/ untouched" || fail "BASE..FINAL touches contracts/"
-other=$(git diff --name-only "$BASE" "$FINAL" | grep -E '^docs/tasks/.*(-verify\.sh|\.py|\.json)$')
-[ -z "$other" ] && ok "BASE..FINAL touches no verify script, pin file or fixture under docs/tasks" || fail "BASE..FINAL touches: $other"
+other=$(git diff --name-only "$BASE" "$FINAL" | grep -E '^docs/tasks/.*(-verify\.sh|\.py|\.json)$' | grep -vE '^docs/tasks/(008b1|008c)-verify\.sh$')
+[ -z "$other" ] && ok "BASE..FINAL touches no verify script (but 008b1 and 008c, F1), pin file or fixture under docs/tasks" || fail "BASE..FINAL touches: $other"
+# F1: in 008b1-verify.sh and 008c-verify.sh only the mutation anchors changed. Every changed hunk between E01 (old) and FINAL (new) must
+# start at a `run_mut <id>` line, the old and new hunks must name the same ids, and 008b1/008c must have exactly the expected ids.
+cat > "$RUNTMP/anchors.py" <<'PYEOF'
+import difflib, sys
+old, new, want = open(sys.argv[1], encoding="utf-8").read().split("\n"), open(sys.argv[2], encoding="utf-8").read().split("\n"), sys.argv[3].split(",")
+def ids(lines):
+    return [l.split()[1] for l in lines if l.startswith("  run_mut ")]
+got_old, got_new, bad = [], [], []
+for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, old, new, autojunk=False).get_opcodes():
+    if tag == "equal":
+        continue
+    o, n = old[i1:i2], new[j1:j2]
+    if not (o and n and o[0].startswith("  run_mut ") and n[0].startswith("  run_mut ")):
+        bad.append((tag, o[:1], n[:1]))
+    got_old += ids(o); got_new += ids(n)
+if bad or sorted(got_old) != sorted(want) or sorted(got_new) != sorted(want):
+    print("BAD", bad, got_old, got_new); sys.exit(1)
+print("ok", sorted(got_new))
+PYEOF
+git show "$E01:docs/tasks/008c-verify.sh" > "$RUNTMP/008c.old"; git show "$FINAL:docs/tasks/008c-verify.sh" > "$RUNTMP/008c.new"
+git show "$E01:docs/tasks/008b1-verify.sh" > "$RUNTMP/008b1.old"; git show "$FINAL:docs/tasks/008b1-verify.sh" > "$RUNTMP/008b1.new"
+W8C=ascii-flag-dropped,digit-translation-dropped,digit-translation-dropped-published-at,digit-translation-mangles-escaped-backslash
+$PY "$RUNTMP/anchors.py" "$RUNTMP/008c.old" "$RUNTMP/008c.new" "$W8C" > "$RUNTMP/a1.out" 2>&1 && ok "008c-verify.sh: only the four mutation anchors changed ($(cat "$RUNTMP/a1.out"))" || fail "008c-verify.sh changed outside the four mutation anchors: $(cat "$RUNTMP/a1.out")"
+$PY "$RUNTMP/anchors.py" "$RUNTMP/008b1.old" "$RUNTMP/008b1.new" c17b-ecma-digits-dropped > "$RUNTMP/a2.out" 2>&1 && ok "008b1-verify.sh: only the c17b mutation anchor changed ($(cat "$RUNTMP/a2.out"))" || fail "008b1-verify.sh changed outside the c17b mutation anchor: $(cat "$RUNTMP/a2.out")"
+# control: one extra changed line outside any run_mut line must be flagged
+{ cat "$RUNTMP/008b1.new"; echo 'echo stray'; } > "$RUNTMP/008b1.ctl"
+$PY "$RUNTMP/anchors.py" "$RUNTMP/008b1.old" "$RUNTMP/008b1.ctl" c17b-ecma-digits-dropped > /dev/null 2>&1 && fail "control: the anchors-only check passes a script with a stray added line" || ok "control: the anchors-only check flags a stray added line"
 
 # Content of ecma.py at FINAL (a pinned blob, not the worktree).
 ECMA=$(git show "$FINAL:tools/pipeline/ecma.py" 2>/dev/null)
@@ -123,19 +171,29 @@ hits=$(n3_imports_n5 tools/registry)
 [ -n "$(grep -n 'tools.*registry' tools/pipeline/ecma.py)" ] && ok "the one-way import N5 -> N3 exists (ecma.py loads tools/registry/schema.py)" || fail "ecma.py does not load tools/registry/schema.py"
 
 # Criterion 5: the pipeline suite (the invocation 008a-verify.sh uses) at HEAD.
-SUITE_FLOOR=$((147 + 25))
+SUITE_FLOOR=$((147 + 26))
 OUT=$($PY tests/pipeline/run_checks.py 2>"$RUNTMP/suite-stderr")
 PASSN=$(echo "$OUT" | grep -c '^CHECK .* PASS$')
 FAILN=$(echo "$OUT" | grep -c '^CHECK .* FAIL$')
 echo "$OUT" | grep '^CHECK .* FAIL$' | sed 's/^/FAIL  /'
 echo "suite at HEAD: $PASSN passed, $FAILN failed; $(echo "$OUT" | grep '^SUMMARY')"
 [ "$FAILN" -eq 0 ] && echo "$OUT" | grep -q '^SUMMARY ran=[0-9]* failed=0$' && ok "the pipeline suite is green at HEAD (SUMMARY failed=0)" || { fail "$FAILN suite check(s) failed"; cat "$RUNTMP/suite-stderr" >&2; }
-[ "$PASSN" -ge "$SUITE_FLOOR" ] && ok "the suite ran at least $SUITE_FLOOR checks (147 + the 25 new ones): $PASSN" || fail "the suite ran only $PASSN checks (floor $SUITE_FLOOR)"
+[ "$PASSN" -ge "$SUITE_FLOOR" ] && ok "the suite ran at least $SUITE_FLOOR checks (147 + the 26 new ones): $PASSN" || fail "the suite ran only $PASSN checks (floor $SUITE_FLOOR)"
 for pat in 'RedFirst.test_c1a' 'RedFirst.test_c1b' 'RedFirst.test_c1c' 'PositiveControls.test_c2' 'Equivalence.test_c3' 'NewCallers.test_c3b' 'PlanPendingValidator' 'Helper.test_'; do
   P=$(echo "$OUT" | grep -c "^CHECK ${pat}.* PASS$"); F=$(echo "$OUT" | grep -c "^CHECK ${pat}.* FAIL$")
   [ "$P" -ge 1 ] && [ "$F" -eq 0 ] && ok "$pat*: $P passing, 0 failing" || fail "$pat*: $P passing, $F failing"
 done
 [ "$(echo "$OUT" | grep -c '^CHECK ReviewFixes.*PASS$')" -ge 7 ] && ok "test_write_back's ReviewFixes (008c's fix-round tests) all pass" || fail "test_write_back's ReviewFixes did not all pass"
+
+# F3 hygiene: importing tools/pipeline/ecma.py (which loads tools/registry/schema.py and tests/contracts/schema_check.py by path) must leave no
+# __pycache__ in tools/registry or tests/contracts. tools/pipeline/__pycache__ is NOT counted: it is written by tests/pipeline/test_plan_pending.py,
+# which runs `python3 -I` without -B (-I ignores PYTHONDONTWRITEBYTECODE); that file is outside task 094 (booked).
+pycache_leaks() { find "$1/tools/registry" "$1/tests/contracts" -name __pycache__ 2>/dev/null; }   # $1 = a tree root
+mkdir -p "$RUNTMP/hyctl/tools/registry/__pycache__" "$RUNTMP/hyctl/tests/contracts"
+[ -n "$(pycache_leaks "$RUNTMP/hyctl")" ] && ok "control: the hygiene check finds a planted tools/registry/__pycache__" || fail "control: the hygiene check is blind to a planted __pycache__"
+leaks=$(pycache_leaks .)
+[ -z "$leaks" ] && ok "after the suite run there is no __pycache__ in tools/registry or tests/contracts" || fail "__pycache__ left behind by the suite: $(echo "$leaks" | tr '\n' ' ')"
+note "other __pycache__ dirs in this tree after the run (informational): $(find . -name __pycache__ -not -path './.git/*' | tr '\n' ' ')"
 
 # ------------------------------------------------------------------------------------------------ red first at A, green at FINAL
 extract() {  # extract REV DIR
@@ -177,7 +235,7 @@ for t in $GREEN_AT_A; do
 done
 extract "$FINAL" "$RUNTMP/at-FINAL" || fail "cannot export FINAL"
 ( cd "$RUNTMP/at-FINAL" && $PY tests/pipeline/run_checks.py --only test_ecma_patterns ) > "$RUNTMP/F.out" 2>"$RUNTMP/F.err"
-grep -q '^SUMMARY ran=[0-9]* failed=0$' "$RUNTMP/F.out" && [ "$(grep -c '^CHECK .* PASS$' "$RUNTMP/F.out")" -ge 25 ] \
+grep -q '^SUMMARY ran=[0-9]* failed=0$' "$RUNTMP/F.out" && [ "$(grep -c '^CHECK .* PASS$' "$RUNTMP/F.out")" -ge 26 ] \
   && ok "at FINAL all $(grep -c '^CHECK .* PASS$' "$RUNTMP/F.out") tests of test_ecma_patterns.py pass" || { fail "test_ecma_patterns.py is not green at FINAL"; grep -v ' PASS$' "$RUNTMP/F.out"; }
 
 # ------------------------------------------------------------------------------------------------ --mutate
@@ -276,6 +334,40 @@ PYEOF
     grep -E '^MUTATION (SUMMARY|fullmatch-becomes-search)' "$RUNTMP/m6.out"; grep -v 'RED (good)' "$RUNTMP/m6.out" | grep -v '^MUTATION SUMMARY' | sed 's/^/      /'
     [ "$rc" -eq 0 ] && grep -q '^MUTATION SUMMARY mutations=[0-9]* not_red=0$' "$RUNTMP/m6.out" && ok "m6: tests/pipeline/mutate.py reports not_red=0" || fail "m6: mutate.py reports not-red mutations (exit $rc)"
   fi
+
+  # F1 (review round): the closed scripts' --mutate modes. RED FIRST: the OLD scripts (blobs at E01) run on the tree at FINAL (the new code) must
+  # go red, naming the anchors the removed code took with it; then the scripts at FINAL (re-anchored) must be green on the same tree.
+  g1() { git -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false "$@"; }
+  git clone -q --no-hardlinks "$PWD" "$RUNTMP/f1old" 2>/dev/null && ( cd "$RUNTMP/f1old" && g1 checkout -q --detach "$FINAL" \
+    && cp "$RUNTMP/008c.old" docs/tasks/008c-verify.sh && cp "$RUNTMP/008b1.old" docs/tasks/008b1-verify.sh \
+    && g1 commit -q -am "the old closed scripts (e01a0d7)" ) && ok "F1: scratch clone with the OLD 008b1/008c-verify.sh (blobs at E01) over the tree at FINAL" || fail "F1: cannot build the scratch clone with the old scripts"
+  git clone -q --no-hardlinks "$PWD" "$RUNTMP/f1new" 2>/dev/null && ( cd "$RUNTMP/f1new" && g1 checkout -q --detach "$FINAL" ) && ok "F1: scratch clone at FINAL (the re-anchored scripts)" || fail "F1: cannot build the scratch clone at FINAL"
+  ( cd "$RUNTMP/f1old" && bash docs/tasks/008c-verify.sh --mutate > "$RUNTMP/o8c.out" 2>&1; echo "rc=$?" >> "$RUNTMP/o8c.out" )
+  ( cd "$RUNTMP/f1old" && bash docs/tasks/008b1-verify.sh --mutate > "$RUNTMP/o8b1.out" 2>&1; echo "rc=$?" >> "$RUNTMP/o8b1.out" )
+  for id in ascii-flag-dropped digit-translation-dropped digit-translation-dropped-published-at digit-translation-mangles-escaped-backslash; do
+    grep -q "^FAIL  mutation $id: anchor not found exactly once" "$RUNTMP/o8c.out" && ok "F1 red first: OLD 008c-verify.sh --mutate names the missing anchor of $id" || fail "F1 red first: OLD 008c-verify.sh --mutate does not report $id as an anchor not found"
+  done
+  grep -q '^SUMMARY mutate failed=4$' "$RUNTMP/o8c.out" && grep -q '^rc=4$' "$RUNTMP/o8c.out" && ok "F1 red first: OLD 008c-verify.sh --mutate: SUMMARY mutate failed=4, exit 4" || fail "F1 red first: OLD 008c-verify.sh --mutate is not exactly 4 failures: $(grep -E '^SUMMARY|^rc=' "$RUNTMP/o8c.out" | tr '\n' ' ')"
+  grep -q '^FAIL  mutation c17b-ecma-digits-dropped: anchor not found exactly once' "$RUNTMP/o8b1.out" && grep -q '^SUMMARY mutate failed=1$' "$RUNTMP/o8b1.out" && grep -q '^rc=1$' "$RUNTMP/o8b1.out" \
+    && ok "F1 red first: OLD 008b1-verify.sh --mutate: c17b-ecma-digits-dropped anchor not found, SUMMARY mutate failed=1, exit 1" || fail "F1 red first: OLD 008b1-verify.sh --mutate is not exactly the c17b failure: $(grep -E '^FAIL|^SUMMARY|^rc=' "$RUNTMP/o8b1.out" | tr '\n' ' ')"
+  ( cd "$RUNTMP/f1new" && bash docs/tasks/008c-verify.sh --mutate > "$RUNTMP/n8c.out" 2>&1; echo "rc=$?" >> "$RUNTMP/n8c.out" )
+  ( cd "$RUNTMP/f1new" && bash docs/tasks/008b1-verify.sh --mutate > "$RUNTMP/n8b1.out" 2>&1; echo "rc=$?" >> "$RUNTMP/n8b1.out" )
+  for id in ascii-flag-dropped digit-translation-dropped digit-translation-dropped-published-at digit-translation-mangles-escaped-backslash; do
+    grep -q "^ok    mutation $id: red -> " "$RUNTMP/n8c.out" && ok "F1 green: re-anchored 008c-verify.sh --mutate: $id is red (the property still breaks)" || fail "F1 green: re-anchored 008c-verify.sh --mutate: $id is not red"
+  done
+  grep -q '^SUMMARY mutate failed=0$' "$RUNTMP/n8c.out" && grep -q '^rc=0$' "$RUNTMP/n8c.out" && ok "F1 green: 008c-verify.sh --mutate at FINAL: SUMMARY mutate failed=0, exit 0" || fail "F1 green: 008c-verify.sh --mutate at FINAL: $(grep -E '^FAIL|^SUMMARY|^rc=' "$RUNTMP/n8c.out" | tr '\n' ' ')"
+  grep -q '^ok    mutation c17b-ecma-digits-dropped: red -> ' "$RUNTMP/n8b1.out" && grep -q '^SUMMARY mutate failed=0$' "$RUNTMP/n8b1.out" && grep -q '^rc=0$' "$RUNTMP/n8b1.out" \
+    && ok "F1 green: 008b1-verify.sh --mutate at FINAL: c17b-ecma-digits-dropped red, SUMMARY mutate failed=0, exit 0" || fail "F1 green: 008b1-verify.sh --mutate at FINAL: $(grep -E '^FAIL|^SUMMARY|^rc=' "$RUNTMP/n8b1.out" | tr '\n' ' ')"
+
+  # F3 (review round): RED FIRST on the first review's FINAL (a5710ed), whose ecma load wrote bytecode: after the full suite its tree holds a
+  # __pycache__ in tools/registry and/or tests/contracts; the tree at FINAL holds none.
+  extract "$OLDFINAL" "$RUNTMP/hy-old" && ( cd "$RUNTMP/hy-old" && $PY tests/pipeline/run_checks.py > "$RUNTMP/hy-old.out" 2>&1 )
+  grep -q '^SUMMARY ran=[0-9]* failed=0$' "$RUNTMP/hy-old.out" && ok "F3: the suite is green at OLDFINAL (so the leak below is not a failing run)" || fail "F3: the suite at OLDFINAL is not green"
+  old_leaks=$(pycache_leaks "$RUNTMP/hy-old")
+  [ -n "$old_leaks" ] && ok "F3 red first: at OLDFINAL the suite leaves __pycache__ in $(echo "$old_leaks" | sed "s#$RUNTMP/hy-old/##" | tr '\n' ' ')" || fail "F3 red first: the hygiene check is NOT red at OLDFINAL"
+  extract "$FINAL" "$RUNTMP/hy-new" && ( cd "$RUNTMP/hy-new" && $PY tests/pipeline/run_checks.py > "$RUNTMP/hy-new.out" 2>&1 )
+  grep -q '^SUMMARY ran=[0-9]* failed=0$' "$RUNTMP/hy-new.out" && ok "F3: the suite is green at FINAL" || fail "F3: the suite at FINAL is not green"
+  [ -z "$(pycache_leaks "$RUNTMP/hy-new")" ] && ok "F3 green: at FINAL the suite leaves no __pycache__ in tools/registry or tests/contracts" || fail "F3: at FINAL the suite still leaves $(pycache_leaks "$RUNTMP/hy-new" | tr '\n' ' ')"
 fi
 
 echo "SUMMARY failed=$FAILS"
