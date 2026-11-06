@@ -116,8 +116,10 @@ preserved (`contracts/signature-format.md`, "What `entry.json`'s `signature` fie
    `manifest.schema.json`; `manifest.id` must equal the entry id and `manifest.version` the version
    (both named in the schema as "pipeline logic"). Licence validity is the schema's OSI enum:
    `LicenseRef-*`, `NOASSERTION` and invented identifiers are rejected (`manifest/license-not-osi`).
-   Patterns for `commit`, `version` and `id` are matched with `fullmatch` because the schema
-   validator's `re.search` lets `$` accept a trailing newline.
+   Every schema pattern (`id`, `version`, `commit`, `published_at`, and the manifest's `id` and
+   `version`) is matched through `tools/pipeline/ecma.py` (task 094) with the registry gate's own expression
+   `re.search(ecma_pattern(p), s)` (`tools/registry/schema.py`): `$` is end of input only, so a trailing
+   newline fails; `\d` is ASCII-only; `\s`/`\S` are ECMA-262's set.
 6. **Key handling.** The tool takes a *path* (`--key`), passes it to `minisign -S -s`, and never reads,
    prints or logs it. `minisign` is run with a minimal environment (`PATH`, `LC_ALL`); the caller's
    environment, including any secret-bearing variable, is not forwarded. The finished signature is
@@ -215,7 +217,7 @@ a PR rejection) with a `reason`:
 | `pending-shape` | the target `pending` version does not have exactly the four pending keys `version`, `commit`, `source_url`, `status` (`contracts/append-only.rules.md` key-set table; `entry.schema.json`'s `pending` branch): a stray key such as `reason`, or an already-present write-back key such as `source_archive`, is refused before anything is written |
 | `result-missing-field` | `result` lacks `artifact.source_sha256`, `artifact.signature`, `artifact.key_id` or `built_at` |
 | `key-set` | the computed values do not have exactly the five keys |
-| `bad-value` | a value fails its `entry.schema.json` pattern, or `signature` is empty. Patterns are matched as ECMA-262 does: full-match (a trailing newline fails) and ASCII-only digits (each unescaped `\d` in a schema pattern is translated to `[0-9]` when the pattern is loaded, so Arabic-Indic digits fail; `\s`/`\S` are left at Python's default, which is Unicode-aware like ECMA's, so U+00A0 and U+2028 fail `\S`; no global `re.ASCII` flag). `published_at` accepts what the schema pattern accepts: `YYYY-MM-DDThh:mm:ss`, an optional fraction (`.` and one or more digits), then `Z` or a `+hh:mm`/`-hh:mm` offset. The pattern checks shape only, not calendar validity (month 13 passes) |
+| `bad-value` | a value fails its `entry.schema.json` pattern, or `signature` is empty. Patterns are matched as the registry gate matches them (task 094): `tools/pipeline/ecma.py` evaluates `re.search(ecma_pattern(p), s)` with `ecma_pattern` from `tools/registry/schema.py`, so the pipeline's verdict equals the gate's for every pattern. `$` is end of input only (a trailing newline fails); `\d` is ASCII-only (Arabic-Indic and fullwidth digits fail); `\s`/`\S` are ECMA-262's WhiteSpace + LineTerminator set, so U+00A0, U+2028, U+2029, U+3000, U+2003 and U+FEFF fail `\S`, while U+001C-U+001F and U+0085 (not white space in ECMA-262) pass it, inside a `source_archive` URL for example. No global `re.ASCII` flag, and the translator is not copied. A pattern with a construct the translator does not support raises `NotImplementedError`, which is never caught. `published_at` accepts what the schema pattern accepts: `YYYY-MM-DDThh:mm:ss`, an optional fraction (`.` and one or more digits), then `Z` or a `+hh:mm`/`-hh:mm` offset. The pattern checks shape only, not calendar validity (month 13 passes) |
 | `bad-id` / `bad-version` / `reserved-namespace` | `source_archive_url` input is not a valid id, a semver string, or a Windows reserved device name |
 | `entry-malformed` / `result-malformed` | the arguments are not objects of the expected shape |
 
@@ -286,8 +288,8 @@ requested id). This document is internal to node N5 and adds no edge to the depe
   keys, `NaN`, a file nested too deeply to parse (reason `nested too deeply to parse`), an `id` that does not belong to its directory `mods/<namespace>.<name>/`, the same version
   twice, a `mods/<dir>/` without `entry.json`) is one `fault` entry naming the file. Nothing is built for
   any version of it and no T3 is opened. Other entries continue. Patterns are matched through
-  `write_back`'s helpers (full match, ASCII-only `\d`); task 094 will move the pipeline to
-  `tools/registry/schema.py`'s `ecma_pattern`, and the `\s` residual booked in task 008c applies here too.
+  `tools/pipeline/ecma.py` (task 094), the registry gate's own `re.search(ecma_pattern(p), s)`, so an entry
+  is a fault exactly when the gate would reject it for a pattern (ASCII-only `\d`, ECMA-262 `\s`/`\S`).
 - **Branch skip (C13, PT6).** A `pending` version whose `pipeline/<namespace>.<name>-<version>` branch exists
   is a `skip`, never built, and the skip applies before the `+` rule. It is not silent: see
   `summarize_outcomes` below.

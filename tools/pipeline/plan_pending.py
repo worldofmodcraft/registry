@@ -12,8 +12,8 @@ holds skip/refuse/fault entries; 1 for malformed or conflicting inputs, and then
 A skip or fault is never reported by a non-zero exit; `summarize_outcomes` is how the run ends non-green.
 
 No network, no subprocess, no clock, no secret: everything is injected. Schema patterns are matched through
-write_back's helpers (`_ecma_digits`, `_fullmatch`): full-match, ASCII-only `\\d`. (Task 094 will later move the
-pipeline to tools/registry/schema.py's `ecma_pattern`; the residual `\\s` differences are booked in task 008c.)
+ecma.matches (task 094): the registry gate's own `re.search(ecma_pattern(p), s)`, so the planner's verdict on an entry equals the
+gate's for every pattern (ASCII-only `\\d`, ECMA-262 `\\s`/`\\S`, `$` at the end of input only).
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+import ecma  # noqa: E402
 import naming  # noqa: E402
 import write_back as wb  # noqa: E402
 from pipeline_errors import PipelineError  # noqa: E402
@@ -53,15 +54,6 @@ class SchemaFault(Exception):
     pass
 
 
-_PATTERN_CACHE: dict = {}
-
-
-def _pattern(p: str) -> str:
-    if p not in _PATTERN_CACHE:
-        _PATTERN_CACHE[p] = wb._ecma_digits(p)
-    return _PATTERN_CACHE[p]
-
-
 def _type_ok(inst, t: str) -> bool:
     if t == "object":
         return isinstance(inst, dict)
@@ -87,7 +79,7 @@ def _validate(inst, sch: dict, path: str) -> None:
     if isinstance(inst, str):
         if "minLength" in sch and len(inst) < sch["minLength"]:
             raise SchemaFault(f"{path}: shorter than {sch['minLength']}")
-        if "pattern" in sch and not wb._fullmatch(_pattern(sch["pattern"]), inst):
+        if "pattern" in sch and not ecma.matches(sch["pattern"], inst):
             raise SchemaFault(f"{path}: does not match pattern {sch['pattern']}")
     if isinstance(inst, int) and not isinstance(inst, bool) and "minimum" in sch and inst < sch["minimum"]:
         raise SchemaFault(f"{path}: below {sch['minimum']}")
@@ -151,9 +143,9 @@ def parse_version_id(value: str) -> tuple[str, str, str]:
     ns, dot, name = head.partition(".")
     if not at or not dot:
         raise PlanInputError(f"version input {value!r} is not <namespace>.<name>@<semver>")
-    if not wb._fullmatch(wb._PAT_ID, f"{ns}:{name}"):
+    if not ecma.matches(wb._PAT_ID, f"{ns}:{name}"):
         raise PlanInputError(f"version input {value!r}: {ns!r}.{name!r} is not a valid entry id")
-    if not wb._fullmatch(wb._PAT_SEMVER, semver):
+    if not ecma.matches(wb._PAT_SEMVER, semver):
         raise PlanInputError(f"version input {value!r}: {semver!r} is not a semver string")
     return ns, name, semver
 
