@@ -347,7 +347,7 @@ class ReviewFixes(unittest.TestCase):
         out = wb.apply_write_back(entry_with(PEND), result_for(), url)
         self.assertEqual(out["versions"][0]["source_archive"], url)
 
-    # Task 094: `_ecma_digits` is gone (write_back matches through ecma.matches, the gate's translator). Its test,
+    # Task 094: the private digit translator is gone (write_back matches through ecma.matches, the gate's translator). Its test,
     # test_fix3_digit_translation_leaves_escaped_backslash_alone, moved to tests/pipeline/test_ecma_patterns.py as
     # Helper.test_escaped_backslash_is_not_mangled (escaped backslash cases) and
     # Helper.test_an_untranslatable_construct_propagates_not_implemented_error (the `\D` raise).

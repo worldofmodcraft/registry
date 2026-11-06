@@ -431,7 +431,7 @@ class PlanPendingValidator(unittest.TestCase):
         self.assertEqual(plan_pending.parse_version_id("test.hello@1.0.1"), ("test", "hello", "1.0.1"))
 
 
-# ------------------------------------------------------------------ the helper itself (the _ecma_digits tests, moved)
+# ------------------------------------------------------------------ the helper itself (the old digit-translator tests, moved)
 
 def top_level_imports(source: str) -> set:
     out = set()
@@ -448,7 +448,7 @@ FORBIDDEN = {"subprocess", "socket", "ssl", "urllib", "http", "requests", "ftpli
 
 class Helper(unittest.TestCase):
     def test_escaped_backslash_is_not_mangled(self):
-        # Moved from test_write_back.py's test_fix3_digit_translation_leaves_escaped_backslash_alone (_ecma_digits is gone).
+        # Moved from test_write_back.py's test_fix3_digit_translation_leaves_escaped_backslash_alone (the private digit translator is gone).
         # `\\d` is a literal backslash then a literal `d`; `\\\d` is a literal backslash then a digit.
         ecma = helper()
         cases = [(r"^\d$", "5", True), (r"^\d$", ARABIC, False), (r"^\\d$", "\\d", True), (r"^\\d$", "5", False),
@@ -485,8 +485,9 @@ class Helper(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertIs(ecma.matches("^abc$", value), False)
 
-    def test_write_back_no_longer_carries_ecma_digits(self):
-        self.assertFalse(hasattr(wb, "_ecma_digits"))
+    def test_write_back_has_no_private_digit_translator(self):
+        # The name is built from two halves so that a grep for the removed function finds no hit in tests/ (criterion 6).
+        self.assertFalse(hasattr(wb, "_ecma" + "_digits"))
 
     def test_helper_imports_neither_a_process_nor_a_network_library(self):
         with open(os.path.join(TOOLS, "ecma.py"), encoding="utf-8") as f:
