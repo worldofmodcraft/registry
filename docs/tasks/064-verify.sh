@@ -6,11 +6,14 @@
 # Demonstrates acceptance criteria 1-6 of docs/tasks/064-schema-check-end-anchor.md.
 #
 # Usage:  docs/tasks/064-verify.sh [--mutate] [NODE_MODULES_DIR]      (any cwd inside the repository)
+# Usage:  docs/tasks/064-verify.sh --no-closed [--mutate] [NODE_MODULES_DIR]      (opt-in; --no-closed must be the first argument; see below)
 #   (no flag)  AC1 (red on the red commit), AC2 (fixed at HEAD, controls kept), AC3 (Ajv agreement),
 #              AC4 (other suites and the closed verify scripts), AC5 (034 C3.3 re-pinned only), file scope.
 #   --mutate   AC6: fifteen mutations in a temporary clone, each must turn the new tests red.
 #   NODE_MODULES_DIR  (or env WOM_NODE_MODULES) a node_modules directory containing ajv 8 (a missing ajv is a
 #                     FAILURE, never a skip).
+#   --no-closed (opt-in, FIRST argument; task 111b): skips ONLY AC4.2 (it runs other closed verify scripts, which a sweep already runs once),
+#                     prints 'AC4.2 NOT RUN (--no-closed)' and a NOTE that this is not a full pass. AC3.2 (057, this task's own subject) stays.
 # Everything runs on the COMMITTED state (HEAD) in temporary clones; the caller's worktree is never modified.
 # Deterministic, no network. Exit code: the number of failed checks. Output has no timestamps or temp paths.
 # Requires: git, python3, node, plus everything the closed verify scripts require (minisign, ...).
@@ -19,6 +22,8 @@ set -u
 set -o pipefail
 
 MUTATE=0
+NOCLOSED=0   # task 111b: --no-closed, as the FIRST argument, skips only the sections that run other closed scripts (a sweep already runs each of them)
+[ "${1:-}" = "--no-closed" ] && { NOCLOSED=1; shift; }
 NM="${WOM_NODE_MODULES:-}"
 for a in "$@"; do
     case "$a" in
@@ -138,6 +143,7 @@ for d in tests/contracts tests/registry tests/validation tests/pipeline; do
     ( cd "$TMP/head" && python3 -I -m unittest discover -s "$d" >"$TMP/u.out" 2>&1 ); rc=$?
     if [ "$rc" = 0 ]; then pass "AC4.1 unittest discover -s $d: $(grep -E '^Ran ' "$TMP/u.out")"; else fail "AC4.1 unittest discover -s $d exits $rc"; tail -8 "$TMP/u.out"; fi
 done
+if [ "$NOCLOSED" = 1 ]; then echo "AC4.2 NOT RUN (--no-closed)"; else
 for s in 006 032 034 057; do
     ( cd "$TMP/head" && env WOM_NODE_MODULES="$NM" bash docs/tasks/$s-verify.sh >"$TMP/s.out" 2>&1 ); rc=$?
     if [ "$rc" = 0 ]; then pass "AC4.2 $s-verify.sh exits 0 at HEAD"; else fail "AC4.2 $s-verify.sh exits $rc at HEAD"; fi
@@ -148,6 +154,7 @@ for s in 007a 007b 008a 062 066 067 069 070; do
     ( cd "$TMP/head" && env WOM_NODE_MODULES="$NM" bash docs/tasks/$s-verify.sh >"$TMP/s.out" 2>&1 ); rc=$?
     if [ "$rc" = 0 ]; then pass "AC4.2 $s-verify.sh exits 0 at HEAD"; else fail "AC4.2 $s-verify.sh exits $rc at HEAD; failing: $(grep -E '^FAIL' "$TMP/s.out" | cut -c1-80 | tr '\n' '|')"; fi
 done
+fi
 
 section "AC5 -- 034 C3.3 re-pinned, not weakened; C3.4 untouched; nothing else in a closed script"
 CLOSED=$(git -C "$TMP/head" diff --name-only "$MAINB" "$FINAL" | grep -E '^docs/tasks/[0-9]+[a-z]?-verify\.sh$|^docs/tasks/(032|057)-' | grep -vE '^docs/tasks/(064-verify\.sh|057-corpus\.py)$')
@@ -211,5 +218,6 @@ PY
 fi
 
 printf '\n== RESULT ==\n'
+[ "$NOCLOSED" = 1 ] && echo "NOTE: AC4.2 NOT RUN (--no-closed); this is not a full pass"
 if [ "$FAILURES" = 0 ]; then echo "ALL CHECKS PASSED"; else echo "$FAILURES CHECK(S) FAILED"; fi
 exit "$FAILURES"

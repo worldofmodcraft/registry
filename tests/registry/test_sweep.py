@@ -31,7 +31,7 @@ RUNNER = '#!/usr/bin/env bash\nbash "$(dirname "$0")/a-verify.sh"\nbash "$(dirna
 class Stub:
     """A throwaway git repository holding a copy of sweep.py and the given verify scripts."""
 
-    def __init__(self, test, scripts, gitignore=True):
+    def __init__(self, test, scripts, gitignore=True, branch="main"):
         self.dir = Path(tempfile.mkdtemp(prefix="sweep-test."))
         test.addCleanup(shutil.rmtree, self.dir, True)
         self.repo = self.dir / "repo"
@@ -51,7 +51,7 @@ class Stub:
         self.tmp.mkdir()
         test.addCleanup(self.reap)
         self.markers.mkdir()
-        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
+        subprocess.run(["git", "init", "-q", "-b", branch, str(self.repo)], check=True)  # not the machine's init.defaultBranch (task 111b)
         subprocess.run(GIT + ["-C", str(self.repo), "add", "-A"], check=True)
         subprocess.run(GIT + ["-C", str(self.repo), "commit", "-q", "-m", "stub"], check=True)
 
@@ -160,6 +160,75 @@ class SpecialScripts(unittest.TestCase):
         self.assertEqual(p.returncode, 2, p.stdout + p.stderr)
 
 
+class NoClosedArguments(unittest.TestCase):
+    """Task 111b: 039b, 064 and 065 get --no-closed from the driver (the whole sweep already runs each closed script once); nothing else does."""
+
+    def setUp(self):
+        marker = '#!/usr/bin/env bash\necho "$@" > "$WOM_STUB_OUT/%s.args"\nexit 0\n'
+        names = ("039b", "064", "065", "069", "070")
+        self.s = Stub(self, {n + "-verify.sh": marker % n for n in names})
+
+    def test_064_and_065_get_no_closed_and_other_scripts_get_none(self):
+        p = self.s.run()
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        for n in ("039b", "064", "065"):
+            self.assertEqual((self.s.markers / (n + ".args")).read_text().strip(), "--no-closed", n)
+        for n in ("069", "070"):  # their nested runs are fixtures of their own checks, not sweeps
+            self.assertEqual((self.s.markers / (n + ".args")).read_text().strip(), "", n)
+
+    def test_the_flag_list_is_one_named_constant_and_a_list_of_three(self):
+        self.assertEqual(sweep.NO_CLOSED_ARGS, ["--no-closed"])
+        self.assertEqual(sorted(sweep.EXTRA_ARGS), ["039b-verify.sh", "064-verify.sh", "065-verify.sh"])
+        for args in sweep.EXTRA_ARGS.values():
+            self.assertIs(args, sweep.NO_CLOSED_ARGS)
+
+
+PROBE = (
+    '#!/usr/bin/env bash\n'
+    'if git rev-parse --verify -q origin/main >/dev/null; then echo yes > "$WOM_STUB_OUT/origin_main"; else echo no > "$WOM_STUB_OUT/origin_main"; fi\n'
+    'exit 0\n'
+)
+
+
+class MissingMain(unittest.TestCase):
+    """Task 111b, found 2026-11-05 (089c AC0.4 red): the inner clone has origin/main only if the source clone has a local main."""
+
+    def test_positive_control_main_exists_so_the_inner_clone_has_origin_main(self):
+        s = Stub(self, {"p-verify.sh": PROBE})
+        p = s.run()
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertEqual((s.markers / "origin_main").read_text().strip(), "yes")
+
+    def test_source_cloned_with_branch_has_no_local_main_exit_2(self):
+        # the 2026-11-05 shape: `git clone --branch X` of a repository whose branch is main
+        s = Stub(self, {"p-verify.sh": PROBE})
+        subprocess.run(["git", "-C", str(s.repo), "branch", "feat"], check=True)
+        second = s.dir / "second"
+        subprocess.run(["git", "clone", "-q", "--branch", "feat", str(s.repo), str(second)], check=True)
+        s.repo = second
+        have = subprocess.run(["git", "-C", str(second), "rev-parse", "--verify", "-q", "refs/heads/main"], capture_output=True)
+        self.assertNotEqual(have.returncode, 0, "the fixture must have no local main")
+        p = s.run()
+        self.assertEqual(p.returncode, 2, p.stdout + p.stderr)
+        self.assertIn("sweep.py: error:", p.stderr)
+        self.assertIn("main", p.stderr)
+        self.assertFalse((s.markers / "origin_main").exists(), "no script may run")
+        self.assertFalse(s.out.exists(), "no report is written")
+        self.assertEqual(s.clones(), [], "no inner clone is made")
+
+    def test_source_on_a_branch_named_trunk_exit_2(self):
+        s = Stub(self, {"p-verify.sh": PROBE}, branch="trunk")
+        p = s.run()
+        self.assertEqual(p.returncode, 2, p.stdout + p.stderr)
+        self.assertIn("main", p.stderr)
+        self.assertFalse((s.markers / "origin_main").exists())
+
+    def test_list_does_not_need_main(self):
+        s = Stub(self, {"p-verify.sh": PROBE}, branch="trunk")
+        p = s.run("--list", use_defaults=False)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+
+
 class ClearedEnvironment(unittest.TestCase):
     def test_child_of_cleared_environment_is_not_counted(self):
         text = '#!/usr/bin/env bash\nenv -i PATH="$PATH" bash "$(dirname "$0")/a-verify.sh"\nexit 0\n'
@@ -220,6 +289,13 @@ class ListReal(unittest.TestCase):
         self.assertEqual(lines[-1], "%d scripts, 1 skipped" % len(want))
         self.assertIn("039a-verify.sh  [skipped: it is the sweep]", lines)
         self.assertIn("039b-verify.sh  args: --no-closed", lines)
+
+    def test_list_shows_no_closed_for_039b_064_065_only(self):
+        p = subprocess.run([sys.executable, "-I", "-B", str(SWEEP_SRC), "--list"], capture_output=True, text=True)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        withargs = sorted(ln for ln in p.stdout.splitlines() if "args:" in ln)
+        self.assertEqual(withargs, ["039b-verify.sh  args: --no-closed", "064-verify.sh  args: --no-closed",
+                                    "065-verify.sh  args: --no-closed"])
 
 
 ENVPROBE = (

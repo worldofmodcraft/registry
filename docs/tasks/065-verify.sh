@@ -6,12 +6,16 @@
 # Demonstrates acceptance criteria 1-6 of docs/tasks/065-entry-schema-key-id-format.md (criterion 7 is the site PR).
 #
 # Usage:  docs/tasks/065-verify.sh [--mutate] [NODE_MODULES_DIR]      (any cwd inside the repository)
+# Usage:  docs/tasks/065-verify.sh --no-closed [--mutate] [NODE_MODULES_DIR]      (opt-in; --no-closed must be the first argument; see below)
 #   (no flag)  AC1 (red on the red commit), AC2 (HEAD rejects/accepts, three validators), AC3 (diff integrity of
 #              the fix range), AC4 (every closed verify script on HEAD, one at a time), AC5 (rules-document examples).
 #   --mutate   AC1-AC3, AC5 and AC6 (AC4, the long run of every closed script, is skipped): three mutations of the schema
 #              pattern in a temporary clone, each must turn a criterion-1 test red.
 #   NODE_MODULES_DIR  (or env WOM_NODE_MODULES, else <repo root>/tools/dev/node_modules; install with
 #                     npm ci --prefix tools/dev) a node_modules directory with ajv 8. Missing ajv is a FAILURE, never a skip.
+#   --no-closed (opt-in, FIRST argument; task 111b): skips ONLY AC4.2 and AC4.3 (they run other closed verify scripts, which a sweep already runs
+#                     once), prints 'AC4.2 NOT RUN (--no-closed)' and 'AC4.3 NOT RUN (--no-closed)' and a NOTE that this is not a full pass.
+#                     AC2.4 (057, this task's own subject) and AC4.1 (the suites) stay.
 # Pinning (REVIEW-CHECKLIST item 12): the task's OWN change (red-commit ancestry, scope, diffs, substitutions) is
 # measured on the fixed range BASE..FIX below, never HEAD or origin/main; the LIVE guards (tests, validators,
 # closed scripts) run on HEAD. Everything runs on the COMMITTED state in temporary clones; the caller's worktree is
@@ -27,6 +31,8 @@ set -o pipefail
 export PYTHONDONTWRITEBYTECODE=1
 
 MUTATE=0
+NOCLOSED=0   # task 111b: --no-closed, as the FIRST argument, skips only the sections that run other closed scripts (a sweep already runs each of them)
+[ "${1:-}" = "--no-closed" ] && { NOCLOSED=1; shift; }
 NM="${WOM_NODE_MODULES:-}"
 for a in "$@"; do
     case "$a" in
@@ -229,6 +235,7 @@ for d in tests/contracts tests/registry tests/validation tests/pipeline; do
     [ "$rc" = 0 ] && pass "AC4.1 unittest discover -s $d: $(grep -E '^Ran ' "$TMP/u.out")" || { fail "AC4.1 unittest discover -s $d exits $rc"; tail -8 "$TMP/u.out"; }
 done
 # 006 runs through 062 (its checks over their pinned ranges); the rest are listed by their closed task number.
+if [ "$NOCLOSED" = 1 ]; then echo "AC4.2 NOT RUN (--no-closed)"; echo "AC4.3 NOT RUN (--no-closed)"; else
 for s in 007a 007b 008a 032 034 062 064 066 067 069 070 071 075; do
     [ -f "$TMP/head/docs/tasks/$s-verify.sh" ] || { fail "AC4.2 $s-verify.sh does not exist at HEAD"; continue; }
     ( cd "$TMP/head" && env WOM_NODE_MODULES="$NM" bash docs/tasks/$s-verify.sh >"$TMP/s.out" 2>&1 ); rc=$?
@@ -236,6 +243,7 @@ for s in 007a 007b 008a 032 034 062 064 066 067 069 070 071 075; do
 done
 ( cd "$TMP/head" && env WOM_NODE_MODULES="$NM" bash docs/tasks/006-verify.sh >"$TMP/s.out" 2>&1 ); rc=$?
 [ "$rc" = 0 ] && pass "AC4.3 006-verify.sh exits 0 at HEAD (also covered through 062 over its pinned ranges)" || echo "  note: 006-verify.sh run directly exits $rc (its moving-frame checks are not the live guard; 062 runs them over pinned ranges and is green above)"
+fi
 fi
 
 section "AC5 -- the JSON examples embedded in contracts/append-only.rules.md validate against the schema"
@@ -290,5 +298,6 @@ PY
 fi
 
 printf '\n== RESULT ==\n'
+[ "$NOCLOSED" = 1 ] && echo "NOTE: AC4.2 and AC4.3 NOT RUN (--no-closed); this is not a full pass"
 if [ "$FAILURES" = 0 ]; then echo "ALL CHECKS PASSED"; else echo "$FAILURES CHECK(S) FAILED"; fi
 exit "$FAILURES"

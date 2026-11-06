@@ -219,7 +219,7 @@ if [ -d "$NM/ajv" ] && command -v node >/dev/null 2>&1; then
         case "$f" in *039a-verify.sh) continue ;; esac
         wait_quiet || { fail "$f: another verify script kept running"; continue; }
         args=(); note=""
-        case "$f" in *039b-verify.sh) args=(--no-closed); note=" (--no-closed: its AC12 sweep is this loop)" ;; esac
+        case "$f" in *039b-verify.sh) args=(--no-closed); note=" (--no-closed: its AC12 sweep is this loop)" ;; *064-verify.sh|*065-verify.sh) args=(--no-closed); note=" (--no-closed: the closed scripts it re-ran are this loop's)" ;; esac
         ( cd "$TMP/head" && env -u WOM_NODE_MODULES -u NODE_MODULES_DIR bash "$f" ${args[@]+"${args[@]}"} > "$TMP/v.out" 2>&1 ); rc=$?
         if [ "$rc" = 0 ]; then pass "$(basename "$f") exits 0 on HEAD$note"; else fail "$(basename "$f") exit $rc on HEAD: $(grep -m3 '^FAIL' "$TMP/v.out" | tr '\n' ' ')"; fi
     done
