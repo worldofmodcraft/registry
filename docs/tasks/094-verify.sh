@@ -35,7 +35,7 @@ OLDFINAL=a5710ed0aaae5b7a547e3509363cec55beb2474b
 E01=e01a0d7c08df5837ec991375f489b1417fa8d8fa
 # TIP: the last commit the FINAL..TIP name-list check measures, i.e. the commit before the one that records this line. The pin commit and the
 # log entries after it change only docs/tasks/094-* files and are not range-checked (101's pattern). Empty until recorded; empty FAILS.
-TIP=3833b44979ea9753bfe6ac2fded772a16f66c771
+TIP=2eaa48304ea04a4504865d1e336fe96d701b3822
 
 export PYTHONDONTWRITEBYTECODE=1
 PY="python3 -I -B"
