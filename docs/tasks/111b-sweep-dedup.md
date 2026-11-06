@@ -38,3 +38,20 @@ Weakening any check that runs in standalone mode; removing a loop rather than gu
 ---
 # Task 111b log
 - 2026-11-05 manager (session 15): spec written from the measurement; gate passed solo.
+- 2026-11-06 implementer: done; pins BASE=ab5fcba (origin/main), RED=62fc5be, FIX=b19bf12; `docs/tasks/111b-verify.sh` default (~15 s) and `--mutate` (~10 s) green.
+  - Red first (RED commit 62fc5be = test_sweep.py only, run against the unfixed sweep.py of ab5fcba; 36 older tests and both positive controls stay green). Output of `python3 -I -B -m unittest discover -s tests/registry -p test_sweep.py`:
+    ```
+    FAIL: test_list_shows_no_closed_for_039b_064_065_only (test_sweep.ListReal.test_list_shows_no_closed_for_039b_064_065_only)
+    FAIL: test_source_cloned_with_branch_has_no_local_main_exit_2 (test_sweep.MissingMain.test_source_cloned_with_branch_has_no_local_main_exit_2)
+    FAIL: test_source_on_a_branch_named_trunk_exit_2 (test_sweep.MissingMain.test_source_on_a_branch_named_trunk_exit_2)
+    FAIL: test_064_and_065_get_no_closed_and_other_scripts_get_none (test_sweep.NoClosedArguments.test_064_and_065_get_no_closed_and_other_scripts_get_none)
+    FAIL: test_the_flag_list_is_one_named_constant_and_a_list_of_three (test_sweep.NoClosedArguments.test_the_flag_list_is_one_named_constant_and_a_list_of_three)
+    Ran 41 tests in 6.091s
+    FAILED (failures=5)
+    ```
+    The missing-main fixture is the 2026-11-05 shape: `git clone --branch feat` of a stub repository, so the source has no local `main`. At the red commit the driver exits 0 and runs the script; with the fix it exits 2 before cloning ("the source clone ... has no local branch 'main'"), no script runs, no report is written. Positive control: with a local main the probe script sees `origin/main` in the inner clone and the sweep exits 0. FIX: 41 tests green.
+  - Fix (FIX commit b19bf12): `tools/dev/sweep.py` (EXTRA_ARGS names 039b, 064, 065, all `NO_CLOSED_ARGS`; the refs/heads/main check), `039a-verify.sh` (the one case line in the verify loop), `064-verify.sh` and `065-verify.sh` (additions only: 7 and 8 lines, 0 removed).
+  - Guarded sections (the full list): 064: AC4.2 only (both loops: 006 032 034 057, then 007a 007b 008a 062 066 067 069 070). 065: AC4.2 (007a 007b 008a 032 034 062 064 066 067 069 070 071 075) and AC4.3 (006), under one guard. Not guarded: 064 AC3.2 and 065 AC2.4 (the direct run of 057), AC4.1 (the four unit-test suites) and everything else. 070, 069 and every other closed script are untouched.
+  - How the closed scripts are exercised without running them: `111b-verify.sh` cuts the real 064/065 text into a slice (real prelude with the real argument parsing and pins, the 057 line, the real AC4 section, the real RESULT tail) and runs it over a stub tree (every `*-verify.sh` is `exit 0`; one trivial passing test per tests/ directory) with a BASH_ENV file that records each `*-verify.sh` start, as sweep.py does. Measured: with `--no-closed` the nested starts are exactly {057} for both; without it 064 starts 13 (057 twice, plus 006 032 034 007a 007b 008a 062 066 067 069 070) and 065 starts 15; the same slices cut from BASE and given `--no-closed` still start 13 and 15 (the control that the harness sees the break).
+  - Mutations (all red, restore green): flag ignored in 064; flag ignored in 065; sweep.py not passing it; missing-main check removed; 039a's case not passing it.
+  - FOR THE MANAGER, not done by me: (1) the merge-gate sweep. (2) `111a-verify.sh` pins `FINAL..HEAD touches only in-scope files` with a scope that does not list 064/065/039a/the 111b files, so by its own design it may redden on this branch (see the entry below for the measured result). I did not edit it (not in scope). (3) 089b-verify.sh runs the NEW 065 `--mutate` on HEAD and checks AC3.5; I did not run it. (4) The real 064, 065, 039a and the sweep were not run, by order.
