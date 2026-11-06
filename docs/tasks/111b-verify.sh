@@ -14,16 +14,21 @@
 #              AC5   the missing-main fixture (exit 2) and its positive control; AC6/7 scope at pinned SHAs, time bound, no __pycache__;
 #              AC8   (scope extension) 111a-verify.sh's own-change range is FINAL..TIP, not FINAL..HEAD: the OLD blob (at BASE) is red on this
 #                    head with the out-of-scope FAIL line, the new one is green on it and on a frame with a later out-of-scope commit.
-#   --mutate   AC6: six mutations in a temporary clone (flag ignored in 064; in 065; sweep.py not passing it; missing-main check
+#   --mutate   AC6/AC9: six mutations in a temporary clone (flag ignored in 064; in 065; sweep.py not passing it; missing-main check
 #              removed; 039a not passing it; 111a-verify.sh's TIP set back to HEAD, run on a frame with a later out-of-scope commit),
-#              each must redden its named check; the restore must be green. (111a-verify.sh's own --mutate takes ~77 s and is not run here.)
+#              each must redden its named check; the restore must be green; AC9: the later-commit frame described above.
+#              (111a-verify.sh's own --mutate takes ~77 s and is not run here.)
 # How 064 and 065 are exercised WITHOUT running them end to end: the real script text is cut into a PRELUDE (everything before its
 # TMP=, including the real argument parsing and the real pins), the lines of the check that runs 057 (AC3.2 / AC2.4), the real
 # AC4 section, and the real RESULT tail. That slice runs in a temporary tree whose docs/tasks/*-verify.sh are stubs that do nothing
 # (`exit 0`) and whose tests/ directories hold one trivial passing test. A BASH_ENV file, as tools/dev/sweep.py generates, records
 # every *-verify.sh start (PID, PPID, $0). No real closed script, no 039a, no sweep, no real 064/065 run, no network, no credential.
-# Own-change checks read the pinned BASE/RED/FIX, never HEAD; live guards read HEAD. No quiet-wait here (it tolerates being run from
-# 039a-verify.sh, from the sweep driver and from a fresh clone: it uses env -i for its test runs and its own BASH_ENV for the slices).
+# Own-change checks read the pinned BASE/RED/FIX/FIX2/FIX3 blobs, or a frame built from them (a clone at TIP = FIX3), never HEAD: a later
+# task that adds a fourth --no-closed script or rewords a section title cannot redden them. The live guards read HEAD and are only: the
+# whole tests/registry/test_sweep.py suite and "111a-verify.sh exits 0" (no count, no text pinned). --mutate also runs this very script
+# (the HEAD blob) and its previous version (PREV) on a frame where a later commit grows NO_CLOSED_ARGS to four entries and rewords
+# 039a's case line and a 064 section title: the HEAD blob stays green, PREV goes red.
+# No quiet-wait here (it tolerates being run from 039a-verify.sh, the sweep driver and a fresh clone: env -i for test runs, own BASH_ENV).
 # To satisfy AC7's "fresh clone" clause run this script from a fresh `git clone` of the pushed branch.
 # Exit code: the number of failed checks. Requires: git, python3, bash.
 
@@ -34,8 +39,11 @@ export PYTHONDONTWRITEBYTECODE=1
 BASE=ab5fcba6d26436a7c87df191eb85d9323f83052d   # registry origin/main (111a merged, PR #40) the branch was cut from
 RED=62fc5bed6568cf25987ddab832308de8ea7c7698    # tests/registry/test_sweep.py only: the new fixtures, no fix
 FIX=b19bf12b1d13d16a4e6c5efd0f5a10886889c5cc    # last commit that changes sweep.py, 064, 065 or 039a
-FIX2=23d32e7c85012143c808e8c918e44b13cce24960   # the commit that re-pins 111a-verify.sh (FINAL..HEAD -> FINAL..TIP); the TIP of this script: nothing after it is range-checked
-                                                # (a FIX2..HEAD check would be the very HEAD read this script's AC8 removes from 111a; later commits: this script and the log only)
+FIX2=23d32e7c85012143c808e8c918e44b13cce24960   # the commit that re-pins 111a-verify.sh (FINAL..HEAD -> FINAL..TIP)
+FIX3=04b0d7626cc0aefd5caed563d9ba2b18f431ff3a   # the commit that lists --no-closed in the Usage lines of 064 and 065 (documentation only)
+TIP="$FIX3"                                     # this script's TIP: every own-change assertion reads BASE/RED/FIX/FIX2/FIX3 blobs or a clone at TIP; nothing after it is range-checked
+                                                # (later commits: this script and the log only)
+PREV=e4e4d9981f6130c45ef4196fe1d440e2a2043bdc   # the previous version of this script (it read HEAD text for 111b's own change): the control of AC9
 
 MUTATE=0
 for a in "$@"; do
@@ -58,7 +66,7 @@ HEADREV="$(G rev-parse HEAD)" || exit 99
 SCOPE='^(docs/tasks/064-verify\.sh|docs/tasks/065-verify\.sh|docs/tasks/039a-verify\.sh|tools/dev/sweep\.py|tests/registry/test_sweep\.py|docs/tasks/111a-sweep-measure\.md|docs/tasks/111a-verify\.sh|docs/tasks/111b-sweep-dedup\.md|docs/tasks/111b-verify\.sh)$'
 scope_bad() { grep -Ev "$SCOPE"; }   # reads file names on stdin, prints those outside the scope
 
-for c in "$BASE" "$RED" "$FIX" "$FIX2"; do
+for c in "$BASE" "$RED" "$FIX" "$FIX2" "$FIX3" "$PREV"; do
     G cat-file -e "$c^{commit}" 2>/dev/null || { fail "P0 pinned commit $c is not reachable"; exit "$FAILURES"; }
 done
 NEWTESTS="NoClosedArguments.064_and_065_get_no_closed_and_other_scripts_get_none NoClosedArguments.the_flag_list_is_one_named_constant_and_a_list_of_three ListReal.list_shows_no_closed_for_039b_064_065_only MissingMain.source_cloned_with_branch_has_no_local_main_exit_2 MissingMain.source_on_a_branch_named_trunk_exit_2"
@@ -81,10 +89,34 @@ case_args() {   # case_args FILE NAME : the args array the file's case line give
 run_111a() {   # run_111a FRAME OUTFILE : the FRAME's own docs/tasks/111a-verify.sh, default mode; sets V_RC
     bash "$1/docs/tasks/111a-verify.sh" > "$2" 2>&1; V_RC=$?
 }
-make_later() {   # make_later DIR : a frame = HEAD plus one later commit that touches an out-of-scope file (a later task's file)
-    new_clone "$1" "$HEADREV" && printf 'a later task\n' > "$1/docs/tasks/999-later-task.txt" && git -C "$1" add docs/tasks/999-later-task.txt \
+make_later() {   # make_later DIR : a frame = TIP plus one later commit that touches an out-of-scope file (a later task's file)
+    new_clone "$1" "$TIP" && printf 'a later task\n' > "$1/docs/tasks/999-later-task.txt" && git -C "$1" add docs/tasks/999-later-task.txt \
         && git -C "$1" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false commit -q -m "a later task touches an out-of-scope file"
 }
+
+# make_later4 DIR : a frame = TIP plus a 111c-like later commit: NO_CLOSED_ARGS grows to four entries (and the two tests that count them
+# follow), 039a's case line is reworded, a 064 section title is reworded. Nothing here reads HEAD: the frame is built from TIP.
+M4="$TMP/mkframe4.py"
+cat > "$M4" <<'PY'
+import subprocess, sys
+d = sys.argv[1]
+def edit(rel, old, new):
+    p = d + "/" + rel
+    t = open(p).read()
+    if t.count(old) != 1:
+        print("mkframe4: %r found %d times in %s" % (old, t.count(old), rel)); sys.exit(2)
+    open(p, "w").write(t.replace(old, new))
+edit("tools/dev/sweep.py", '    "065-verify.sh": NO_CLOSED_ARGS,\n', '    "065-verify.sh": NO_CLOSED_ARGS,\n    "089c-verify.sh": NO_CLOSED_ARGS,\n')
+edit("tests/registry/test_sweep.py", '["039b-verify.sh", "064-verify.sh", "065-verify.sh"])', '["039b-verify.sh", "064-verify.sh", "065-verify.sh", "089c-verify.sh"])')
+edit("tests/registry/test_sweep.py", '"065-verify.sh  args: --no-closed"])', '"065-verify.sh  args: --no-closed", "089c-verify.sh  args: --no-closed"])')
+edit("docs/tasks/039a-verify.sh", 'case "$f" in *039b-verify.sh) args=(--no-closed); note=" (--no-closed: its AC12 sweep is this loop)" ;; *064-verify.sh|*065-verify.sh) args=(--no-closed); note=" (--no-closed: the closed scripts it re-ran are this loop\'s)" ;; esac',
+     'case "$f" in *064-verify.sh|*065-verify.sh|*039b-verify.sh|*089c-verify.sh) args=(--no-closed); note=" (--no-closed: this loop is the sweep)" ;; esac')
+edit("docs/tasks/064-verify.sh", 'section "AC4 -- no other suite moves"', 'section "AC4 -- the other suites do not move"')
+git = ["git", "-C", d, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false"]
+subprocess.run(git + ["add", "-A"], check=True)
+subprocess.run(git + ["commit", "-q", "-m", "a later task (111c-like): fourth --no-closed script, reworded 039a case and 064 section title"], check=True)
+PY
+make_later4() { new_clone "$1" "$TIP" && python3 -I -B "$M4" "$1"; }
 
 # ---------------------------------------------------------------------------------------------------------------------
 # The slice harness. slice KIND SRCFILE OUTSCRIPT : cut the real script text SRCFILE (064 or 065) into the stubbed slice described above.
@@ -122,11 +154,11 @@ out = prelude + ['TMP="$WOM_H_TMP"', 'section "slice of %s-verify.sh (stubbed)"'
 open(dst, "w", encoding="utf-8").write("\n".join(out))
 PY
 
-# make_tree DIR : the stub tree: every docs/tasks/*-verify.sh name of HEAD as an `exit 0` stub; tests/* with one passing test; a git repo (the real script finds its ROOT)
+# make_tree DIR : the stub tree: every docs/tasks/*-verify.sh name of TIP as an `exit 0` stub; tests/* with one passing test; a git repo (the real script finds its ROOT)
 make_tree() {
     mkdir -p "$1/docs/tasks" "$1/tools/dev" && git init -q "$1" || return 1
     local n d
-    for n in $(G ls-tree --name-only "$HEADREV" docs/tasks/ | grep -E '^docs/tasks/[0-9]+[a-z0-9]*-verify\.sh$'); do
+    for n in $(G ls-tree --name-only "$TIP" docs/tasks/ | grep -E '^docs/tasks/[0-9]+[a-z0-9]*-verify\.sh$'); do
         printf '#!/usr/bin/env bash\nexit 0\n' > "$1/docs/tasks/$(basename "$n")"
     done
     for d in contracts registry validation pipeline; do
@@ -153,8 +185,9 @@ run_slice() {
 if [ "$MUTATE" = 0 ]; then
 # ---------------------------------------------------------------------------------------------------------------------
 section "RED -- the new fixtures fail at the red commit (tests only, on the unfixed sweep.py), and only they"
-G merge-base --is-ancestor "$BASE" "$RED" && G merge-base --is-ancestor "$RED" "$FIX" && G merge-base --is-ancestor "$FIX" "$HEADREV" \
-    && pass "RED.1 BASE < RED < FIX are ancestors of HEAD in that order" || fail "RED.1 commit order BASE < RED < FIX < HEAD does not hold"
+G merge-base --is-ancestor "$BASE" "$RED" && G merge-base --is-ancestor "$RED" "$FIX" && G merge-base --is-ancestor "$FIX" "$FIX2" \
+    && G merge-base --is-ancestor "$FIX2" "$FIX3" && G merge-base --is-ancestor "$FIX3" "$HEADREV" \
+    && pass "RED.1 BASE < RED < FIX < FIX2 < FIX3 (TIP) are ancestors of HEAD in that order" || fail "RED.1 commit order BASE < RED < FIX < FIX2 < FIX3 < HEAD does not hold"
 [ "$(G diff --name-only "$RED~1" "$RED")" = "tests/registry/test_sweep.py" ] && pass "RED.2 the red commit changes only tests/registry/test_sweep.py (no fix)" || fail "RED.2 red commit touches: $(G diff --name-only "$RED~1" "$RED" | tr '\n' ' ')"
 [ "$(G rev-parse "$RED~2")" = "$BASE" ] && pass "RED.3 the red commit sits two commits (spec copy, then it) above BASE" || fail "RED.3 the red commit is not BASE+2"
 new_clone "$TMP/red" "$RED" || { fail "cannot clone RED"; exit "$FAILURES"; }
@@ -171,24 +204,31 @@ nbad="$(grep -cE '^(FAIL|ERROR): ' "$TMP/red.out")"
 grep -E '^(FAIL|ERROR): ' "$TMP/red.out" | sed 's/^/        red: /'
 
 # ---------------------------------------------------------------------------------------------------------------------
-section "AC5 + live guard -- the sweep test file on the committed HEAD (temporary clone, env -i, python3 -I -B)"
+section "Live guard -- the whole sweep test file on the committed HEAD (temporary clone, env -i, python3 -I -B)"
 new_clone "$TMP/head" "$HEADREV" || { fail "cannot clone HEAD"; exit "$FAILURES"; }
 run_tests "$TMP/head" "$TMP/t.out"; rc=$?
 tail -4 "$TMP/t.out" | sed 's/^/        /'
-[ "$rc" = 0 ] && pass "test_sweep.py green at HEAD: $(grep -E '^Ran ' "$TMP/t.out")" || fail "test_sweep.py red at HEAD (exit $rc)"
+[ "$rc" = 0 ] && pass "live: test_sweep.py green at HEAD: $(grep -E '^Ran ' "$TMP/t.out")" || fail "live: test_sweep.py red at HEAD (exit $rc)"
+[ "$(find "$TMP/tt" -name 'wom-sweep.*' | wc -l)" = 0 ] && pass "live: the test run leaves no wom-sweep.* in the TMPDIR it sets" || fail "live: wom-sweep.* directories left"
+[ "$(find "$TMP/head" -name __pycache__ | wc -l)" = 0 ] && pass "AC7 no __pycache__ in the HEAD clone" || fail "AC7 __pycache__ left in the HEAD clone"
+run_111a "$TMP/head" "$TMP/a-head.out"
+[ "$V_RC" = 0 ] && pass "live: 111a-verify.sh exits 0 on HEAD" || { fail "live: 111a-verify.sh exits $V_RC on HEAD"; grep '^FAIL' "$TMP/a-head.out" | sed 's/^/        /'; }
+
+section "AC4/AC5 -- the named tests at TIP (FIX3), the commit that carries the change"
+new_clone "$TMP/tip" "$TIP" || { fail "cannot clone TIP"; exit "$FAILURES"; }
+run_tests "$TMP/tip" "$TMP/tip.out"; rc=$?
+[ "$rc" = 0 ] && pass "test_sweep.py green at TIP: $(grep -E '^Ran ' "$TMP/tip.out")" || fail "test_sweep.py red at TIP (exit $rc)"
 for t in $NEWTESTS $CONTROLS; do
-    test_ok "$TMP/t.out" "$t" && pass "green at HEAD: $t" || fail "not ok at HEAD: $t"
+    test_ok "$TMP/tip.out" "$t" && pass "green at TIP: $t" || fail "not ok at TIP: $t"
 done
-test_ok "$TMP/t.out" NoClosedArguments.064_and_065_get_no_closed_and_other_scripts_get_none && pass "AC4 the driver gives 039b, 064 and 065 --no-closed and 069/070 nothing (stub scripts)" || fail "AC4 driver arguments"
-test_ok "$TMP/t.out" MissingMain.source_cloned_with_branch_has_no_local_main_exit_2 && pass "AC5 a source clone made with --branch (no local main) exits 2, no script runs, no report, no inner clone" || fail "AC5 missing-main exit 2"
-test_ok "$TMP/t.out" MissingMain.positive_control_main_exists_so_the_inner_clone_has_origin_main && pass "AC5 positive control: with a local main the inner clone has origin/main and the sweep exits 0" || fail "AC5 positive control"
-[ "$(find "$TMP/tt" -name 'wom-sweep.*' | wc -l)" = 0 ] && pass "the test run leaves no wom-sweep.* in the TMPDIR it sets" || fail "wom-sweep.* directories left"
-[ "$(find "$TMP/head" -name __pycache__ | wc -l)" = 0 ] && pass "AC7 no __pycache__ in the clone" || fail "AC7 __pycache__ left in the clone"
+test_ok "$TMP/tip.out" NoClosedArguments.064_and_065_get_no_closed_and_other_scripts_get_none && pass "AC4 the driver gives 039b, 064 and 065 --no-closed and 069/070 nothing (stub scripts)" || fail "AC4 driver arguments"
+test_ok "$TMP/tip.out" MissingMain.source_cloned_with_branch_has_no_local_main_exit_2 && pass "AC5 a source clone made with --branch (no local main) exits 2, no script runs, no report, no inner clone" || fail "AC5 missing-main exit 2"
+test_ok "$TMP/tip.out" MissingMain.positive_control_main_exists_so_the_inner_clone_has_origin_main && pass "AC5 positive control: with a local main the inner clone has origin/main and the sweep exits 0" || fail "AC5 positive control"
 
 # ---------------------------------------------------------------------------------------------------------------------
-section "AC1 + AC3 -- 064 and 065 at HEAD, stubbed slices: with --no-closed only 057 starts; without it the closed scripts start; labels"
+section "AC1 + AC3 -- 064 and 065 at TIP, stubbed slices: with --no-closed only 057 starts; without it the closed scripts start; labels"
 for kind in 064 065; do
-    SRC="$TMP/head/docs/tasks/$kind-verify.sh"
+    SRC="$TMP/tip/docs/tasks/$kind-verify.sh"
     run_slice "$kind" "$SRC" yes "$kind-flag"
     [ "$S_RC" = 0 ] && pass "AC1 $kind --no-closed: the slice exits 0 (all remaining checks pass on the stub tree)" || { fail "AC1 $kind --no-closed: slice exit $S_RC"; sed 's/^/        /' "$S_OUT" | tail -8; }
     [ "$S_NAMES" = "057-verify.sh" ] && pass "AC1 $kind --no-closed: nested starts are exactly {057-verify.sh} (the direct run of its own subject)" || fail "AC1 $kind --no-closed: nested starts: $(printf '%s' "$S_NAMES" | tr '\n' ' ')"
@@ -222,42 +262,56 @@ for kind in 064 065; do
 done
 
 # ---------------------------------------------------------------------------------------------------------------------
-section "AC2 -- standalone unchanged: BASE..FIX of 064 and 065 has additions only, all around the flag"
-allowed() {   # allowed FILE : reads added lines on stdin, prints those that are neither comments, the flag logic, nor a bare fi
-    grep -Ev '^[+]#|NOCLOSED|^[+]fi$|^[+][+][+] '
+section "AC2 -- standalone unchanged: BASE..TIP of 064 and 065 has additions only, all around the flag (exact lines)"
+# The added NON-comment lines must be exactly these (a line that merely contains NOCLOSED is not enough). Comments (+#) cannot change behaviour.
+flag_expected() {   # flag_expected KIND : the exact added non-comment lines, '+' prefixed
+    printf '%s\n' '+NOCLOSED=0   # task 111b: --no-closed, as the FIRST argument, skips only the sections that run other closed scripts (a sweep already runs each of them)'
+    printf '%s\n' '+[ "${1:-}" = "--no-closed" ] && { NOCLOSED=1; shift; }'
+    if [ "$1" = 064 ]; then
+        printf '%s\n' '+if [ "$NOCLOSED" = 1 ]; then echo "AC4.2 NOT RUN (--no-closed)"; else'
+        printf '%s\n' '+[ "$NOCLOSED" = 1 ] && echo "NOTE: AC4.2 NOT RUN (--no-closed); this is not a full pass"'
+    else
+        printf '%s\n' '+if [ "$NOCLOSED" = 1 ]; then echo "AC4.2 NOT RUN (--no-closed)"; echo "AC4.3 NOT RUN (--no-closed)"; else'
+        printf '%s\n' '+[ "$NOCLOSED" = 1 ] && echo "NOTE: AC4.2 and AC4.3 NOT RUN (--no-closed); this is not a full pass"'
+    fi
+    printf '%s\n' '+fi'
 }
+flag_added() { grep -E '^[+]' | grep -Ev '^[+]#|^[+][+][+] '; }   # reads a diff, prints its added non-comment lines
+flag_exact() { [ "$(flag_added < "$2" | sort)" = "$(flag_expected "$1" | sort)" ]; }   # flag_exact KIND DIFFFILE
 for kind in 064 065; do
     f="docs/tasks/$kind-verify.sh"
-    G diff -U0 "$BASE" "$FIX" -- "$f" > "$TMP/$kind.diff"
-    ns="$(G diff --numstat "$BASE" "$FIX" -- "$f")"
+    G diff -U0 "$BASE" "$TIP" -- "$f" > "$TMP/$kind.diff"
+    ns="$(G diff --numstat "$BASE" "$TIP" -- "$f")"
     added="$(printf '%s' "$ns" | cut -f1)"; deleted="$(printf '%s' "$ns" | cut -f2)"
     [ "$deleted" = 0 ] && [ "$added" -gt 0 ] && pass "AC2 $kind: $added lines added, 0 removed (every BASE line is byte-identical and in place)" || fail "AC2 $kind: numstat $added added / $deleted removed"
     [ -z "$(grep -E '^-' "$TMP/$kind.diff" | grep -Ev '^--- ')" ] && pass "AC2 $kind: the diff has no '-' line at all" || fail "AC2 $kind: the diff has '-' lines"
-    stray="$(grep -E '^[+]' "$TMP/$kind.diff" | allowed)"
-    [ -z "$stray" ] && pass "AC2 $kind: every added line is a comment, flag logic (NOCLOSED / NOT RUN) or the closing fi" || fail "AC2 $kind: added lines outside the flag: $stray"
-    nfi="$(grep -cE '^[+]fi$' "$TMP/$kind.diff")"
-    [ "$nfi" = 1 ] && pass "AC2 $kind: exactly one guarded block (one added if-line, one added fi)" || fail "AC2 $kind: $nfi added fi lines"
-    [ "$(grep -cE '^[+]if \[ "\$NOCLOSED" = 1 \]; then echo ' "$TMP/$kind.diff")" = 1 ] && pass "AC2 $kind: the guard is 'if NOCLOSED then echo \"ACx NOT RUN (--no-closed)\"; else'" || fail "AC2 $kind: guard line not as specified"
+    flag_exact "$kind" "$TMP/$kind.diff" && pass "AC2 $kind: the added non-comment lines are exactly the $(flag_expected "$kind" | wc -l) expected flag lines (parse, guard, NOTE, fi)" || fail "AC2 $kind: added non-comment lines differ from the expected ones: $(flag_added < "$TMP/$kind.diff" | sort | head -n 12 | tr '\n' '|')"
+    nusage="$(grep -cxF "+# Usage:  docs/tasks/$kind-verify.sh --no-closed [--mutate] [NODE_MODULES_DIR]      (opt-in; --no-closed must be the first argument; see below)" "$TMP/$kind.diff")"
+    [ "$nusage" = 1 ] && pass "AC2 $kind: the Usage lines list --no-closed (one added comment line; the old Usage line is untouched)" || fail "AC2 $kind: the added Usage line is missing ($nusage)"
     grep -E '^[+]' "$TMP/$kind.diff" | grep -Ev '^[+]#' | grep -q '057' && fail "AC2 $kind: an added line mentions 057 (its own subject stays unguarded)" || pass "AC2 $kind: nothing about 057 added (its own run is outside the guard)"
 done
-# the guarded sections, listed from the real HEAD text: which check sections sit between the guard's if and fi
+# the guarded sections, listed from the TIP text: which check sections sit between the guard's if and fi
 for kind in 064 065; do
-    awk '/^if \[ "\$NOCLOSED" = 1 \]; then echo/{on=1} on&&/AC4\.[0-9]/{match($0,/AC4\.[0-9]+/); s=substr($0,RSTART,RLENGTH); seen[s]=1} on&&/^fi$/{on=0} END{for(k in seen) print k}' "$TMP/head/docs/tasks/$kind-verify.sh" | sort | tr '\n' ' ' > "$TMP/guard-$kind.txt"
+    awk '/^if \[ "\$NOCLOSED" = 1 \]; then echo/{on=1} on&&/AC4\.[0-9]/{match($0,/AC4\.[0-9]+/); s=substr($0,RSTART,RLENGTH); seen[s]=1} on&&/^fi$/{on=0} END{for(k in seen) print k}' "$TMP/tip/docs/tasks/$kind-verify.sh" | sort | tr '\n' ' ' > "$TMP/guard-$kind.txt"
     printf '        %s guarded check sections (labels inside the guard): %s\n' "$kind" "$(cat "$TMP/guard-$kind.txt")"
 done
 grep -q 'AC4.2' "$TMP/guard-064.txt" && ! grep -q 'AC4.1' "$TMP/guard-064.txt" && pass "AC2 064 guards AC4.2 (and not AC4.1)" || fail "AC2 064 guard labels: $(cat "$TMP/guard-064.txt")"
 grep -q 'AC4.2' "$TMP/guard-065.txt" && grep -q 'AC4.3' "$TMP/guard-065.txt" && ! grep -q 'AC4.1' "$TMP/guard-065.txt" && pass "AC2 065 guards AC4.2 and AC4.3 (and not AC4.1)" || fail "AC2 065 guard labels: $(cat "$TMP/guard-065.txt")"
-# control: the checker itself detects a removed or a stray line
-printf -- '-removed line\n+stray line\n' > "$TMP/ctl.diff"
-[ -n "$(grep -E '^-' "$TMP/ctl.diff")" ] && [ -n "$(grep -E '^[+]' "$TMP/ctl.diff" | allowed)" ] && pass "AC2 control: a removed line and a stray added line are both detected" || fail "AC2 control: the diff checker cannot fail"
+# controls: the checker itself detects a removed line, a stray line that merely contains NOCLOSED, a missing expected line; and accepts the exact set
+flag_expected 064 > "$TMP/ctl-ok.diff"
+{ cat "$TMP/ctl-ok.diff"; printf '%s\n' '+NOCLOSED=1; true'; } > "$TMP/ctl-stray.diff"
+grep -vxF '+fi' "$TMP/ctl-ok.diff" > "$TMP/ctl-missing.diff"
+printf -- '-removed line\n' > "$TMP/ctl-removed.diff"
+flag_exact 064 "$TMP/ctl-ok.diff" && ! flag_exact 064 "$TMP/ctl-stray.diff" && ! flag_exact 064 "$TMP/ctl-missing.diff" && [ -n "$(grep -E '^-' "$TMP/ctl-removed.diff")" ] \
+    && pass "AC2 control: the exact set passes; an extra line that merely contains NOCLOSED, a missing line and a removed line are all detected" || fail "AC2 control: the diff checker cannot fail"
 # 039a: one line replaced, and it is the case line
-G diff -U0 "$BASE" "$FIX" -- docs/tasks/039a-verify.sh > "$TMP/039a.diff"
+G diff -U0 "$BASE" "$TIP" -- docs/tasks/039a-verify.sh > "$TMP/039a.diff"
 [ "$(grep -cE '^-[^-]' "$TMP/039a.diff")" = 1 ] && [ "$(grep -cE '^[+][^+]' "$TMP/039a.diff")" = 1 ] && grep -E '^-[^-]' "$TMP/039a.diff" | grep -q 'case "\$f" in \*039b-verify.sh)' && grep -E '^[+][^+]' "$TMP/039a.diff" | grep -q 'case "\$f" in \*039b-verify.sh)' \
     && pass "AC2 039a-verify.sh: exactly one line replaced, and it is the case in the verify loop" || fail "AC2 039a-verify.sh diff is not the one case line"
 
 # ---------------------------------------------------------------------------------------------------------------------
-section "AC4 -- --list on the real tree; 039a's case; the driver's constant"
-( cd "$TMP/head" && python3 -I -B tools/dev/sweep.py --list ) > "$TMP/list.out" 2> "$TMP/list.err"; rc=$?
+section "AC4 -- --list on the tree at TIP; 039a's case at TIP"
+( cd "$TMP/tip" && python3 -I -B tools/dev/sweep.py --list ) > "$TMP/list.out" 2> "$TMP/list.err"; rc=$?
 [ "$rc" = 0 ] && pass "--list exits 0" || fail "--list exit $rc: $(head -2 "$TMP/list.err")"
 for n in 039b 064 065; do
     grep -qx "$n-verify.sh  args: --no-closed" "$TMP/list.out" && pass "AC4 --list shows --no-closed for $n" || fail "AC4 --list does not show --no-closed for $n"
@@ -265,10 +319,10 @@ done
 [ "$(grep -c 'args:' "$TMP/list.out")" = 3 ] && pass "AC4 --list shows arguments for exactly those three scripts (070, 069 and the rest get none)" || fail "AC4 --list shows arguments for $(grep -c 'args:' "$TMP/list.out") scripts"
 tail -1 "$TMP/list.out" | sed 's/^/        /'
 for n in 039b 064 065; do
-    [ "$(case_args "$TMP/head/docs/tasks/039a-verify.sh" $n)" = "--no-closed" ] && pass "AC4 039a's case gives $n --no-closed" || fail "AC4 039a's case does not give $n --no-closed ($(case_args "$TMP/head/docs/tasks/039a-verify.sh" $n))"
+    [ "$(case_args "$TMP/tip/docs/tasks/039a-verify.sh" $n)" = "--no-closed" ] && pass "AC4 039a's case gives $n --no-closed" || fail "AC4 039a's case does not give $n --no-closed ($(case_args "$TMP/tip/docs/tasks/039a-verify.sh" $n))"
 done
 for n in 069 070 057 062; do
-    [ -z "$(case_args "$TMP/head/docs/tasks/039a-verify.sh" $n)" ] && pass "AC4 039a's case gives $n nothing (positive control: not every script gets the flag)" || fail "AC4 039a's case gives $n an argument"
+    [ -z "$(case_args "$TMP/tip/docs/tasks/039a-verify.sh" $n)" ] && pass "AC4 039a's case gives $n nothing (positive control: not every script gets the flag)" || fail "AC4 039a's case gives $n an argument"
 done
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -279,26 +333,26 @@ want="docs/tasks/039a-verify.sh docs/tasks/064-verify.sh docs/tasks/065-verify.s
 [ -z "$(printf '%s\n' "$files" | scope_bad)" ] && pass "every file BASE..FIX changes is in the declared scope (no other closed script, 070 and 069 untouched)" || fail "out of scope: $(printf '%s\n' "$files" | scope_bad | tr '\n' ' ')"
 ctl="$(printf '%s\n' "$files" docs/tasks/070-verify.sh | scope_bad)"
 [ "$ctl" = "docs/tasks/070-verify.sh" ] && pass "control: an edit of 070-verify.sh would be flagged" || fail "control: the scope check cannot fail"
-G merge-base --is-ancestor "$FIX" "$FIX2" && G merge-base --is-ancestor "$FIX2" "$HEADREV" && pass "FIX < FIX2 (this script's TIP) are ancestors of HEAD in that order" || fail "FIX < FIX2 < HEAD does not hold"
-G diff --name-only "$FIX" "$FIX2" > "$TMP/fix2.files"
-[ -z "$(scope_bad < "$TMP/fix2.files")" ] && grep -qx 'docs/tasks/111a-verify.sh' "$TMP/fix2.files" && pass "FIX..FIX2 (fixed range) touches only in-scope files and includes docs/tasks/111a-verify.sh ($(tr '\n' ' ' < "$TMP/fix2.files"))" || fail "FIX..FIX2 changes: $(tr '\n' ' ' < "$TMP/fix2.files")"
-[ -z "$(G diff --name-only "$FIX" "$FIX2" | grep 'verify\.sh$' | grep -vE '^docs/tasks/111[ab]-verify\.sh$')" ] && pass "FIX..FIX2 changes no closed verify script except 111a-verify.sh (and this one)" || fail "FIX..FIX2 touches another verify script"
+G merge-base --is-ancestor "$FIX" "$FIX2" && G merge-base --is-ancestor "$FIX2" "$TIP" && G merge-base --is-ancestor "$TIP" "$HEADREV" && pass "FIX < FIX2 < FIX3 (TIP) are ancestors of HEAD in that order" || fail "FIX < FIX2 < FIX3 < HEAD does not hold"
+G diff --name-only "$FIX" "$TIP" > "$TMP/fix2.files"
+[ -z "$(scope_bad < "$TMP/fix2.files")" ] && grep -qx 'docs/tasks/111a-verify.sh' "$TMP/fix2.files" && pass "FIX..TIP (fixed range) touches only in-scope files and includes docs/tasks/111a-verify.sh ($(tr '\n' ' ' < "$TMP/fix2.files"))" || fail "FIX..TIP changes: $(tr '\n' ' ' < "$TMP/fix2.files")"
+[ -z "$(grep 'verify\.sh$' "$TMP/fix2.files" | grep -vE '^docs/tasks/(064|065|111a|111b)-verify\.sh$')" ] && pass "FIX..TIP changes no closed verify script except 064, 065 (the Usage lines), 111a-verify.sh (and this one)" || fail "FIX..TIP touches another verify script"
 [ "$(G diff --numstat "$FIX" "$FIX2" -- docs/tasks/111a-verify.sh | cut -f1,2)" = "$(printf '8\t1')" ] && pass "111a-verify.sh: 8 lines added, 1 removed (the FINAL..HEAD check line); the live guards (tests, --list, timing) are untouched" || fail "111a-verify.sh FIX..FIX2 numstat: $(G diff --numstat "$FIX" "$FIX2" -- docs/tasks/111a-verify.sh | cut -f1,2 | tr '\t' '/')"
 G diff -U0 "$FIX" "$FIX2" -- docs/tasks/111a-verify.sh | grep -E '^-[^-]' | grep -qF 'FINAL..HEAD touches only in-scope files' && pass "the one removed line is the FINAL..HEAD check" || fail "the removed line of 111a-verify.sh is not the FINAL..HEAD check"
 [ "$(G diff --numstat "$BASE" "$FIX" -- tests/registry/test_sweep.py | cut -f2)" = 2 ] && pass "no test was removed or weakened: test_sweep.py loses exactly 2 lines (the Stub's git init line and its signature), both replaced" || fail "test_sweep.py BASE..FIX removes $(G diff --numstat "$BASE" "$FIX" -- tests/registry/test_sweep.py | cut -f2) lines"
 G diff -U0 "$BASE" "$FIX" -- tests/registry/test_sweep.py | grep -E '^-[^-]' | sed 's/^/        removed: /'
 
 # ---------------------------------------------------------------------------------------------------------------------
-section "AC8 -- 111a-verify.sh reads FINAL..TIP: the OLD blob is red on this head, the new one is green on it and after a later out-of-scope commit"
-new_clone "$TMP/a-old" "$HEADREV" && G show "$BASE:docs/tasks/111a-verify.sh" > "$TMP/a-old/docs/tasks/111a-verify.sh" || fail "AC8 cannot build the OLD-blob frame"
+section "AC8 -- 111a-verify.sh reads FINAL..TIP: on the TIP frame the OLD blob is red, the new one green; the new one stays green after a later out-of-scope commit"
+new_clone "$TMP/a-old" "$TIP" && G show "$BASE:docs/tasks/111a-verify.sh" > "$TMP/a-old/docs/tasks/111a-verify.sh" || fail "AC8 cannot build the OLD-blob frame"
 run_111a "$TMP/a-old" "$TMP/a-old.out"
 grep -E '^FAIL' "$TMP/a-old.out" | sed 's/^/        old 111a-verify.sh: /'
 [ "$V_RC" = 1 ] && [ "$(grep -c '^FAIL' "$TMP/a-old.out")" = 1 ] && grep -qx 'FAIL  FINAL..HEAD touches out-of-scope files' "$TMP/a-old.out" \
-    && pass "AC8 red first: the OLD 111a-verify.sh (blob at BASE) on this head exits 1 with exactly one FAIL, 'FINAL..HEAD touches out-of-scope files'" || fail "AC8 the OLD 111a-verify.sh on this head: exit $V_RC, FAIL lines: $(grep '^FAIL' "$TMP/a-old.out" | tr '\n' '|')"
-new_clone "$TMP/a-new" "$HEADREV" || fail "AC8 cannot clone HEAD"
+    && pass "AC8 red first: the OLD 111a-verify.sh (blob at BASE) on the TIP frame exits 1 with exactly one FAIL, 'FINAL..HEAD touches out-of-scope files'" || fail "AC8 the OLD 111a-verify.sh on the TIP frame: exit $V_RC, FAIL lines: $(grep '^FAIL' "$TMP/a-old.out" | tr '\n' '|')"
+new_clone "$TMP/a-new" "$TIP" || fail "AC8 cannot clone TIP"
 run_111a "$TMP/a-new" "$TMP/a-new.out"
 tail -2 "$TMP/a-new.out" | sed 's/^/        new 111a-verify.sh: /'
-[ "$V_RC" = 0 ] && grep -qx 'ALL PASS' "$TMP/a-new.out" && ! grep -q '^FAIL' "$TMP/a-new.out" && pass "AC8 green: the new 111a-verify.sh on the same head exits 0, ALL PASS" || fail "AC8 the new 111a-verify.sh on this head: exit $V_RC, FAIL lines: $(grep '^FAIL' "$TMP/a-new.out" | tr '\n' '|')"
+[ "$V_RC" = 0 ] && grep -qx 'ALL PASS' "$TMP/a-new.out" && ! grep -q '^FAIL' "$TMP/a-new.out" && pass "AC8 green: the new 111a-verify.sh (blob at TIP) on the same frame exits 0, ALL PASS" || fail "AC8 the new 111a-verify.sh on the TIP frame: exit $V_RC, FAIL lines: $(grep '^FAIL' "$TMP/a-new.out" | tr '\n' '|')"
 grep -qx 'PASS  FINAL..TIP touches only in-scope files' "$TMP/a-new.out" && grep -q '^PASS  TIP is reachable' "$TMP/a-new.out" && pass "AC8 the new run prints the FINAL..TIP check and the TIP ancestry check" || fail "AC8 the new run lacks the FINAL..TIP or the TIP ancestry line"
 make_later "$TMP/a-later" || fail "AC8 cannot build the later-commit frame"
 run_111a "$TMP/a-later" "$TMP/a-later.out"
@@ -311,8 +365,8 @@ fi
 
 if [ "$MUTATE" = 1 ]; then
 # ---------------------------------------------------------------------------------------------------------------------
-section "AC6 -- mutations in a temporary clone (each must redden its named check; the restore must be green)"
-new_clone "$TMP/head" "$HEADREV" || { fail "cannot clone HEAD"; exit "$FAILURES"; }
+section "AC6 -- mutations in a temporary clone at TIP (each must redden its named check; the restore must be green)"
+new_clone "$TMP/head" "$TIP" || { fail "cannot clone TIP"; exit "$FAILURES"; }
 M="$TMP/head"
 cat > "$TMP/mut.py" <<'PY'
 import sys
@@ -355,6 +409,16 @@ run_111a "$TMP/lf" "$TMP/lf0.out"
 mutate "$TMP/lf/docs/tasks/111a-verify.sh" 'TIP=58c75c033cbddc506f55358e6716682e9bfe9a53' 'TIP="$(git -C "$(dirname "$0")" rev-parse HEAD)"' || fail "AC6 111a TIP mutation did not apply"
 run_111a "$TMP/lf" "$TMP/lf1.out"
 if [ "$V_RC" != 0 ] && grep -qx 'FAIL  FINAL..TIP touches out-of-scope files' "$TMP/lf1.out"; then pass "AC6 111a-verify.sh with TIP set back to HEAD turns red on the later-commit frame: exit $V_RC, 'FINAL..TIP touches out-of-scope files'"; else fail "AC6 111a-verify.sh with TIP set back to HEAD stayed green or missed the FAIL line (exit $V_RC)"; fi
+section "AC9 -- a 111c-like later commit (fourth NO_CLOSED_ARGS entry, reworded 039a case and 064 section title): this script stays green, its previous version does not"
+make_later4 "$TMP/l4" || fail "AC9 cannot build the 111c-like frame"
+G show "$HEADREV:docs/tasks/111b-verify.sh" > "$TMP/l4/docs/tasks/111b-verify.sh"
+G show "$PREV:docs/tasks/111b-verify.sh" > "$TMP/l4/docs/tasks/111b-prev-verify.sh"
+( bash "$TMP/l4/docs/tasks/111b-verify.sh" > "$TMP/l4-new.out" 2>&1; echo $? > "$TMP/l4-new.rc" ) &
+( bash "$TMP/l4/docs/tasks/111b-prev-verify.sh" > "$TMP/l4-prev.out" 2>&1; echo $? > "$TMP/l4-prev.rc" ) &
+wait
+grep '^FAIL' "$TMP/l4-prev.out" | sed 's/^/        previous version: /' | head -n 12
+[ "$(cat "$TMP/l4-new.rc")" = 0 ] && grep -qx 'ALL PASS' "$TMP/l4-new.out" && pass "AC9 green: this script (the HEAD blob), default mode, on the 111c-like frame: ALL PASS ($(grep -c '^PASS' "$TMP/l4-new.out") checks)" || { fail "AC9 this script on the 111c-like frame: exit $(cat "$TMP/l4-new.rc")"; grep '^FAIL' "$TMP/l4-new.out" | head -n 8; tail -n 12 "$TMP/l4-new.out" | sed 's/^/        /'; }
+[ "$(cat "$TMP/l4-prev.rc")" != 0 ] && grep -q '^FAIL' "$TMP/l4-prev.out" && pass "AC9 red: the previous version of this script (PREV, which read HEAD text) fails on the same frame: exit $(cat "$TMP/l4-prev.rc"), $(grep -c '^FAIL' "$TMP/l4-prev.out") FAIL line(s)" || fail "AC9 the previous version stayed green on the 111c-like frame (exit $(cat "$TMP/l4-prev.rc"))"
 run_tests "$M" "$TMP/r.out"; rc=$?
 [ "$rc" = 0 ] && pass "AC6 restore: unmutated clone is green again ($(grep -E '^Ran ' "$TMP/r.out"))" || fail "AC6 restore: unmutated clone is red"
 for kind in 064 065; do
