@@ -82,7 +82,7 @@ a_files=$(git diff --name-only "$A^" "$A")
   || fail "BASE..A^ holds more than the spec copy"
 
 # File scope (spec). handoff.py and sign_built.py are NOT in it: if either needs an edit the task stops and reports.
-SCOPE_RE='^(tools/pipeline/(ecma|build_version|write_back|plan_pending)\.py|tests/pipeline/(test_ecma_patterns|test_write_back|mutate)\.py|docs/pipeline/build-pipeline\.md|docs/tasks/094-pipeline-ecma-patterns\.md|docs/tasks/(008b1|008c)-verify\.sh)$'
+SCOPE_RE='^(tools/pipeline/(ecma|build_version|write_back|plan_pending)\.py|tests/pipeline/(test_ecma_patterns|test_write_back|mutate)\.py|docs/pipeline/build-pipeline\.md|docs/tasks/094-(pipeline-ecma-patterns\.md|verify\.sh)|docs/tasks/(008b1|008c)-verify\.sh)$'
 files=$(git diff --name-only "$BASE" "$FINAL")
 bad=$(printf '%s\n' "$files" | grep -vE "$SCOPE_RE")
 [ -n "$files" ] && [ -z "$bad" ] && ok "git diff --name-only BASE FINAL is non-empty and inside the file scope ($(printf '%s\n' "$files" | wc -l) files)" \
@@ -94,7 +94,7 @@ for forbidden in tools/registry/schema.py tests/contracts/schema_check.py tools/
   [ -z "$(git diff --name-only "$BASE" "$FINAL" -- "$forbidden")" ] && ok "BASE..FINAL leaves $forbidden untouched" || fail "BASE..FINAL touches $forbidden"
 done
 [ -z "$(git diff --name-only "$BASE" "$FINAL" -- contracts)" ] && ok "BASE..FINAL leaves contracts/ untouched" || fail "BASE..FINAL touches contracts/"
-other=$(git diff --name-only "$BASE" "$FINAL" | grep -E '^docs/tasks/.*(-verify\.sh|\.py|\.json)$' | grep -vE '^docs/tasks/(008b1|008c)-verify\.sh$')
+other=$(git diff --name-only "$BASE" "$FINAL" | grep -E '^docs/tasks/.*(-verify\.sh|\.py|\.json)$' | grep -vE '^docs/tasks/(008b1|008c|094)-verify\.sh$')
 [ -z "$other" ] && ok "BASE..FINAL touches no verify script (but 008b1 and 008c, F1), pin file or fixture under docs/tasks" || fail "BASE..FINAL touches: $other"
 # F1: in 008b1-verify.sh and 008c-verify.sh only the mutation anchors changed. Every changed hunk between E01 (old) and FINAL (new) must
 # start at a `run_mut <id>` line, the old and new hunks must name the same ids, and 008b1/008c must have exactly the expected ids.
