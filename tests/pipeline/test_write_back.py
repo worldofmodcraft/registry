@@ -348,14 +348,17 @@ class ReviewFixes(unittest.TestCase):
         self.assertEqual(out["versions"][0]["source_archive"], url)
 
     def test_fix3_digit_translation_leaves_escaped_backslash_alone(self):
-        # Expected strings typed literally. `\\d` is a literal backslash then a literal `d`: not mangled.
-        cases = [(r"^\d$", r"^[0-9]$"), (r"^\\d$", r"^\\d$"), (r"^\\\d$", r"^\\[0-9]$"),
-                 (r"^\\\\d$", r"^\\\\d$"), (r"[\d.]", r"[0-9.]"), (r"a\.b", r"a\.b")]
-        for src, want in cases:
-            with self.subTest(src=src):
-                self.assertEqual(wb._ecma_digits(src), want)
-        with self.assertRaises(NotImplementedError):
-            wb._ecma_digits(r"\D")
+        # Task 094: the private digit translator is gone; write_back matches through ecma.matches (the gate's translator), so this
+        # test now goes through it, under its old name (008c-verify.sh's mutation `digit-translation-mangles-escaped-backslash`
+        # names it and runs only test_write_back). `\\d` is a literal backslash then a literal `d`: not mangled. The `\D` raise
+        # moved to test_ecma_patterns.py (Helper.test_an_untranslatable_construct_propagates_not_implemented_error).
+        import ecma
+        cases = [(r"^\d$", "5", True), (r"^\d$", self.ARABIC, False), (r"^\\d$", "\\d", True), (r"^\\d$", "5", False),
+                 (r"^\\\d$", "\\5", True), (r"^\\\d$", "\\" + self.ARABIC, False), (r"^\\\\d$", "\\\\d", True),
+                 (r"^[\d.]$", "5", True), (r"^[\d.]$", ".", True), (r"^[\d.]$", self.ARABIC, False), (r"^a\.b$", "axb", False)]
+        for pattern, value, want in cases:
+            with self.subTest(pattern=pattern, value=value):
+                self.assertIs(ecma.matches(pattern, value), want)
 
     def test_fix2_pending_shape_stray_and_preexisting_keys_refused(self):
         cases = {

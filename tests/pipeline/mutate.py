@@ -96,7 +96,9 @@ mut("asset-scan-skipped", "tools/pipeline/build_version.py", [('    report = run
     ["test_ac7_blizzard_magic_named_png_rejected_naming_the_format", "test_ac7_glb_with_embedded_blizzard_payload_rejected"])
 mut("reserved-names-off", "tools/pipeline/naming.py", [('    if stem in RESERVED_DEVICE_NAMES:', '    if False:')], ["test_ac8_reserved_device_namespaces_rejected_before_any_output", "test_ac8_case_insensitive_unit"])
 mut("reserved-names-prefix-match", "tools/pipeline/naming.py", [('    if stem in RESERVED_DEVICE_NAMES:', '    if any(stem.startswith(r) for r in RESERVED_DEVICE_NAMES):')], ["test_ac8_comet_and_console_are_accepted_positive_controls"])
-mut("fullmatch-becomes-search", "tools/pipeline/build_version.py", [('re.fullmatch(pattern, value) is not None', 're.search(pattern, value) is not None')],
+# Task 094: build_version no longer calls re.fullmatch; every pattern goes through tools/pipeline/ecma.py. The same weakening is now
+# "search the RAW pattern" there (no ECMA translation, so `$` tolerates a trailing newline): the same two checks must turn red.
+mut("fullmatch-becomes-search", "tools/pipeline/ecma.py", [('re.search(schema.ecma_pattern(pattern), value) is not None', 're.search(pattern, value) is not None')],
     ["test_ac2_commit_with_trailing_newline_rejected", "test_ac2_version_not_semver_and_not_in_entry"])
 mut("commit-from-head-not-entry", "tools/pipeline/gitops.py", [('f"--prefix={ROOT_PREFIX}/", commit]', 'f"--prefix={ROOT_PREFIX}/", "HEAD"]')],
     ["test_ac2_builds_the_entry_commit_even_when_branch_moved_on"])

@@ -39,6 +39,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
 import archive  # noqa: E402
+import ecma  # noqa: E402
 import gitops  # noqa: E402
 import naming  # noqa: E402
 import reference_verify  # noqa: E402
@@ -65,8 +66,8 @@ def _load_schema(name: str) -> dict:
         return json.load(f)
 
 
-# Patterns copied at load time from the contract, matched with fullmatch so a trailing newline
-# (which `$` tolerates under re.search) cannot slip through.
+# Patterns copied at load time from the contract and matched with the registry gate's ECMA-262 semantics (tools/pipeline/ecma.py,
+# task 094): `$` is end of input only, `\d` is ASCII-only, `\s` is ECMA's set. Not re.fullmatch on the raw pattern.
 _ENTRY_SCHEMA = _load_schema("entry.schema.json")
 _VERSION_PROPS = _ENTRY_SCHEMA["properties"]["versions"]["items"]["properties"]
 _PAT_ID = _ENTRY_SCHEMA["properties"]["id"]["pattern"]
@@ -76,7 +77,9 @@ _PAT_PUBLISHED_AT = _VERSION_PROPS["published_at"]["pattern"]
 
 
 def _fullmatch(pattern: str, value) -> bool:
-    return isinstance(value, str) and re.fullmatch(pattern, value) is not None
+    """The gate's verdict on `value` (ecma.matches). The name is kept for tools/pipeline/sign_built.py, which calls it; it is
+    not a re.fullmatch (the schema patterns are anchored, so search with the translated pattern is the full match)."""
+    return ecma.matches(pattern, value)
 
 
 class Log:

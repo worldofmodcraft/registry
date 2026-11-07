@@ -1,8 +1,8 @@
 """Pipeline write-back (task 008c, edge E8): the five write-back values, the project-owned
 `source_archive` URL, and the `pending -> published` entry (transition T1, ADR-0121).
 
-Pure functions: no I/O beyond reading the two contract files at import, no process spawning,
-no network, no key material (`signature` is the public, detached signature text that
+Pure functions: no I/O beyond reading the contract files at import (and, through ecma.py, the registry gate's
+tools/registry/schema.py), no process spawning, no network, no key material (`signature` is the public, detached signature text that
 `build_version` already produced). Nothing here checks a hash against a tarball; that is the
 E9 verifiers' job (docs/pipeline/build-pipeline.md, "Write-back").
 """
@@ -12,13 +12,13 @@ from __future__ import annotations
 import copy
 import json
 import os
-import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
+import ecma  # noqa: E402
 import naming  # noqa: E402
 from pipeline_errors import PipelineError, Rejected  # noqa: E402
 
@@ -52,48 +52,15 @@ _PAT_ID = _SCHEMA["properties"]["id"]["pattern"]
 _PAT_SEMVER = _VPROPS["version"]["pattern"]
 
 
-def _ecma_digits(pattern: str) -> str:
-    r"""The schema pattern with every unescaped `\d` replaced by `[0-9]` (`0-9` inside a character class).
-
-    Why: the schema patterns are ECMA-262 regexes (JSON Schema's dialect). ECMA `\d` is ASCII-only, but Python's
-    default `re` `\d` matches any Unicode decimal digit (Arabic-Indic, fullwidth, ...). ECMA `\s`/`\S` are
-    Unicode-aware (they cover NBSP, U+2028, ...) and Python's default `re` agrees, so `\s`/`\S` are left alone and
-    no global flag (`re.ASCII` would narrow `\S` too) is used. Escapes are consumed in pairs, so `\\d` (a literal
-    backslash, then `d`) is not mangled. `\D` would need its own translation; none of the schema's patterns has
-    one, so it raises rather than silently keeping Python's meaning."""
-    out, i, in_class = [], 0, False
-    while i < len(pattern):
-        c = pattern[i]
-        if c == "\\":
-            if i + 1 >= len(pattern):
-                raise NotImplementedError(f"pattern {pattern!r}: dangling backslash")
-            e = pattern[i + 1]
-            if e == "d":
-                out.append("0-9" if in_class else "[0-9]")
-            elif e == "D":
-                raise NotImplementedError(f"pattern {pattern!r}: \\D is not translated to ECMA-262 semantics")
-            else:
-                out.append(pattern[i:i + 2])
-            i += 2
-            continue
-        if c == "[":
-            in_class = True
-        elif c == "]":
-            in_class = False
-        out.append(c)
-        i += 1
-    return "".join(out)
-
-
-_PATTERNS = {k: _ecma_digits(_VPROPS[k]["pattern"]) for k in ("source_archive", "source_sha256", "key_id", "published_at")}
-_PAT_ID = _ecma_digits(_PAT_ID)
-_PAT_SEMVER = _ecma_digits(_PAT_SEMVER)
+# Raw schema patterns; every match goes through ecma.matches, the registry gate's own expression (task 094): `$` is end of input
+# only, `\d` is ASCII-only, `\s`/`\S` are ECMA-262's WhiteSpace + LineTerminator set. No re flag, no translation of our own.
+_PATTERNS = {k: _VPROPS[k]["pattern"] for k in ("source_archive", "source_sha256", "key_id", "published_at")}
 
 
 def _fullmatch(pattern: str, value) -> bool:
-    # fullmatch, not search: `$` would tolerate a trailing newline. The pattern was translated by `_ecma_digits` when
-    # it was loaded (no re flag here; see that function for why).
-    return isinstance(value, str) and re.fullmatch(pattern, value) is not None
+    """The gate's verdict on `value` (ecma.matches). The name is kept for tools/pipeline/handoff.py, which calls it; it is not a
+    re.fullmatch (the schema patterns are anchored, so search with the translated pattern is the full match)."""
+    return ecma.matches(pattern, value)
 
 
 def source_archive_url(namespace: str, name: str, version: str) -> str:
