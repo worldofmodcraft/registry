@@ -819,6 +819,11 @@ class PipelineCarveOut(unittest.TestCase):
     def test_e16_reject_a_first_publish(self):
         for files in (first_publish(), {P("alice", "cooltool"): (None, ent("alice", "cooltool", published()))}):
             self.assertEqual(as_pipeline(files, login="alice")["verdict"], "rejected")
+        # a first publish into a reserved namespace is where the carve-out would matter (membership would be skipped)
+        v = as_pipeline({P("mc", "newtool"): (None, ent("mc", "newtool", pending()))}, oracle=status(404))
+        self.assertEqual(v["verdict"], "rejected")
+        self.assertIn("R7", rules(v))
+        self.assertFalse(v["pipeline_carve_out"])
 
     def test_e16_reject_a_new_version(self):
         v = as_pipeline(add_version())
