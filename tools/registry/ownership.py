@@ -4,7 +4,7 @@ R1-R11 and the checker-constraining invariants I1-I7, plus the FAIL-CLOSED rule 
 reads. Everything arrives as an argument (the seam task 039 fills in).
 
     check(author, files, reserved_base, membership_oracle, *, login=None, r11_identity=None,
-          pipeline_app_id=None, base_entries=None) -> verdict (report.make shape, checker "ownership")
+          pipeline_app_id=None, base_entries=None, namespace_owners=None, pipeline_identity=None) -> verdict (report.make shape, checker "ownership")
 
 author            (provider, id): the PR author as read from pulls.user.id (I1). Never read from anywhere else.
 login             pulls.user.login. Used for messages and for the FIRST-PUBLISH rules R4/R6 only (they are defined
@@ -17,7 +17,14 @@ membership_oracle (org, author) -> int, the HTTP status of the membership questi
                   anything else (302, 500, an exception) is R9's closed rejection (I5: a 302 is never followed).
 r11_identity      (provider, id) that R11 authorises for takedowns. Configuration, never data from the PR. None
                   (the default) means R11 authorises nobody: every takedown PR is then rejected by R11 (and R3/R7).
-pipeline_app_id   accepted and deliberately ignored: it confers nothing until task 008b amends ownership.md.
+pipeline_app_id   accepted and deliberately ignored, kept so task 007's callers and tests stay valid; it confers nothing.
+pipeline_identity (provider, id) of the build pipeline (task 008b-3a; the GitHub App's bot USER id, never a login and
+                  never GITHUB_ACTOR*). Configuration, never data from the PR. None (the default) means the carve-out is
+                  off and every T1/T3 stays rejected (ADR-0121 fail closed). When the author equals it AND the whole
+                  diff is exactly one T1 (pending -> published) or exactly one T3 (pending -> rejected) in one existing
+                  entry.json, the ADR-0121 fail-closed finding and R3/R7 do not apply to that PR. Nothing else is
+                  authorised for it: not a first publish, a new version, a page.json edit, a takedown (T2), two
+                  transitions, or any other path; those are judged as for any stranger. It never authorises a takedown.
 namespace_owners  {namespace: (provider, id)} read from EVERY mods/*/entry.json at the merge-base (never from the
                   PR's files). A namespace is first published by a PR only if absent from this mapping and from the
                   reserved list; a new entry.json in a namespace present here is judged by R3 on the recorded owner's
@@ -90,6 +97,29 @@ def _fail_closed(files):
                 "rejected whoever its author is", "remove the change to existing pending/published elements; the "
                 "pipeline writes those after task 008b amends ownership.md", FAIL_CLOSED_CITE, path=path, index=i))
     return out
+
+
+def _pipeline_shape(files):
+    """'T1' or 'T3' iff the diff is exactly one such transition (task 008b-3a, ownership.md E16): one path, an existing
+    entry.json, same element count, exactly one element differs and 007a classifies it T1 (or T3) with no finding
+    anywhere in the file (id/owner frozen, no extra change); every other element unchanged. Else None."""
+    if len(files) != 1:
+        return None
+    (path, (old, new)), = files.items()
+    p = classify.parse_mod_path(path)
+    if p is None or p[2] != "entry" or old is None or new is None:
+        return None
+    if len(_versions(old)) != len(_versions(new)):
+        return None
+    try:
+        v = append_only.check_entry(old, new, path)
+    except report.ToolError:
+        return None
+    kinds = [e["classification"] for e in v["elements"]]
+    changed = [k for k in kinds if k != "unchanged"]
+    if v["findings"] or len(changed) != 1 or changed[0] not in ("T1", "T3") or len(kinds) != len(_versions(new)):
+        return None
+    return changed[0]
 
 
 def _takedown_shape(files):
@@ -250,13 +280,15 @@ def _namespace(ns, paths, ctx):
 
 
 def check(author, files, reserved_base, membership_oracle, *, login=None, r11_identity=None, pipeline_app_id=None,
-          base_entries=None, namespace_owners=None):
+          base_entries=None, namespace_owners=None, pipeline_identity=None):
     author = _pair(author, "author")
+    pipe = None if pipeline_identity is None else _pair(pipeline_identity, "pipeline_identity")
     r11 = None if r11_identity is None else _pair(r11_identity, "r11_identity")
     names = classify.reserved_names(reserved_base)
     owners = None if namespace_owners is None else {k: _pair(v, f"namespace_owners[{k!r}]")
                                                     for k, v in namespace_owners.items()}
-    findings = _fail_closed(files) + classify.classify(sorted(files), reserved_base)["findings"]
+    carve_out = pipe is not None and author == pipe and _pipeline_shape(files) is not None
+    findings = ([] if carve_out else _fail_closed(files)) + classify.classify(sorted(files), reserved_base)["findings"]
     shape = _takedown_shape(files)
     authorised = r11 is not None and author == r11 and shape
     if shape and not authorised:
@@ -286,8 +318,8 @@ def check(author, files, reserved_base, membership_oracle, *, login=None, r11_id
         if p is not None:
             by_ns.setdefault(p[0], []).append(path)
     ctx = {"author": author, "login": login, "files": files, "names": names, "reserved": reserved_base,
-           "oracle": membership_oracle, "authorised": authorised, "base_entries": base_entries or {}, "owners": owners}
+           "oracle": membership_oracle, "authorised": authorised or carve_out, "base_entries": base_entries or {}, "owners": owners}
     for ns in sorted(by_ns):
         findings += _namespace(ns, sorted(by_ns[ns]), ctx)
-    return report.make("ownership", findings, authorised_takedown=authorised, namespaces=sorted(by_ns),
+    return report.make("ownership", findings, authorised_takedown=authorised, pipeline_carve_out=carve_out, namespaces=sorted(by_ns),
                        merge_signal=False)

@@ -761,5 +761,143 @@ class Cli(unittest.TestCase):
             self.assertIn("alice.b", err.getvalue())
 
 
+FIXTURE_PIPE_ID = PIPE_ID  # a FIXTURE id (task 008b-3a); the real App bot user id is configuration, set after M5
+PIPE = ("github", FIXTURE_PIPE_ID)
+
+
+def oracle_files(name):
+    """{path: (old, new)} from task 057's oracle fixture `name`, read from the committed JSON (not built here)."""
+    import json
+    fx = {f["name"]: f for f in json.loads(support.FIXTURES_PATH.read_text())}
+    return {"mods/kelsi.housing/entry.json": (fx[name]["old"], fx[name]["new"])}
+
+
+def as_pipeline(files, author=PIPE, **kw):
+    return run(author, files, pipeline_identity=PIPE, **kw)
+
+
+class PipelineCarveOut(unittest.TestCase):
+    """Task 008b-3a, criteria 4 and 5: the pipeline id is accepted for exactly one T1 or exactly one T3, nothing else."""
+
+    def test_e16_accept_oracle_t1_and_t3_by_the_pipeline_id(self):
+        for name in ("t1-exact", "t3-exact"):
+            with self.subTest(fixture=name):
+                v = as_pipeline(oracle_files(name))
+                self.assertEqual((v["verdict"], v["pipeline_carve_out"], v["findings"]), ("accepted", True, []))
+                self.assertFalse(v["merge_signal"])
+
+    def test_e16_reject_the_same_diffs_authored_by_another_id(self):
+        owner = ("github", 4831207)  # the entry's own owner
+        for name in ("t1-exact", "t3-exact"):
+            for label, author in (("owner", owner), ("stranger", MALLORY), ("other provider", ("gitlab", FIXTURE_PIPE_ID)),
+                                  ("id off by one", ("github", FIXTURE_PIPE_ID + 1))):
+                with self.subTest(fixture=name, author=label):
+                    v = as_pipeline(oracle_files(name), author=author)
+                    self.assertEqual(v["verdict"], "rejected")
+                    self.assertFalse(v["pipeline_carve_out"])
+                    self.assertTrue(failclosed_findings(v))
+
+    def test_e16_reject_when_the_carve_out_is_not_configured(self):
+        for name in ("t1-exact", "t3-exact"):
+            v = run(PIPE, oracle_files(name))
+            self.assertEqual(v["verdict"], "rejected")
+            self.assertTrue(failclosed_findings(v))
+        v = run(PIPE, oracle_files("t1-exact"), pipeline_app_id=FIXTURE_PIPE_ID)  # the 007 parameter still confers nothing
+        self.assertEqual(v["verdict"], "rejected")
+
+    def test_e16_accept_in_a_reserved_namespace_without_membership(self):
+        for build in (t1, t3):
+            v = as_pipeline(build("mc"), oracle=status(404))
+            self.assertEqual((v["verdict"], v["findings"]), ("accepted", []))
+
+    def test_e16_reject_hostile_login_matches_but_id_differs(self):
+        v = as_pipeline(oracle_files("t1-exact"), author=MALLORY, login="worldofmodcraft-pipeline[bot]")
+        self.assertEqual(v["verdict"], "rejected")
+        with mock.patch.dict(os.environ, {"GITHUB_ACTOR_ID": str(FIXTURE_PIPE_ID), "GITHUB_ACTOR": "pipeline"}):
+            self.assertEqual(as_pipeline(oracle_files("t3-exact"), author=MALLORY)["verdict"], "rejected")
+
+    def test_e16_reject_a_first_publish(self):
+        for files in (first_publish(), {P("alice", "cooltool"): (None, ent("alice", "cooltool", published()))}):
+            self.assertEqual(as_pipeline(files, login="alice")["verdict"], "rejected")
+
+    def test_e16_reject_a_new_version(self):
+        v = as_pipeline(add_version())
+        self.assertEqual(v["verdict"], "rejected")
+        self.assertIn("R3", rules(v))
+        t1_plus_append = {P("alice", "cooltool"): (ent("alice", "cooltool", pending("1.0.0", "a" * 40)),
+                                                  ent("alice", "cooltool", published("1.0.0", "a" * 40),
+                                                      pending("1.1.0", "b" * 40)))}
+        self.assertEqual(as_pipeline(t1_plus_append)["verdict"], "rejected")
+
+    def test_e16_reject_a_page_json_edit(self):
+        files = {P("alice", "cooltool", "page"): ({"a": 1}, {"a": 2})}
+        v = as_pipeline(files, base_entries={P("alice", "cooltool"): ent("alice", "cooltool", published())})
+        self.assertEqual(v["verdict"], "rejected")
+        self.assertIn("R3", rules(v))
+
+    def test_e16_reject_a_t1_with_a_page_json_edit_beside_it(self):
+        files = dict(t1(), **{P("alice", "cooltool", "page"): ({"a": 1}, {"a": 2})})
+        self.assertEqual(as_pipeline(files)["verdict"], "rejected")
+
+    def test_e16_reject_a_takedown_the_carve_out_never_stands_in_for_r11(self):
+        v = as_pipeline(takedown())  # R11 not configured for this id
+        self.assertEqual(v["verdict"], "rejected")
+        self.assertIn("R11", rules(v))
+        self.assertFalse(v["pipeline_carve_out"])
+        v = as_pipeline(takedown(), r11_identity=OTHER_ID and ("github", OTHER_ID))  # R11 names someone else
+        self.assertEqual((v["verdict"], v["authorised_takedown"], v["pipeline_carve_out"]), ("rejected", False, False))
+
+    def test_e16_reject_t2_beside_a_t1_or_t3(self):
+        for new_state in (published("1.1.0", "b" * 40), rejected("1.1.0", "b" * 40)):
+            v = as_pipeline(t2_plus("alice", pending("1.1.0", "b" * 40), new_state))
+            self.assertEqual(v["verdict"], "rejected")
+
+    def test_e16_reject_a_mixed_t1_and_t3_pr(self):
+        self.assertEqual(as_pipeline(oracle_files("t1-and-t3-different-elements"))["verdict"], "rejected")
+        self.assertEqual(as_pipeline(two("alice", published("1.0.0", "a" * 40), rejected("1.1.0", "b" * 40)))["verdict"],
+                         "rejected")
+        self.assertEqual(as_pipeline(oracle_files("t1-two-elements-two-transitions"))["verdict"], "rejected")
+        both = dict(t1("alice"), **{P("alice", "second"): t3("alice")[P("alice", "cooltool")]})
+        self.assertEqual(as_pipeline(both)["verdict"], "rejected")
+        two_t1 = dict(t1("alice"), **{P("alice", "second"): t1("alice")[P("alice", "cooltool")]})
+        self.assertEqual(as_pipeline(two_t1)["verdict"], "rejected")
+
+    def test_e16_reject_a_t3_with_a_blank_reason_or_a_non_https_build_log(self):
+        for name in ("t3-whitespace-only-reason", "t3-missing-reason", "t3-build-log-url-http", "t3-missing-build-log-url",
+                     "t3-reason-not-a-string-null"):
+            with self.subTest(fixture=name):
+                self.assertEqual(as_pipeline(oracle_files(name))["verdict"], "rejected")
+        for bad in (dict(reason="  "), dict(url="http://builds.example.org/log.txt")):
+            files = {P("alice", "cooltool"): (ent("alice", "cooltool", pending("1.0.0", "a" * 40)),
+                                              ent("alice", "cooltool", rejected("1.0.0", "a" * 40, **bad)))}
+            self.assertEqual(as_pipeline(files)["verdict"], "rejected")
+
+    def test_e16_reject_a_t1_that_changes_anything_else(self):
+        for name in ("t1-plus-owner-change", "t1-plus-id-change", "t1-extra-changed-field-commit", "t1-source-url-changed",
+                     "t1-missing-signature", "t1-extra-key", "t1-with-reason", "t1-reorders-versions"):
+            with self.subTest(fixture=name):
+                self.assertEqual(as_pipeline(oracle_files(name))["verdict"], "rejected")
+
+    def test_e16_reject_any_change_under_contracts_or_github(self):
+        for extra in ("contracts/ownership.md", ".github/workflows/registry-ci.yml", "reserved-namespaces.json",
+                      "tools/registry/ownership.py"):
+            with self.subTest(path=extra):
+                files = dict(t1("alice"), **{extra: ({"a": 1}, {"a": 2})})
+                v = as_pipeline(files)
+                self.assertEqual(v["verdict"], "rejected")
+                self.assertFalse(v["pipeline_carve_out"])
+        only = {"contracts/ownership.md": ({"a": 1}, {"a": 2})}
+        self.assertEqual(as_pipeline(only)["verdict"], "rejected")
+
+    def test_e16_accept_positive_control_an_owner_pr_is_unaffected(self):
+        self.assertEqual(as_pipeline(add_version(), author=ALICE)["verdict"], "accepted")
+        self.assertEqual(as_pipeline(first_publish(), author=ALICE, login="alice")["verdict"], "accepted")
+
+    def test_e16_reject_bad_pipeline_identity_is_a_tool_error(self):
+        for bad in ("x", ("github",), ("github", "1"), ("github", True)):
+            with self.assertRaises(report.ToolError):
+                run(ALICE, add_version(), pipeline_identity=bad)
+
+
 if __name__ == "__main__":
     unittest.main()
