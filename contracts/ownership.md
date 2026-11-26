@@ -1192,17 +1192,23 @@ not an integer greater than zero (a string `"342916936"` or a boolean `true` nev
 verdict**: the checker stops and reports that it could not decide, as it does for `config/r11-identity.json`. **Detection
 is broad:** a PR *contains* a T1 or T3 mutation if some `entry.json` it changes has an element whose
 `status` goes from `"pending"` to `"published"` or from `"pending"` to `"rejected"`, or a newly added
-element whose `status` is `"published"` or `"rejected"`, whatever else is wrong with that file or PR; if
+element whose `status` is `"published"` or `"rejected"`, and that includes an `entry.json` the PR creates
+or deletes: a created file holding such an element, or a deleted file that held one, counts as containing
+a T1 or T3 mutation and is rejected by `R12`, because there is no `old` (or no `new`) for the parsed object
+to equal, whatever else is wrong with that file or PR; if
 that cannot be evaluated (the file does not parse, or has a duplicate key) the PR is rejected by `R12`
 (fail closed, ADR-0121). **Authorisation is narrow:** `R12` authorises a PR that contains a T1 or T3
 mutation only when, in addition to its author being the pipeline identity, that one element is classified
 by `append-only.rules.md` as a T1 or a T3, the parsed `new` `entry.json` equals the parsed `old` one
 except for that one element's transition (no top-level key added or changed, no other element changed,
-`id` and `owner` untouched), and the PR touches no other path. Differences in bytes that leave the parsed
+`id` and `owner` untouched), and the PR touches no other path, where "path" counts every path in the diff whatever its status (added,
+deleted, renamed, copied, or changed in mode only). Differences in bytes that leave the parsed
 object equal (whitespace, key order) are not a change for `R12`'s purposes; they stay the business of the
 append-only and schema layers. The two conditions, the pipeline identity as author and that diff, are not
-merely necessary but jointly **sufficient**: a PR meeting both is authorised, and no third condition is
-held back elsewhere in this document. A PR that contains a T1 or T3 mutation and that `R12` does not
+merely necessary but jointly **sufficient** for `R12`'s own authorisation, that is, for lifting `R3` and `R7` for that
+PR: a PR meeting both is authorised by `R12`, and no third condition is held back for that lift elsewhere in this
+document. The sufficiency reaches no further: the rules named in the paragraph below as still applying
+reject such a PR separately, whatever `R12` has authorised. A PR that contains a T1 or T3 mutation and that `R12` does not
 authorise is **rejected by `R12` itself, whoever opened it**, the pipeline identity and the
 organisation's members included, with a finding that names `R12`; because `R3` and `R7` are lifted only
 for a PR `R12` authorises, they apply to such a PR in full. Until the pipeline identity is configured,
@@ -1232,8 +1238,8 @@ are not consulted. The same diff opened by an organisation member such as `womcr
 `mods/`, which is all `R1` governs, so this document does not protect it; the control is the merge gate,
 exactly as for `config/r11-identity.json`: every registry merge is the manager's under MANAGER.md §7, and
 as of task 118's spec (2026-11-26) no CODEOWNERS or branch-protection rule exists on the registry. A
-malformed `config/pipeline-identity.json` stops the checker for **every** registry PR, not only for PRs that
-contain a T1 or T3 mutation, as a malformed `config/r11-identity.json` already does; that is deliberate,
+malformed `config/pipeline-identity.json` stops the checker for **every** PR with a path under `mods/`, not only for PRs that
+contain a T1 or T3 mutation (the checker routes a PR with no path under `mods/` to its infrastructure route, which reads no config, and the same holds for `config/r11-identity.json` today), as a malformed `config/r11-identity.json` already does; that is deliberate,
 and the merge gate is what keeps such a file from landing. This task does not create the file: the
 008b-3a fix round creates it with `null`, and 008b-3b sets the id. Whether `config/` should have a
 CODEOWNERS or branch-protection rule is booked as Question 3 below.
@@ -1241,7 +1247,7 @@ CODEOWNERS or branch-protection rule is booked as Question 3 below.
 **I9 (MUST)** — `R12`'s identity is read at the PR's merge-base, and the comparison below is made only
 when both identities are configured, that is, when `config/pipeline-identity.json` and
 `config/r11-identity.json` each hold a non-null identity at that merge-base. When both are configured and
-the pipeline identity equals `R11`'s identity, the checker stops without a verdict, for every PR: one
+the pipeline identity equals `R11`'s identity, the checker stops without a verdict, for every PR with a path under `mods/`: one
 account holding both the takedown power of `R11` and the write-back power of `R12` would erase the
 separation those two rules state.
 
