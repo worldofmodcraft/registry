@@ -791,6 +791,15 @@ class AC12PipelineIdentity(Base):
         self.check(run_cli(w, w.pr(unset), uid=self.PIPE, login="bot"), 1, "R12")  # extra path: not exactly one change
         self.check(run_cli(w, w.pr(self.T1, "p4"), uid=self.PIPE, login="bot"), 0)
 
+    def test_a_pr_that_repairs_or_equalises_the_config_is_still_judged_by_the_merge_base_value(self):
+        w = self.world({**base_files(), "config/pipeline-identity.json": "{not json"})
+        fixed = {**add_version_changes(), "config/pipeline-identity.json": self.cfg(None)}
+        self.check(run_cli(w, w.pr(fixed)), 2, "pipeline-identity")  # the broken merge-base value decides, not the repair
+        w = self.world({**base_files(), "config/r11-identity.json": self.R11_FILE})
+        equal = {**add_version_changes(), "config/pipeline-identity.json": self.cfg({"provider": "github", "id": 555})}
+        # a rejection (mixed paths), not "undecided": I9 reads both identities at the merge-base, never the PR's own value
+        self.check(run_cli(w, w.pr(equal)), 1, "unrecognised-path")
+
     def test_i9_equal_identities_are_undecided_for_every_pr_with_a_mods_path(self):
         same = self.cfg({"provider": "github", "id": 555})
         w = self.world(self.pending_base(**{"config/pipeline-identity.json": same, "config/r11-identity.json": self.R11_FILE}))

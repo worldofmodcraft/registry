@@ -392,7 +392,7 @@ class Takedowns(unittest.TestCase):
         self.assertIn("R3", rules(v))
 
     def test_i9_reject_pipeline_identity_equal_to_r11_identity_is_no_verdict_not_even_for_a_takedown(self):
-        """Task 120: replaces the 008b-3a pipeline_app_id case. One account may not hold R11 and R12 (I9)."""
+        """Task 120: replaces the 008b-3a app-id case. One account may not hold R11 and R12 (I9)."""
         with self.assertRaises(report.ToolError):
             run(R11, takedown(), r11_identity=R11, pipeline_identity=R11)
 
@@ -552,7 +552,7 @@ class FailClosed(unittest.TestCase):
         self.assertEqual(cells, 30)
 
     def test_b1_r11_identity_has_no_write_back_power_even_when_a_pipeline_identity_is_configured(self):
-        """Task 120: replaces the 008b-3a pipeline_app_id case: the platform's own identity cannot carry T1 or T3."""
+        """Task 120: replaces the 008b-3a app-id case: the platform's own identity cannot carry T1 or T3."""
         for build in (t1, t3):
             v = run(R11, build(), r11_identity=R11, pipeline_identity=PIPE)
             self.assertEqual(v["verdict"], "rejected")
