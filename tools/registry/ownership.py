@@ -117,9 +117,9 @@ def _writeback(author, pipeline, files, hits):
 
 def _fail_closed(files, hits, why):
     """ADR-0121, evaluated FIRST on the raw old/new pair (never on 007a's classification). A T1/T3 mutation (hits) is
-    R12's: rejected by R12 with `why` unless R12 authorised it (why == ""). Any other change to an existing element
-    keeps the fail-closed tag: at index i < len(old) the new element is missing, or differs and (old is pending, or
-    new is published/rejected, which a pending old element would have made a hit)."""
+    R12's: rejected by R12 with `why` unless R12 authorised it (why == ""); a file with a hit gets no fail-closed finding, R12 covers all of it. In every
+    other file any change to an existing element keeps the fail-closed tag: at index i < len(old) the new element is
+    missing, or differs and (old is pending, or new is published/rejected)."""
     out = []
     for path in sorted(files):
         if why and path in hits:
@@ -131,14 +131,11 @@ def _fail_closed(files, hits, why):
                 "remove the change to the pending/published/rejected elements; the build pipeline writes those",
                 R12_CITE, path=path, index=hits[path][0][0]))
         p = classify.parse_mod_path(path)
-        if p is None or p[2] != "entry":
-            continue
+        if p is None or p[2] != "entry" or path in hits:
+            continue  # a file holding a T1/T3 mutation is R12's whole; the others are judged for fail-closed
         old, new = files[path]
         nv = _versions(new)
-        skip = {i for i, born in hits.get(path, []) if not born}
         for i, o in enumerate(_versions(old)):
-            if i in skip:
-                continue
             if i >= len(nv):
                 why_fc = f"element {i} is missing from the new file (versions[] truncated, append-only rule 3)"
             elif not append_only._same(o, nv[i]) and (_status(o) == "pending" or _status(nv[i]) in ("published", "rejected")):

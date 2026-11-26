@@ -1,4 +1,5 @@
-"""Ownership checker (task 007b, E16): ownership.md R1-R11 and I1-I8, plus the ADR-0121 fail-closed rule.
+"""Ownership checker (task 007b, E16): ownership.md R1-R12 and I1-I9 (R12 and I9: tasks 118/120), plus the ADR-0121
+fail-closed rule for changes to existing elements that are not a T1, T2 or T3.
 
 Test names are `test_<rule>_<accept|reject>_<what>` so test_ownership_mutations.py can prove, per rule id, that a
 named mutation reddens a test of that rule (B3). The unit under test never touches the network or environment.
@@ -21,6 +22,7 @@ ORG = {"provider": "github", "id": ORG_ID, "name_at_registration": "worldofmodcr
 RES = {"schema_version": "1.0.0", "namespaces": {"mc": {"owner": ORG, "reason": "r"}, "test": {"owner": ORG, "reason": "r"}}}
 ALICE_ID, MALLORY_ID, PIPE_ID, OTHER_ID = 100200300, 900800700, 555111, 424242
 ALICE, MALLORY = ("github", ALICE_ID), ("github", MALLORY_ID)
+PIPE = ("github", PIPE_ID)  # the configured pipeline identity of the R12 tests (a fixture value, never the real id)
 ORG_MEMBER = ("github", 777000)
 R11 = ("github", OTHER_ID)  # deliberately NOT the reserved owner's id: R11 is configuration, not reserved-list data
 
@@ -389,9 +391,10 @@ class Takedowns(unittest.TestCase):
         v = run(MALLORY, takedown(), r11_identity=None)
         self.assertIn("R3", rules(v))
 
-    def test_r11_pipeline_app_id_equal_to_r11_identity_behaves_as_r11_for_t2(self):
-        v = run(R11, takedown(), r11_identity=R11, pipeline_app_id=R11[1])
-        self.assertEqual(v["verdict"], "accepted")
+    def test_i9_reject_pipeline_identity_equal_to_r11_identity_is_no_verdict_not_even_for_a_takedown(self):
+        """Task 120: replaces the 008b-3a pipeline_app_id case. One account may not hold R11 and R12 (I9)."""
+        with self.assertRaises(report.ToolError):
+            run(R11, takedown(), r11_identity=R11, pipeline_identity=R11)
 
 
 def removal_plus_new_version(ns="alice", name="cooltool", owner=None):
@@ -519,13 +522,17 @@ AUTHORS = {  # label: (author, namespace, kwargs)
     "namespace owner": (ALICE, "alice", {}),
     "stranger": (MALLORY, "alice", {}),
     "org member on a reserved namespace": (ORG_MEMBER, "mc", {"oracle": status(204)}),
-    "pipeline app id": (("github", PIPE_ID), "alice", {"pipeline_app_id": PIPE_ID}),
+    "pipeline identity, R12 not configured": (("github", PIPE_ID), "alice", {}),
     "r11 identity": (R11, "alice", {"r11_identity": R11}),
 }
 
 
 def failclosed_findings(v):
     return [f for f in v["findings"] if f["rules"] == ["fail-closed"]]
+
+
+def r12_findings(v):
+    return [f for f in v["findings"] if f["rules"] == ["R12"]]
 
 
 class FailClosed(unittest.TestCase):
@@ -536,18 +543,20 @@ class FailClosed(unittest.TestCase):
                 with self.subTest(kind=kind, author=label):
                     v = run(author, build(ns), login="x", **kw)
                     self.assertEqual(v["verdict"], "rejected")
-                    fc = failclosed_findings(v)
-                    self.assertTrue(fc, "no fail-closed finding")
+                    fc = r12_findings(v)
+                    self.assertTrue(fc, "no R12 finding")
+                    self.assertFalse(failclosed_findings(v), "a leftover fail-closed tag on a T1/T3 cell")
                     self.assertIn("ADR-0121", fc[0]["message"])
-                    self.assertIn("task 008b", fc[0]["message"])
+                    self.assertIn("R12", fc[0]["message"])
                     cells += 1
         self.assertEqual(cells, 30)
 
-    def test_b1_pipeline_app_id_equal_to_r11_identity_still_cannot_carry_t1_or_t3(self):
+    def test_b1_r11_identity_has_no_write_back_power_even_when_a_pipeline_identity_is_configured(self):
+        """Task 120: replaces the 008b-3a pipeline_app_id case: the platform's own identity cannot carry T1 or T3."""
         for build in (t1, t3):
-            v = run(R11, build(), r11_identity=R11, pipeline_app_id=R11[1])
+            v = run(R11, build(), r11_identity=R11, pipeline_identity=PIPE)
             self.assertEqual(v["verdict"], "rejected")
-            self.assertTrue(failclosed_findings(v))
+            self.assertTrue(r12_findings(v))
 
     def test_b6_truncation_trips_fail_closed_for_every_author(self):
         old = ent("alice", "cooltool", published("1.0.0", "a" * 40), published("1.1.0", "b" * 40))
@@ -574,7 +583,8 @@ class FailClosed(unittest.TestCase):
     def test_fail_closed_key_is_independent_of_the_shape_verdict(self):
         """A malformed pending -> published (007a calls it a violation) must still trip it."""
         v = run(ALICE, t1(signature=False))
-        self.assertTrue(failclosed_findings(v))
+        self.assertTrue(r12_findings(v))
+        self.assertFalse(failclosed_findings(v))
         self.assertEqual(support.append_only.check_pr(
             {P("alice", "cooltool"): (ent("alice", "cooltool", pending("1.0.0", "a" * 40)),
                                       t1(signature=False)[P("alice", "cooltool")][1])})["authority_required"], [])
@@ -585,7 +595,274 @@ class FailClosed(unittest.TestCase):
 
     def test_fail_closed_reports_other_rule_failures_too(self):
         v = run(MALLORY, t1())
+        self.assertEqual(sorted(rules(v)), ["R12", "R3"])
+
+
+class Recorder:
+    """A membership oracle that records every call and then raises, so a test can assert it was never consulted."""
+
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, org, author):
+        self.calls.append((org, author))
+        raise AssertionError("the membership oracle was consulted")
+
+
+def wb(ns="alice", name="cooltool", kind="T1", **kw):
+    """One entry whose only change is element 0: pending -> published (T1) or pending -> rejected (T3)."""
+    new = published("1.0.0", "a" * 40) if kind == "T1" else rejected("1.0.0", "a" * 40)
+    return {P(ns, name): (ent(ns, name, pending("1.0.0", "a" * 40), **kw), ent(ns, name, new, **kw))}
+
+
+def run12(author, files, **kw):
+    kw.setdefault("pipeline_identity", PIPE)
+    return run(author, files, **kw)
+
+
+def only_path(files):
+    (path, pair), = files.items()
+    return path, pair
+
+
+class R12Accept(unittest.TestCase):
+    def test_r12_accept_exactly_one_t1_or_one_t3_by_the_pipeline_identity_on_an_ordinary_namespace(self):
+        for kind in ("T1", "T3"):
+            with self.subTest(kind=kind):
+                v = run12(PIPE, wb(kind=kind), login="worldofmodcraft-pipeline[bot]")
+                self.assertEqual((v["verdict"], v["authorised_writeback"], v["authorised_takedown"]), ("accepted", True, False))
+                self.assertEqual(v["findings"], [])
+
+    def test_r12_accept_on_the_reserved_namespace_test_without_consulting_r7_or_r9(self):
+        for kind in ("T1", "T3"):
+            with self.subTest(kind=kind):
+                oracle = Recorder()
+                v = run12(PIPE, wb("test", "hello-world", kind), oracle=oracle)
+                self.assertEqual(v["verdict"], "accepted", v["findings"])
+                self.assertEqual(oracle.calls, [], "R7/R9 must not be consulted for an authorised write-back")
+
+    def test_r12_accept_a_byte_different_but_parsed_equal_entry(self):
+        path, (old, new) = only_path(wb())
+        reordered = {k: new[k] for k in reversed(list(new))}
+        reordered["versions"] = [{k: e[k] for k in reversed(list(e))} for e in new["versions"]]
+        self.assertNotEqual(list(reordered), list(new))
+        self.assertEqual(run12(PIPE, {path: (old, reordered)})["verdict"], "accepted")
+
+    def test_r12_accept_leaves_the_owner_positive_control_and_the_hostile_fixtures_as_they_were(self):
+        self.assertEqual(run12(ALICE, add_version())["verdict"], "accepted")  # an owner's new version still accepts
+        self.assertEqual(rules(run12(MALLORY, add_version())), ["R3"])
+        self.assertEqual(rules(run12(MALLORY, add_version(), login="alice")), ["R3"])  # the 007 hostile login pattern
+
+
+class R12Reject(unittest.TestCase):
+    def assertR12(self, v, *also):
+        self.assertEqual(v["verdict"], "rejected")
+        self.assertIn("R12", rules(v))
+        self.assertFalse(failclosed_findings(v), "a leftover fail-closed tag")
+        self.assertFalse(v["authorised_writeback"])
+        for r in also:
+            self.assertIn(r, rules(v))
+
+    def test_r12_reject_the_same_diffs_by_a_different_id(self):
+        for kind in ("T1", "T3"):
+            for label, author, ns in (("owner", ALICE, "alice"), ("stranger", MALLORY, "alice"), ("r11", R11, "alice"),
+                                      ("org member", ORG_MEMBER, "mc")):
+                with self.subTest(kind=kind, author=label):
+                    self.assertR12(run12(author, wb(ns, kind=kind), oracle=status(204), r11_identity=R11))
+
+    def test_r12_reject_a_login_that_matches_the_bot_when_the_id_differs(self):
+        v = run12(("github", PIPE_ID + 1), wb(), login="worldofmodcraft-pipeline[bot]")
+        self.assertR12(v, "R3")
+
+    def test_r12_reject_when_the_identity_is_not_configured(self):
+        for kind in ("T1", "T3"):
+            with self.subTest(kind=kind):
+                v = run(PIPE, wb(kind=kind), pipeline_identity=None)
+                self.assertR12(v)
+                self.assertIn("authorises nobody", r12_findings(v)[0]["message"])
+
+    def test_r12_reject_a_t1_plus_a_new_version_a_page_edit_or_an_extra_top_level_key(self):
+        path, (old, new) = only_path(wb())
+        plus_version = dict(new, versions=new["versions"] + [pending("1.1.0", "b" * 40)])
+        plus_key = dict(new, extra="x")
+        plus_page = {path: (old, new), P("alice", "cooltool", "page"): ({"a": 1}, {"a": 2})}
+        for label, files in (("new version", {path: (old, plus_version)}), ("extra top-level key", {path: (old, plus_key)}),
+                             ("page.json edit", plus_page)):
+            with self.subTest(change=label):
+                self.assertR12(run12(PIPE, files))
+
+    def test_r12_reject_two_t1s_a_t1_and_a_t3_and_two_entries_each_with_a_t1(self):
+        two_t1 = two("alice", published("1.0.0", "a" * 40), published("1.1.0", "b" * 40))
+        t1_t3 = two("alice", published("1.0.0", "a" * 40), rejected("1.1.0", "b" * 40))
+        two_files = dict(wb(name="one"), **wb(name="two"))
+        for label, files in (("two T1", two_t1), ("T1 and T3", t1_t3), ("two entries", two_files)):
+            with self.subTest(case=label):
+                self.assertR12(run12(PIPE, files))
+
+    def test_r12_reject_a_t1_and_a_takedown_by_r11_as_well(self):
+        files = t2_plus("alice", pending("1.1.0", "b" * 40), published("1.1.0", "b" * 40))
+        self.assertR12(run12(PIPE, files), "R11")
+        self.assertR12(run12(R11, files, r11_identity=R11, pipeline_identity=PIPE), "R11")
+
+    def test_r12_reject_a_t3_with_a_blank_reason_or_a_non_https_build_log_url(self):
+        for label, new in (("blank reason", rejected("1.0.0", "a" * 40, reason="   ")),
+                           ("http url", rejected("1.0.0", "a" * 40, url="http://builds.example.org/log.txt"))):
+            with self.subTest(case=label):
+                self.assertR12(run12(PIPE, {P("alice", "cooltool"): (ent("alice", "cooltool", pending("1.0.0", "a" * 40)),
+                                                                     ent("alice", "cooltool", new))}))
+
+    def test_r12_reject_a_t1_plus_any_change_to_another_file(self):
+        base = wb()
+        for other in ("config/r11-identity.json", "contracts/ownership.md", ".github/workflows/x.yml",
+                      "reserved-namespaces.json", P("alice", "other"), P("alice", "other", "page")):
+            with self.subTest(other=other):
+                self.assertR12(run12(PIPE, dict(base, **{other: ({"a": 1}, {"a": 2})})))
+
+    def test_r12_reject_a_newly_added_element_born_published_or_rejected_even_by_the_owner(self):
+        """057 attack 1: an author appends an element that is already published (or rejected)."""
+        for label, born in (("published", published("1.1.0", "b" * 40)), ("rejected", rejected("1.1.0", "b" * 40))):
+            files = {P("alice", "cooltool"): (ent("alice", "cooltool", published()), ent("alice", "cooltool", published(), born))}
+            first = {P("alice", "cooltool"): (None, ent("alice", "cooltool", born))}
+            for who, author, f in (("owner", ALICE, files), ("pipeline", PIPE, files), ("owner first publish", ALICE, first)):
+                with self.subTest(born=label, author=who):
+                    self.assertR12(run12(author, f, login="alice"))
+
+    def test_r12_reject_a_t1_that_is_not_classified_as_one_by_the_append_only_rules(self):
+        self.assertR12(run12(PIPE, t1(signature=False)))
+        path, (old, new) = only_path(wb())
+        extra_key = dict(new, versions=[dict(new["versions"][0], reason="x")])
+        self.assertR12(run12(PIPE, {path: (old, extra_key)}))
+
+    def test_r12_reject_a_t1_that_also_changes_id_owner_or_another_element(self):
+        path, (old, new) = only_path(wb())
+        two_el_old = ent("alice", "cooltool", pending("1.0.0", "a" * 40), pending("1.1.0", "b" * 40))
+        two_el_new = ent("alice", "cooltool", published("1.0.0", "a" * 40), pending("1.1.0", "c" * 40))
+        for label, n in (("owner", dict(new, owner=own(MALLORY_ID, "mallory"))), ("id", dict(new, id="alice:other"))):
+            with self.subTest(change=label):
+                self.assertR12(run12(PIPE, {path: (old, n)}))
+        with self.subTest(change="another element"):
+            self.assertR12(run12(PIPE, {path: (two_el_old, two_el_new)}))
+
+    def test_r12_reject_the_pipeline_identity_changing_an_already_published_element(self):
+        """Not a T1, so R12 has nothing to say: the ordinary rules and the fail-closed rule reject it."""
+        old = ent("alice", "cooltool", published())
+        new = ent("alice", "cooltool", published("1.0.0", "d" * 40))
+        v = run12(PIPE, {P("alice", "cooltool"): (old, new)})
+        self.assertEqual(v["verdict"], "rejected")
         self.assertEqual(sorted(rules(v)), ["R3", "fail-closed"])
+        both = {P("alice", "cooltool"): (ent("alice", "cooltool", pending("1.0.0", "a" * 40), published("1.1.0", "b" * 40)),
+                                         ent("alice", "cooltool", published("1.0.0", "a" * 40), published("1.1.0", "d" * 40)))}
+        self.assertR12(run12(PIPE, both))
+
+    def test_r12_reject_still_applies_r3_and_r7_to_an_unauthorised_pr(self):
+        self.assertEqual(sorted(rules(run12(MALLORY, wb()))), ["R12", "R3"])
+        self.assertEqual(sorted(rules(run12(ORG_MEMBER, wb("mc", name="core"), oracle=status(404)))), ["R12", "R7"])
+
+    def test_r12_reject_r2_and_r10_still_apply_to_an_authorised_write_back(self):
+        bad_id = wb(id="bob:cooltool")
+        v = run12(PIPE, bad_id)
+        self.assertEqual((v["verdict"], set(rules(v)), v["authorised_writeback"]), ("rejected", {"R2"}, True))
+        orphan = dict(wb(), **{P("alice", "orphan", "page"): (None, {"a": 1})})
+        v = run12(PIPE, orphan)
+        self.assertIn("R10", rules(v))
+        self.assertIn("R12", rules(v))
+        v = run12(PIPE, {P("alice", "orphan", "page"): (None, {"a": 1})})
+        self.assertIn("R10", rules(v))
+
+    def test_r12_reject_is_in_the_cli_for_an_entry_that_does_not_parse_or_repeats_a_key(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        import ownership_cli
+        for label, bad in (("syntax", "{not json"), ("duplicate key", '{"id": "a", "id": "b"}')):
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as d:
+                root = Path(d)
+                for side in ("old", "new"):
+                    for name in ("cooltool", "broken"):
+                        (root / side / f"mods/alice.{name}").mkdir(parents=True)
+                (root / "res.json").write_text(json.dumps(RES))
+                path, (old, new) = only_path(wb())
+                (root / "old" / path).write_text(json.dumps(old))
+                (root / "new" / path).write_text(json.dumps(new))
+                (root / "old/mods/alice.broken/entry.json").write_text(json.dumps(ent("alice", "broken", pending())))
+                (root / "new/mods/alice.broken/entry.json").write_text(bad)
+                out = io.StringIO()
+                args = ["--author-provider", "github", "--author-id", str(PIPE_ID), "--old-root", str(root / "old"),
+                        "--new-root", str(root / "new"), "--reserved-file", str(root / "res.json"),
+                        "--pipeline-identity", f"github:{PIPE_ID}", path, "mods/alice.broken/entry.json"]
+                with redirect_stdout(out), redirect_stderr(io.StringIO()):
+                    code = report.run(ownership_cli.main, args)
+                self.assertEqual(code, 1)
+                v = json.loads(out.getvalue())
+                self.assertIn("R12", [r for f in v["findings"] for r in f["rules"]])
+                self.assertTrue(all(f["path"] == "mods/alice.broken/entry.json" for f in v["findings"]))
+
+
+class R12Cli(unittest.TestCase):
+    def cli(self, files_old, files_new, extra, author=PIPE_ID):
+        import json
+        import tempfile
+        from pathlib import Path
+        import ownership_cli
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "res.json").write_text(json.dumps(RES))
+            for side, files in (("old", files_old), ("new", files_new)):
+                for path, doc in files.items():
+                    (root / side / path).parent.mkdir(parents=True, exist_ok=True)
+                    (root / side / path).write_text(json.dumps(doc))
+            (root / "old/mods").mkdir(parents=True, exist_ok=True)
+            (root / "new/mods").mkdir(parents=True, exist_ok=True)
+            args = ["--author-provider", "github", "--author-id", str(author), "--old-root", str(root / "old"),
+                    "--new-root", str(root / "new"), "--reserved-file", str(root / "res.json")] + extra
+            out, err = io.StringIO(), io.StringIO()
+            with redirect_stdout(out), redirect_stderr(err):
+                code = report.run(ownership_cli.main, args)
+            return code, err.getvalue()
+
+    def test_r12_accept_through_the_cli_with_the_flag_and_reject_without_it(self):
+        path, (old, new) = only_path(wb())
+        status_arg = ["--membership-status", "404"]
+        with_flag = self.cli({path: old}, {path: new}, status_arg + ["--pipeline-identity", f"github:{PIPE_ID}", path])
+        without = self.cli({path: old}, {path: new}, status_arg + [path])
+        other = self.cli({path: old}, {path: new}, status_arg + ["--pipeline-identity", f"github:{PIPE_ID + 1}", path])
+        self.assertEqual((with_flag[0], without[0], other[0]), (0, 1, 1))
+        self.assertIn("R12", without[1])
+
+    def test_i9_reject_equal_identities_exit_2_in_the_cli_whatever_the_pr(self):
+        path, (old, new) = only_path(wb())
+        for ident in (f"github:{R11[1]}",):
+            code, err = self.cli({path: old}, {path: new}, ["--r11-identity", ident, "--pipeline-identity", ident, path])
+            self.assertEqual(code, 2)
+            self.assertIn("I9", err)
+        for r11, pipe, want in ((f"github:{R11[1]}", f"github:{PIPE_ID}", 0), (f"github:{R11[1]}", None, 1),
+                                (None, f"github:{R11[1]}", 1)):  # distinct or unconfigured: a verdict, as before
+            extra = (["--r11-identity", r11] if r11 else []) + (["--pipeline-identity", pipe] if pipe else [])
+            self.assertEqual(self.cli({path: old}, {path: new}, extra + ["--membership-status", "404", path])[0], want)
+
+    def test_r12_reject_a_malformed_pipeline_identity_flag_is_exit_2(self):
+        path, (old, new) = only_path(wb())
+        self.assertEqual(self.cli({path: old}, {path: new}, ["--pipeline-identity", "x", path])[0], 2)
+
+
+class I9Separation(unittest.TestCase):
+    def test_i9_accept_either_identity_unconfigured_or_two_distinct_ones_give_a_verdict(self):
+        for r11, pipe in ((None, None), (R11, None), (None, R11), (R11, PIPE)):
+            with self.subTest(r11=r11, pipeline=pipe):
+                v = run(ALICE, add_version(), r11_identity=r11, pipeline_identity=pipe)
+                self.assertEqual(v["verdict"], "accepted")
+
+    def test_i9_reject_equal_identities_raise_a_tool_error_for_every_pr_on_a_direct_call(self):
+        for label, author, files in (("ordinary", ALICE, add_version()), ("takedown", R11, takedown()),
+                                     ("write-back", R11, wb()), ("empty", ALICE, {})):
+            with self.subTest(pr=label):
+                with self.assertRaises(report.ToolError) as cm:
+                    run(author, files, r11_identity=R11, pipeline_identity=R11)
+                self.assertIn("I9", str(cm.exception))
+
+    def test_i9_reject_the_comparison_is_on_provider_and_id(self):
+        v = run(ALICE, add_version(), r11_identity=("github", 7), pipeline_identity=("gitlab", 7))
+        self.assertEqual(v["verdict"], "accepted")
 
 
 class Identity(unittest.TestCase):
