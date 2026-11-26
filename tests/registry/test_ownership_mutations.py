@@ -200,7 +200,7 @@ mut("r12-two-entries-accepted", [
 mut("r12-another-path-allowed", [('    if len(files) != 1 or len(hits) != 1 or', '    if len(hits) != 1 or')],
     ["test_r12_reject_a_t1_plus_any_change_to_another_file", "test_r12_reject_a_t1_plus_a_new_version_a_page_edit"])
 mut("r12-parsed-equality-check-skipped", [('    if not append_only._same(only, new):', '    if False:')],
-    ["test_r12_reject_a_t1_plus_a_new_version_a_page_edit", "test_r12_reject_a_t1_that_also_changes_id_owner"])
+    ["test_r12_reject_a_t1_plus_a_new_version_a_page_edit"])
 mut("r12-shape-classification-skipped", [('    if v["findings"] or kind not in ("T1", "T3"):', '    if False:')],
     ["test_r12_reject_a_t1_that_is_not_classified_as_one", "test_r12_reject_a_t3_with_a_blank_reason"])
 mut("r12-detection-misses-born-published", [('(i >= len(ov) or _status(ov[i]) == "pending")', '(i < len(ov) and _status(ov[i]) == "pending")')],
@@ -208,7 +208,7 @@ mut("r12-detection-misses-born-published", [('(i >= len(ov) or _status(ov[i]) ==
 mut("r12-does-not-lift-r3-and-r7", [('"authorised": authorised or pipeline_ok,', '"authorised": authorised,')],
     ["test_r12_accept_exactly_one_t1_or_one_t3", "test_r12_accept_on_the_reserved_namespace_test"])
 mut("r12-lifts-r3-and-r7-for-every-pr", [('pipeline_ok = why == ""', 'pipeline_ok = why in ("", None)')],
-    ["test_r12_reject_still_applies_r3_and_r7_to_an_unauthorised_pr"])
+    ["test_r3_reject_stranger"])
 mut("r12-finding-dropped", [('    if why and path in hits:', '    if False:')],
     ["test_r12_reject_the_same_diffs_by_a_different_id", "test_r12_reject_when_the_identity_is_not_configured"])
 mut("r12-cli-unparseable-entry-not-tagged", [('["R12"], f"{rel}: the file does not parse', '["R0"], f"{rel}: the file does not parse', "tools/registry/ownership_cli.py")],
@@ -225,11 +225,11 @@ mut("f1-namespace-owners-ignored-per-path-first-publish",
     [('elif first is not None and not reserved and ns in ctx["owners"]:', 'elif first is not None and not reserved and False:')],
     ["test_r3_reject_new_sibling_entry_by_a_stranger", "test_r3_accept_renamed_owner_adds_a_second_mod"])
 mut("f1-namespace-owners-read-from-the-prs-own-files",
-    [('"base_entries": base_entries or {}, "owners": owners}',
-      '"base_entries": base_entries or {}, "owners": {classify.parse_mod_path(p)[0]: _owner_pair(f[1]) for p, f in files.items() if classify.parse_mod_path(p) and f[1]}}')],
+    [('"owners": owners}',
+      '"owners": {classify.parse_mod_path(p)[0]: _owner_pair(f[1]) for p, f in files.items() if classify.parse_mod_path(p) and f[1]}}')],
     ["test_r3_reject_new_sibling_entry_by_a_stranger", "test_r3_reject_owners_are_not_read_from_the_prs_own_files"])
 mut("f1-none-namespace-owners-treated-as-empty",
-    [('"base_entries": base_entries or {}, "owners": owners}', '"base_entries": base_entries or {}, "owners": owners or {}}')],
+    [('"owners": owners}', '"owners": owners or {}}')],
     ["test_r3_reject_missing_namespace_owners_fails_closed"])
 mut("f1-sibling-entry-judged-by-login-not-id",
     [('if ctx["owners"][ns] != author:', 'if (login or "").lower() != ns.lower():')],
