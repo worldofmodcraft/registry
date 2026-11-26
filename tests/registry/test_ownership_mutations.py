@@ -78,7 +78,7 @@ mut("b4-r11-admits-non-takedown-changes", [(SHAPE_GATE, '        if "T2" not in 
 mut("b4-r11-admits-page-edit", [(PATHGATE, '        if p is None or old is None or new is None:\n            return False\n        if p[2] == "page":\n            continue')],
     ["test_r11_reject_a_takedown_plus_any_other_change"])
 mut("b4-r11-precedence-shape-based-attempt-9", [
-    ('"authorised": authorised,', '"authorised": authorised, "shape": shape,'),
+    ('"authorised": authorised or pipeline_ok,', '"authorised": authorised or pipeline_ok, "shape": shape,'),  # task 120: re-anchored
     (R3GATE, 'if not ctx["shape"] and _owner_pair(existing) != author:'),
     ('    if reserved and not ctx["authorised"]:', '    if reserved and not ctx["shape"]:')],
     ["test_r11_precedence_is_authority_based", "test_r11_reject_owner_stranger_and_member"])
