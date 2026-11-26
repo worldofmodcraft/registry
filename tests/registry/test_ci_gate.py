@@ -806,6 +806,14 @@ class AC12PipelineIdentity(Base):
         for i, changes in enumerate((self.T1, add_version_changes(), first_publish_changes("alice", "second"))):
             self.check(run_cli(w, w.pr(changes, f"p{i}"), uid=555, login="platform"), 2, "I9")
 
+    def test_i9_is_enforced_by_the_composer_itself_not_only_by_the_checker_it_calls(self):
+        """Stub checkers accept everything, so only the composer's own I9 check can produce exit 2 here."""
+        same = self.cfg({"provider": "github", "id": 555})
+        w = self.world({**base_files(), "config/pipeline-identity.json": same, "config/r11-identity.json": self.R11_FILE})
+        self.check(run_lib(w, w.pr(add_version_changes()), tools_dir=write_stubs(w.ws / "s", ALL_OK), status="204"), 2, "I9")
+        w = self.world({**base_files(), "config/pipeline-identity.json": self.PIPE_FILE, "config/r11-identity.json": self.R11_FILE})
+        self.check(run_lib(w, w.pr(add_version_changes()), tools_dir=write_stubs(w.ws / "s", ALL_OK), status="204"), 0)
+
     def test_i9_distinct_or_unconfigured_identities_still_give_a_verdict(self):
         both = {"config/pipeline-identity.json": self.PIPE_FILE, "config/r11-identity.json": self.R11_FILE}
         w = self.world(self.pending_base(**both))
