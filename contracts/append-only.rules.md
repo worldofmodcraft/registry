@@ -600,9 +600,9 @@ violation.
   independently. A PR holding a T1 on one version and a T2 or T3 on another is shape-legal. Who may carry which
   belongs to `ownership.md`: its `R11` takedown PR must contain nothing but
   takedown mutations, which excludes T1 and T3 in the same PR, and the
-  pipeline's carve-out (a sibling task) must be keyed on the pipeline identity
+  pipeline's carve-out, `ownership.md`'s `R12`, is keyed on the pipeline identity
   and on T1 or T3 mutations only.
-- **Fail closed.** Until `ownership.md` carries the pipeline-identity carve-out for T1 and T3, a checker implementing T1 or T3 must reject every PR that contains a T1 or T3 mutation, whoever authors it. Without this default an author could write their own `published` or `rejected` fields.
+- **Fail closed.** Until a checker implements the pipeline-identity carve-out for T1 and T3, which is `ownership.md`'s `R12`, it must reject every PR that contains a T1 or T3 mutation, whoever authors it. Without this default an author could write their own `published` or `rejected` fields.
 - Authority for T1 and T3 is therefore not defined by this document. It defines the shape of the transitions, as the T2 section says of the takedown.
 
 #### Attack attempts the contract must answer
@@ -691,7 +691,7 @@ paragraph's rule.
 ## What this document does not cover
 
 - **`page.json`** — see "Scope" above; not append-only at all.
-- **Who may perform T1, T2 or T3.** This document defines shapes, not authority (see "Coexistence of T1, T2 and T3"); authority is `ownership.md`'s, and until its pipeline carve-out exists every T1 or T3 mutation is rejected.
+- **Who may perform T1, T2 or T3.** This document defines shapes, not authority (see "Coexistence of T1, T2 and T3"); authority is `ownership.md`'s, and until a checker implements its pipeline carve-out, `R12`, every T1 or T3 mutation is rejected.
 - **Manifest content (`mod.lua` / `manifest.schema.json`) as archived per
   version.** ADR-0059 Section 2 calls "the technical manifest fields" of a
   given version "frozen forever" as part of *version-bound* content, but

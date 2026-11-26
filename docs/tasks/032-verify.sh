@@ -840,13 +840,13 @@ for _, over, unders in pairs:
 # normalisation); the check does not interpret what an edited sentence means.
 CROSSREF_ALLOWED = [
     ('R3',
-     "**R3 (MUST)** — for a namespace that already exists at the PR's merge-base and is not on the reserved list, the PR author's real `(provider, id)` pair MUST equal `old.owner.provider` and `old.owner.id`, **unless `R11` authorises the PR as a takedown** — the single exception to this rule, stated here at the point the ordinary rule is made, in the same form `R8`'s reserved-list exception takes, so that the two never have to be reconciled by a reader."),
+     "**R3 (MUST)** — for a namespace that already exists at the PR's merge-base and is not on the reserved list, the PR author's real `(provider, id)` pair MUST equal `old.owner.provider` and `old.owner.id`, **unless `R11` authorises the PR as a takedown, or `R12` authorises it as the pipeline's write-back** — the only two exceptions to this rule, stated here at the point the ordinary rule is made, in the same form `R8`'s reserved-list exception takes, so that the two never have to be reconciled by a reader."),
     ('R6',
      "**R6 (MUST)** — at that same first publish of a namespace **not** on the reserved list, `new.owner.name_at_registration` MUST equal the PR author's username as the PR object reports it (`pulls.user.login`), compared case-insensitively per `R4`'s folding rule;"),
     ('R6',
      'no rule ever compares it to decide who may touch an existing namespace — `R3` compares `owner.id`, and only `owner.id`.'),
     ('R7',
-     "**R7 (MUST)** — a PR touching a namespace on the reserved list is authorised only if the PR author is a **current member** of the organisation `reserved-namespaces.json` records as that namespace's owner, **unless `R11` authorises the PR as a takedown**, on exactly the terms and with exactly the precedence `R3` states above:"),
+     "**R7 (MUST)** — a PR touching a namespace on the reserved list is authorised only if the PR author is a **current member** of the organisation `reserved-namespaces.json` records as that namespace's owner, **unless `R11` authorises the PR as a takedown, or `R12` authorises it as the pipeline's write-back**, on exactly the terms and with exactly the precedence `R3` states above:"),
     # REMOVED in fix round 5: R7's sentence "The exception is stated here for completeness of the
     # reconciliation rather than because it changes many verdicts -- the platform's own identity
     # is the organisation that owns every reserved namespace today, so such a PR normally
@@ -856,6 +856,12 @@ CROSSREF_ALLOWED = [
     # is deleted here -- and T15b is what forces this line to be touched at all.
     ('R8',
      'Authorisation for such a PR is `R7`, organisation membership, from the first publish onward.'),
+    # Task 118: the pipeline write-back carve-out (R12). R3's and R7's declaration sentences are re-pinned (old text -> new text visible in this diff);
+    # R11 and R12 each carry one sentence that names the other, which no precedence pair relates.
+    ('R11',
+     "The pipeline's write-back is `R12`'s and not this rule's, so a PR that mixes a takedown mutation with a T1 or T3 element is rejected by `R11` and by `R12`, the platform's own identity has no write-back power under `R12`, and the pipeline identity has no takedown power under this rule."),
+    ('R12',
+     "**The interaction with `R11`:** a PR that mixes a takedown mutation with a T1 or T3 element is rejected by both `R11` and `R12`, the pipeline identity has no takedown power, and the platform's own identity has no write-back power."),
 ]
 ALLOWED = set(CROSSREF_ALLOWED)
 
@@ -1076,6 +1082,8 @@ allowed = {
     "100200300": "fabricated placeholder id in the task-007 regression fixture, marked as such",
     "900800700": "fabricated placeholder id in the task-007 regression fixture, marked as such",
     "15062869": "the jestjs/jest repository id, in the live evidence for I5's redirect-following claims",
+    "342916936": "the user id of the pipeline's bot account worldofmodcraft-pipeline[bot], read from the public API 2026-11-07 (task 008b-3a log, umbrella F4); R12's identity",
+    "5327993": "the id of the GitHub App worldofmodcraft-pipeline itself (008b-3a log, F4); named in R12 only to say it is NOT the identity",
 }
 unexpected = [n for n in found if n not in allowed]
 pf("V5 every 5+-digit number in the contract is a known identity or a marked placeholder",
