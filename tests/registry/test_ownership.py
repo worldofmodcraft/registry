@@ -727,6 +727,33 @@ class R12Reject(unittest.TestCase):
                 with self.subTest(born=label, author=who):
                     self.assertR12(run12(author, f, login="alice"))
 
+    def test_r12_reject_a_created_or_deleted_entry_json_holding_a_published_or_rejected_element(self):
+        """Contract 116282e: a created file holding such an element, or a deleted file that held one, is a T1/T3 mutation."""
+        for label, el in (("published", published()), ("rejected", rejected())):
+            created = {P("alice", "tool"): (None, ent("alice", "tool", el))}
+            deleted = {P("alice", "tool"): (ent("alice", "tool", el), None)}
+            for what, files in (("created", created), ("deleted", deleted)):
+                for who, author in (("pipeline", PIPE), ("owner", ALICE)):
+                    with self.subTest(element=label, file=what, author=who):
+                        v = run12(author, files, login="alice")
+                        self.assertEqual(v["verdict"], "rejected")
+                        self.assertIn("R12", rules(v))
+                        self.assertFalse(v["authorised_writeback"])
+        control = {P("alice", "tool"): (ent("alice", "tool", pending()), None)}
+        self.assertNotIn("R12", rules(run12(ALICE, control)))  # a deleted file holding only pending is not R12's (007a rejects it)
+
+    def test_r12_reject_a_t1_plus_a_path_in_any_status_added_deleted_renamed_or_mode_only(self):
+        """Contract 116282e: 'touches no other path' counts every path in the diff, whatever its status."""
+        base = wb()
+        other = P("alice", "other", "page")
+        doc = {"a": 1}
+        for label, extra in (("added", {other: (None, doc)}), ("deleted", {other: (doc, None)}),
+                             ("mode change only (old == new)", {other: (doc, doc)}),
+                             ("renamed (a deletion plus an addition)", {other: (doc, None), P("alice", "moved", "page"): (None, doc)})):
+            with self.subTest(status=label):
+                self.assertR12(run12(PIPE, dict(base, **extra)))
+        self.assertEqual(run12(PIPE, base)["verdict"], "accepted")  # positive control: the same T1 alone
+
     def test_r12_reject_a_t1_that_is_not_classified_as_one_by_the_append_only_rules(self):
         self.assertR12(run12(PIPE, t1(signature=False)))
         path, (old, new) = only_path(wb())

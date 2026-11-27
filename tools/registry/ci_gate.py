@@ -28,10 +28,11 @@ MAX_BLOB_BYTES, MAX_TOTAL_BYTES, MAX_ENTRIES = 1 << 20, 32 << 20, 5000  # per bl
 MARKER = "<!-- registry-ci-gate -->"
 ENV = {"PATH": "/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_TERMINAL_PROMPT": "0"}
 SHA, NAME = r"[0-9a-f]{40}", r"[A-Za-z0-9](-?[A-Za-z0-9]){0,38}"
+LOGIN = NAME + r"(\[bot\])?"  # a GitHub App's bot account reports <name>[bot] as its login; nothing wider is accepted
 CLASSES = ("entry", "page-only", "reserved-namespace", "other")
 STRICT = {k: re.compile(v) for k, v in {  # the only lines OUT/outputs may hold (never PR free text)
     "class": "|".join(CLASSES), "result": r"accepted|rejected|undecided",
-    "route": r"infra|content|empty", "pr": r"[0-9]+", "head_sha": SHA, "merge_base": SHA, "org": NAME, "login": NAME}.items()}
+    "route": r"infra|content|empty", "pr": r"[0-9]+", "head_sha": SHA, "merge_base": SHA, "org": NAME, "login": LOGIN}.items()}
 ENTRY_RE = re.compile(r"mods/([a-z0-9][a-z0-9_-]*)\.([a-z0-9][a-z0-9_-]*)/entry\.json")
 EMPTY_DIFF = ("unrecognised-pr (criterion 8: classification fails closed): the PR changes no paths (empty diff), so it "
               "has no registry shape. To fix: open the PR with the mods/<namespace>.<name>/ files it is meant to change")
@@ -96,7 +97,7 @@ def read_identity(event, pr):
     who = {"number": n, "uid": _at(pr, "user", "id"), "login": _at(pr, "user", "login"), "head": _at(pr, "head", "sha"),
            "base_sha": _at(pr, "base", "sha")}
     good = (type(n) is int and n > 0 and type(who["uid"]) is int and who["uid"] > 0 and isinstance(who["login"], str)
-            and re.fullmatch(NAME, who["login"]) and all(isinstance(who[k], str) and re.fullmatch(SHA, who[k]) for k in ("head", "base_sha")))
+            and re.fullmatch(LOGIN, who["login"]) and all(isinstance(who[k], str) and re.fullmatch(SHA, who[k]) for k in ("head", "base_sha")))
     if not good:
         raise Undecided("the PR object has a malformed number, user id, user login or sha")
     return who

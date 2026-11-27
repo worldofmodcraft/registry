@@ -72,7 +72,8 @@ def _status(e):
 def _t1t3_hits(files):
     """R12's broad detection, on the RAW statuses and never on 007a's classification: {path: [(index, born)]} for
     every entry.json element that goes pending -> published or pending -> rejected, or is newly added (including
-    every element of a new file) already published or rejected. born=True marks the newly added ones."""
+    every element of a created file) already published or rejected, or sits in a deleted file already published or
+    rejected. born=True marks every hit that is not a pending -> published/rejected transition of an existing element."""
     hits = {}
     for path in sorted(files):
         p = classify.parse_mod_path(path)
@@ -80,6 +81,10 @@ def _t1t3_hits(files):
             continue
         old, new = files[path]
         ov = _versions(old)
+        if new is None:  # a deleted entry.json that held a published/rejected element counts too (no `new` to equal)
+            for i, o in enumerate(ov):
+                if _status(o) in T1_T3_TARGETS:
+                    hits.setdefault(path, []).append((i, True))
         for i, n in enumerate(_versions(new)):
             if _status(n) in T1_T3_TARGETS and (i >= len(ov) or _status(ov[i]) == "pending"):
                 hits.setdefault(path, []).append((i, i >= len(ov)))
@@ -100,7 +105,7 @@ def _writeback(author, pipeline, files, hits):
                 f"({len(files)} path(s), {sum(len(v) for v in hits.values())} T1/T3 element(s))")
     (path, [(i, born)]), = hits.items()
     if born:
-        return f"element {i} is born already published or rejected, which is not a T1 or T3 (it needs an existing pending element)"
+        return f"element {i} is born, or deleted, already published or rejected, which is not a T1 or T3 (it needs an existing pending element)"
     old, new = files[path]
     try:
         v = append_only.check_entry(old, new, path)
@@ -131,9 +136,9 @@ def _fail_closed(files, hits, why):
                 "remove the change to the pending/published/rejected elements; the build pipeline writes those",
                 R12_CITE, path=path, index=hits[path][0][0]))
         p = classify.parse_mod_path(path)
-        if p is None or p[2] != "entry" or path in hits:
-            continue  # a file holding a T1/T3 mutation is R12's whole; the others are judged for fail-closed
         old, new = files[path]
+        if p is None or p[2] != "entry" or (path in hits and new is not None):
+            continue  # a file holding a T1/T3 mutation is R12's whole (a deleted one is also truncation: both tags)
         nv = _versions(new)
         for i, o in enumerate(_versions(old)):
             if i >= len(nv):

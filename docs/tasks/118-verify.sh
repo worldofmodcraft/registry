@@ -17,10 +17,15 @@
 # Criteria 7 and 12 are read by the reviewer and are not checked here.
 set -u
 BASE=${BASE:-e213cbce9a2b33f70e72c564be377085a3045640}
+# TIP: the last commit of task 118's own range (task 120, manager scope extension 2026-11-27). Every check that measures
+# "what this task changed in the closed artefacts" diffs BASE..TIP, never the working tree or HEAD, so a later branch that
+# builds on this one (task 120's checker, 008b) cannot turn a check about 118's own change red. Contract-text checks
+# still read the current ownership.md and append-only.rules.md.
+TIP=${TIP:-116282e8b00040ef07249a8a197f7760d8af3fe3}
 OWN=${OWN:-contracts/ownership.md}
 APPEND=${APPEND:-contracts/append-only.rules.md}
 MODE=${1:-check}
-export BASE OWN APPEND
+export BASE TIP OWN APPEND
 
 TMPD=$(mktemp -d)
 trap 'rm -rf "$TMPD"' EXIT
@@ -30,7 +35,7 @@ cat > "$TMPD/checks.py" <<'PY'
 import difflib, hashlib, json, os, re, shutil, subprocess, sys
 from pathlib import Path
 
-OWN, APPEND, BASE = os.environ["OWN"], os.environ["APPEND"], os.environ["BASE"]
+OWN, APPEND, BASE, TIP = os.environ["OWN"], os.environ["APPEND"], os.environ["BASE"], os.environ["TIP"]
 SPLIT = re.compile(r'(?<=[.:;!?])\s+')
 
 
@@ -233,6 +238,8 @@ def closed_script_checks():
         out.append((label, bool(ok), detail))
 
     chk("C10.0 BASE commit exists in this clone", git("cat-file", "-e", BASE + "^{commit}").returncode == 0, BASE)
+    tip_ok = git("cat-file", "-e", TIP + "^{commit}").returncode == 0 and git("merge-base", "--is-ancestor", TIP, "HEAD").returncode == 0
+    chk("C10.0b the pinned TIP of task 118's range exists and is an ancestor of HEAD (an unreadable pin fails, never skips)", tip_ok, TIP)
     for name, cmd in (("032-verify.sh", ["bash", "docs/tasks/032-verify.sh"]),
                       ("032-mutations.sh", ["bash", "docs/tasks/032-mutations.sh"]),
                       ("057-verify.sh", ["bash", "docs/tasks/057-verify.sh"])):
@@ -246,7 +253,8 @@ def closed_script_checks():
             "exit %d; %d FAIL; last line: %s" % (r.returncode, len(fails), tail[0][:100]))
     # --- what changed in the closed artefacts
     def diff(path, *extra):
-        return git("diff", "-U0", BASE, "--", path).stdout.splitlines()
+        r = git("diff", "-U0", BASE, TIP, "--", path)
+        return r.stdout.splitlines() if r.returncode == 0 else ["<<git diff failed>>"]
 
     def changed(path):
         d = diff(path)
@@ -261,10 +269,10 @@ def closed_script_checks():
     badadd = [l[:80] for l in add if not pat.match(l)]
     chk("C10.3 032-verify.sh: every added line is a pin (CROSSREF_ALLOWED), a comment on it, or a V5 identity allow-list entry", not badadd, "%s" % badadd)
     chk("C10.4 032-verify.sh: no check removed (the count of pf(/pass/fail/section call lines is unchanged)",
-        sum(1 for l in git("show", BASE + ":docs/tasks/032-verify.sh").stdout.splitlines() if re.match(r'\s*(pf|pass|fail|expect_\w+|section)\b', l))
-        == sum(1 for l in Path("docs/tasks/032-verify.sh").read_text().splitlines() if re.match(r'\s*(pf|pass|fail|expect_\w+|section)\b', l)))
+        tip_ok and sum(1 for l in git("show", BASE + ":docs/tasks/032-verify.sh").stdout.splitlines() if re.match(r'\s*(pf|pass|fail|expect_\w+|section)\b', l))
+        == sum(1 for l in git("show", TIP + ":docs/tasks/032-verify.sh").stdout.splitlines() if re.match(r'\s*(pf|pass|fail|expect_\w+|section)\b', l)))
     chk("C10.5 032-mutations.sh is unchanged (every anchor still matched exactly once, shown by C10.1 passing)",
-        git("diff", "--quiet", BASE, "--", "docs/tasks/032-mutations.sh").returncode == 0)
+        tip_ok and git("diff", "--quiet", BASE, TIP, "--", "docs/tasks/032-mutations.sh").returncode == 0)
     old_fc = "Until `ownership.md` carries the pipeline-identity carve-out for T1 and T3, a checker implementing T1 or T3 must reject every PR that contains a T1 or T3 mutation, whoever authors it."
     new_fc = "Until a checker implements the pipeline-identity carve-out for T1 and T3, which is `ownership.md`'s `R12`, it must reject every PR that contains a T1 or T3 mutation, whoever authors it."
     for f, label in (("docs/tasks/057-textchecks.py", "057-textchecks.py: only the REQUIRED fail-closed sentence changed"),
@@ -272,8 +280,11 @@ def closed_script_checks():
         rem, add = changed(f)
         chk("C10.6 " + label, len(rem) == 1 and len(add) == 1 and old_fc in rem[0] and new_fc in add[0] and rem[0].replace(old_fc, new_fc) == add[0],
             "removed %d, added %d" % (len(rem), len(add)))
-    new_pins = json.loads(Path("docs/tasks/057-pinned-sections.json").read_text())
-    old_pins = json.loads(git("show", BASE + ":docs/tasks/057-pinned-sections.json").stdout)
+    try:
+        new_pins = json.loads(git("show", TIP + ":docs/tasks/057-pinned-sections.json").stdout)
+        old_pins = json.loads(git("show", BASE + ":docs/tasks/057-pinned-sections.json").stdout)
+    except ValueError:
+        new_pins = old_pins = {"unreadable": 1}
     chk("C10.7 057-pinned-sections.json: T1, T3 and ATTACKS are byte-equal before and after; only COEXISTENCE differs",
         set(old_pins) == set(new_pins) and all(old_pins[k] == new_pins[k] for k in ("T1", "T3", "ATTACKS")) and old_pins["COEXISTENCE"] != new_pins["COEXISTENCE"],
         "equal: %s" % {k: old_pins[k] == new_pins[k] for k in old_pins})
@@ -284,11 +295,33 @@ def closed_script_checks():
     reds = [l for l in r.stdout.splitlines() if l.startswith("RED")]
     fc = [l for l in reds if "fail-closed" in l]
     chk("C10.9 057-textmutations.py: both mutations anchored on FAIL_CLOSED still turn red", r.returncode == 0 and len(fc) == 2, "%d fail-closed RED lines, exit %d" % (len(fc), r.returncode))
-    only = git("diff", "--name-only", BASE).stdout.split()
     allowed = {"contracts/ownership.md", "contracts/append-only.rules.md", "docs/tasks/032-verify.sh", "docs/tasks/057-textchecks.py",
                "docs/tasks/057-textmutations.py", "docs/tasks/057-pinned-sections.json", "docs/tasks/118-verify.sh",
                "docs/tasks/118-ownership-pipeline-carve-out.md"}
-    chk("C10.10 every changed file is inside the declared file scope", set(only) <= allowed, "outside scope: %s" % sorted(set(only) - allowed))
+    def scope(base, tip):
+        """(ok, detail): the files changed in base..tip all inside `allowed`. An uncomputable or empty range is NOT ok."""
+        r = git("diff", "--name-only", base, tip)
+        if r.returncode != 0 or not r.stdout.split():
+            return False, "cannot compute %s..%s or the range is empty" % (base[:9], tip[:9])
+        extra = sorted(set(r.stdout.split()) - allowed)
+        return not extra, "outside scope: %s" % extra
+    ok, detail = scope(BASE, TIP)
+    chk("C10.10 every file changed in BASE..TIP (task 118's own range, never HEAD) is inside the declared file scope", ok, detail)
+    # control (cf. 087-verify.sh AC2.o2): a LATER commit that touches an out-of-scope file is red for the HEAD form of the
+    # check and leaves the pinned form green; an unreadable tip and an empty range are red, not skipped.
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        env = dict(os.environ, GIT_INDEX_FILE=os.path.join(d, "index"))
+        def g(*a, inp=None):
+            return subprocess.run(["git", *a], capture_output=True, text=True, env=env, input=inp).stdout.strip()
+        g("read-tree", TIP)
+        blob = g("hash-object", "-w", "--stdin", inp="a later branch's change\n")
+        g("update-index", "--add", "--cacheinfo", "100644,%s,zz-later-out-of-scope.txt" % blob)
+        later = g("commit-tree", g("write-tree"), "-p", TIP, "-m", "synthetic later commit")
+    wide = scope(BASE, later) if later else (True, "no synthetic commit")
+    chk("C10.11 control: a later out-of-scope commit leaves the pinned BASE..TIP check green, is red for the widened BASE..later form, and a bad or empty range is red",
+        bool(later) and ok and not wide[0] and not scope(BASE, "deadbeef" * 5)[0] and not scope(TIP, TIP)[0],
+        "later=%s widened=%s" % (later[:9], wide))
     return out
 
 

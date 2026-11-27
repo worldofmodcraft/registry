@@ -39,7 +39,7 @@ NAME_RE = r"[A-Za-z0-9](-?[A-Za-z0-9]){0,38}"
 STRICT_LINES = [re.compile(p) for p in (
     r"class=(entry|page-only|reserved-namespace|other)", r"result=(accepted|rejected|undecided)",
     r"route=(infra|content|empty)", r"pr=[0-9]+", r"head_sha=[0-9a-f]{40}", r"merge_base=[0-9a-f]{40}",
-    f"org={NAME_RE}", f"login={NAME_RE}")]
+    f"org={NAME_RE}", f"login={NAME_RE}(\\[bot\\])?")]
 
 
 class Link:
@@ -790,6 +790,46 @@ class AC12PipelineIdentity(Base):
         unset = {**self.T1, "config/pipeline-identity.json": self.cfg(None)}
         self.check(run_cli(w, w.pr(unset), uid=self.PIPE, login="bot"), 1, "R12")  # extra path: not exactly one change
         self.check(run_cli(w, w.pr(self.T1, "p4"), uid=self.PIPE, login="bot"), 0)
+
+    BOT = "worldofmodcraft-pipeline[bot]"  # the real login GitHub reports for the App's bot account (id 342916936, type Bot)
+
+    def test_the_real_bot_login_reaches_an_r12_accept_end_to_end_and_authorises_nothing_by_itself(self):
+        cfg = self.cfg({"provider": "github", "id": 342916936})
+        w = self.world(self.pending_base(**{"config/pipeline-identity.json": cfg}))
+        res = self.check(run_cli(w, w.pr(self.T1), uid=342916936, login=self.BOT), 0)
+        self.assertTrue(res.verdict["checkers"]["ownership"]["verdict"]["authorised_writeback"])
+        # the login never authorises: the same login with another id is rejected by R12, and the id alone is enough
+        self.check(run_cli(w, w.pr(self.T1, "p2"), uid=900800700, login=self.BOT), 1, "R12")
+        self.check(run_cli(w, w.pr(self.T1, "p3"), uid=342916936, login="anything"), 0)
+
+    def test_the_bot_login_is_also_a_valid_metadata_login_for_the_classify_pre_pass(self):
+        w = self.world()
+        res = run_cli(w, w.pr(reserved_publish()), uid=MEMBER, login=self.BOT, classify_only=True)
+        self.check(res, 0)
+        self.assertIn(f"login={self.BOT}\n", res.outputs)
+
+    def test_hostile_logins_are_undecided(self):
+        w = self.world(self.pending_base(**{"config/pipeline-identity.json": self.cfg({"provider": "github", "id": 342916936})}))
+        for i, login in enumerate(("[bot]", "a[bot][bot]", "a[BOT]", "a[bot]x", "a [bot]", "-a[bot]", "a[bot]\n", "a[bot", "a]bot[",
+                                   "a-[bot]", "a[bot] ", "a\n[bot]")):
+            with self.subTest(login=login):
+                self.check(run_cli(w, w.pr(self.T1, f"h{i}"), uid=342916936, login=login), 2, "malformed")
+                self.check(run_cli(w, w.pr(self.T1, f"c{i}"), uid=342916936, login=login, classify_only=True), 2)
+
+    def test_t1_plus_a_path_in_any_status_is_rejected_by_r12_end_to_end(self):
+        """Contract 116282e: 'no other path' counts deletions and mode-only changes too."""
+        w = self.world(self.pending_base(**{"config/pipeline-identity.json": self.PIPE_FILE}))
+        self.check(run_cli(w, w.pr(self.T1, "ok"), uid=self.PIPE, login="bot"), 0)  # control: the T1 alone
+        self.check(run_cli(w, w.pr({**self.T1, "mods/alice.demo/page.json": None}, "del"), uid=self.PIPE, login="bot"), 1, "R12")
+        w.git("checkout", "-q", "-b", "mode", "main")
+        w.apply(self.T1)
+        os.chmod(w.repo / "mods/alice.demo/page.json", 0o755)
+        w.git("add", "-A")
+        w.git("commit", "-q", "-m", "mode")
+        head = w.git("rev-parse", "HEAD").strip()
+        w.git("checkout", "-q", "-f", "main")
+        self.assertIn("mods/alice.demo/page.json", w.git("diff", "--name-only", "main", head))
+        self.check(run_cli(w, head, uid=self.PIPE, login="bot"), 1, "R12")
 
     def test_a_pr_that_repairs_or_equalises_the_config_is_still_judged_by_the_merge_base_value(self):
         w = self.world({**base_files(), "config/pipeline-identity.json": "{not json"})

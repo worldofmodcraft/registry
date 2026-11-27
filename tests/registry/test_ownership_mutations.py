@@ -199,6 +199,10 @@ mut("r12-two-entries-accepted", [
     ["test_r12_reject_two_t1s_a_t1_and_a_t3_and_two_entries"])
 mut("r12-another-path-allowed", [('    if len(files) != 1 or len(hits) != 1 or', '    if len(hits) != 1 or')],
     ["test_r12_reject_a_t1_plus_any_change_to_another_file", "test_r12_reject_a_t1_plus_a_new_version_a_page_edit"])
+mut("r12-detection-misses-deleted-entry", [('        if new is None:  # a deleted entry.json', '        if False:  # a deleted entry.json')],
+    ["test_r12_reject_a_created_or_deleted_entry_json"])
+mut("r12-unchanged-paths-not-counted", [('    if len(files) != 1 or len(hits) != 1 or', '    if len([1 for f in files.values() if f[0] != f[1]]) != 1 or len(hits) != 1 or')],
+    ["test_r12_reject_a_t1_plus_a_path_in_any_status"])
 mut("r12-parsed-equality-check-skipped", [('    if not append_only._same(only, new):', '    if False:')],
     ["test_r12_reject_a_t1_plus_a_new_version_a_page_edit"])
 mut("r12-shape-classification-skipped", [('    if v["findings"] or kind not in ("T1", "T3"):', '    if False:')],
