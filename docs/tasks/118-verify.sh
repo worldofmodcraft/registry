@@ -125,7 +125,7 @@ def text_checks(own_text, app_text):
              "the PR touches no other path",
              "Differences in bytes that leave the parsed object equal (whitespace, key order) are not a change for `R12`'s purposes")
     contains("C1.10 R12 says its two conditions are jointly sufficient", r12,
-             "not merely necessary but jointly sufficient", "no third condition is held back elsewhere in this document")
+             "not merely necessary but jointly sufficient", "no third condition is held back for that lift elsewhere in this document")
     contains("C1.11 R12 says a T1/T3-containing PR it does not authorise is rejected by R12 itself, whoever opened it", r12,
              "is rejected by `R12` itself, whoever opened it")
     contains("C1.12 R12 says it authorises nobody until the identity is configured", r12,
@@ -189,6 +189,18 @@ def text_checks(own_text, app_text):
              "`R12` applies to the reserved namespaces `mc` and `test` as well",
              "deliberate widening of ADR-0119 §3's reservation for this one transition", "`test:hello-world`")
 
+    # ---- fix round (review findings 1-3)
+    contains("F1 sufficiency is stated for R12's own authorisation (the R3/R7 lift) and does not reach the rules that still apply", r12,
+             "jointly sufficient for `R12`'s own authorisation, that is, for lifting `R3` and `R7` for that PR",
+             "The sufficiency reaches no further", "reject such a PR separately")
+    contains("F2a detection counts an entry.json the PR creates or deletes, rejected by R12", r12,
+             "includes an `entry.json` the PR creates or deletes", "a created file holding such an element, or a deleted file that held one, counts as containing a T1 or T3 mutation and is rejected by `R12`")
+    contains("F2b 'touches no other path' counts every path whatever its status", r12,
+             "counts every path in the diff whatever its status (added, deleted, renamed, copied, or changed in mode only)")
+    contains("F3a the malformed-config stop is scoped to PRs with a path under mods/ (infra route reads no config)", sec,
+             "stops the checker for every PR with a path under `mods/`", "infrastructure route, which reads no config")
+    chk("F3b neither the config sentence nor I9 says 'every registry PR' any more", "every registry PR" not in d.norm and "for every PR with a path under `mods/`" in i9)
+
     # ---- criterion 8: append-only.rules.md
     a = flat(app_text)
     chk("C8.1 the 'Fail closed' bullet names ownership.md's R12 and keeps the fail-closed default",
@@ -204,8 +216,8 @@ def text_checks(own_text, app_text):
         "`R1`-`R11`" not in own_text and "`I1`-`I8`" not in own_text)
     chk("C9.2 `R1`-`R12` and `I1`-`I9` appear", "`R1`-`R12`" in own_text and "`I1`-`I9`" in own_text)
     chk("C9.3 the `T1`-`T16` reference to 032-verify.sh's checks stays", "`T1`-`T16`" in own_text)
-    contains("C9.4 a malformed config/pipeline-identity.json stops the checker for every registry PR, as r11-identity.json does; the merge gate is the control", sec,
-             "A malformed `config/pipeline-identity.json` stops the checker for every registry PR",
+    contains("C9.4 a malformed config/pipeline-identity.json stops the checker for every PR with a path under mods/, as r11-identity.json does; the merge gate is the control", sec,
+             "A malformed `config/pipeline-identity.json` stops the checker for every PR with a path under `mods/`",
              "as a malformed `config/r11-identity.json` already does", "the merge gate is what keeps such a file from landing")
     return out
 
@@ -224,6 +236,9 @@ def closed_script_checks():
     for name, cmd in (("032-verify.sh", ["bash", "docs/tasks/032-verify.sh"]),
                       ("032-mutations.sh", ["bash", "docs/tasks/032-mutations.sh"]),
                       ("057-verify.sh", ["bash", "docs/tasks/057-verify.sh"])):
+        if name == "032-mutations.sh" and os.environ.get("SKIP_032_MUTATIONS") == "1":
+            print("SKIPPED  C10.1 032-mutations.sh (SKIP_032_MUTATIONS=1: run separately by the manager; not counted as a pass or a failure)")
+            continue
         r = subprocess.run(cmd, capture_output=True, text=True)
         tail = [l for l in r.stdout.splitlines() if l.strip()][-1:] or [""]
         fails = [l for l in r.stdout.splitlines() if l.startswith("FAIL")]
@@ -289,6 +304,10 @@ def mutations():
         ("delete I9", lambda t: re.sub(r'\*\*I9 \(MUST\)\*\*.*?\n\n', '', t, count=1, flags=re.S)),
         ("drop the detection breadth (the newly-added published/rejected element clause)",
          lambda t: re.sub(r',\s+or a newly added\s+element whose `status` is `"published"` or `"rejected"`', '', t, count=1)),
+        ("F1: drop the sufficiency scope", lambda t: t.replace("sufficient** for `R12`'s own authorisation, that is, for lifting `R3` and `R7` for that\nPR:", "sufficient**:", 1)),
+        ("F2a: drop the created/deleted entry.json clause", lambda t: re.sub(r"and that includes an `entry.json` the PR creates\s+or deletes:.*?because there is no `old` \(or no `new`\) for the parsed object\s+to equal, ", "", t, count=1, flags=re.S)),
+        ("F2b: drop the every-path-whatever-its-status clause", lambda t: re.sub(r', where "path" counts every path in the diff whatever its status \(added,\s+deleted, renamed, copied, or changed in mode only\)', '', t, count=1)),
+        ("F3: restore 'every registry PR'", lambda t: t.replace("stops the checker for **every** PR with a path under `mods/`", "stops the checker for **every** registry PR", 1)),
         ("drop I9's equality condition", lambda t: t.replace("When both are configured and\nthe pipeline identity equals `R11`'s identity, the checker stops", "When both are configured, the checker stops", 1)),
     ]
 
