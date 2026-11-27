@@ -383,7 +383,7 @@ class AC2aHostileStrings(Base):
     def test_hostile_login_exits_2_and_writes_no_free_text_output(self):
         w = self.world()
         head = w.pr(add_version_changes())
-        for login in ("evil\nclass=entry", "a b", "x=y", "-lead", "bot[bot]", "A" * 40):
+        for login in ("evil\nclass=entry", "a b", "x=y", "-lead", "[bot]", "A" * 40):
             res = self.check(run_cli(w, head, login=login), 2)
             self.assertNotIn("evil", res.outputs)
 
