@@ -27,7 +27,7 @@ def sub_once(text, old, new):
     return re.sub(pat, lambda m: new, text, count=1)
 
 
-FAIL_CLOSED = "Until `ownership.md` carries the pipeline-identity carve-out for T1 and T3, a checker implementing T1 or T3 must reject every PR that contains a T1 or T3 mutation, whoever authors it."
+FAIL_CLOSED = "Until a checker implements the pipeline-identity carve-out for T1 and T3, which is `ownership.md`'s `R12`, it must reject every PR that contains a T1 or T3 mutation, whoever authors it."
 BORN = "Every newly appended element must be `pending` and carry exactly the four keys `version`, `commit`, `source_url` and `status`."
 TERMINAL = "`rejected` is terminal and one-way: `rejected -> anything` is a violation of rule 1, and so is `rejected -> rejected` with any change, `reason` included."
 ONCE_START = "T1 happens exactly once, by structure:"

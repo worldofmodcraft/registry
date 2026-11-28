@@ -28,10 +28,11 @@ MAX_BLOB_BYTES, MAX_TOTAL_BYTES, MAX_ENTRIES = 1 << 20, 32 << 20, 5000  # per bl
 MARKER = "<!-- registry-ci-gate -->"
 ENV = {"PATH": "/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_TERMINAL_PROMPT": "0"}
 SHA, NAME = r"[0-9a-f]{40}", r"[A-Za-z0-9](-?[A-Za-z0-9]){0,38}"
+LOGIN = NAME + r"(\[bot\])?"  # a GitHub App's bot account reports <name>[bot] as its login; nothing wider is accepted
 CLASSES = ("entry", "page-only", "reserved-namespace", "other")
 STRICT = {k: re.compile(v) for k, v in {  # the only lines OUT/outputs may hold (never PR free text)
     "class": "|".join(CLASSES), "result": r"accepted|rejected|undecided",
-    "route": r"infra|content|empty", "pr": r"[0-9]+", "head_sha": SHA, "merge_base": SHA, "org": NAME, "login": NAME}.items()}
+    "route": r"infra|content|empty", "pr": r"[0-9]+", "head_sha": SHA, "merge_base": SHA, "org": NAME, "login": LOGIN}.items()}
 ENTRY_RE = re.compile(r"mods/([a-z0-9][a-z0-9_-]*)\.([a-z0-9][a-z0-9_-]*)/entry\.json")
 EMPTY_DIFF = ("unrecognised-pr (criterion 8: classification fails closed): the PR changes no paths (empty diff), so it "
               "has no registry shape. To fix: open the PR with the mods/<namespace>.<name>/ files it is meant to change")
@@ -96,7 +97,7 @@ def read_identity(event, pr):
     who = {"number": n, "uid": _at(pr, "user", "id"), "login": _at(pr, "user", "login"), "head": _at(pr, "head", "sha"),
            "base_sha": _at(pr, "base", "sha")}
     good = (type(n) is int and n > 0 and type(who["uid"]) is int and who["uid"] > 0 and isinstance(who["login"], str)
-            and re.fullmatch(NAME, who["login"]) and all(isinstance(who[k], str) and re.fullmatch(SHA, who[k]) for k in ("head", "base_sha")))
+            and re.fullmatch(LOGIN, who["login"]) and all(isinstance(who[k], str) and re.fullmatch(SHA, who[k]) for k in ("head", "base_sha")))
     if not good:
         raise Undecided("the PR object has a malformed number, user id, user login or sha")
     return who
@@ -187,21 +188,32 @@ def materialise(repo, commit, dest, prefixes, *, max_blob_bytes=MAX_BLOB_BYTES, 
     return odd
 
 
-def read_r11(old):
-    p = Path(old) / "config" / "r11-identity.json"
+def _read_identity(old, name, key):
+    """The identity a config file holds at the merge-base: None (absent or null: unconfigured, so the rule authorises
+    nobody) or the numeric id. Anything else about the file is Undecided (exit 2), never a rejection."""
+    p = Path(old) / "config" / name
     if p.is_symlink() or (p.exists() and not p.is_file()):
-        raise Undecided("config/r11-identity.json at the merge-base is not a regular file")
+        raise Undecided(f"config/{name} at the merge-base is not a regular file")
     if not p.exists():
-        return None  # absent means unconfigured: R11 authorises nobody
-    doc, bad = _load(p, "config/r11-identity.json"), Undecided("config/r11-identity.json is malformed")
-    if not isinstance(doc, dict) or set(doc) != {"schema_version", "r11_identity"} or doc["schema_version"] != "1.0.0":
+        return None  # absent means unconfigured
+    doc, bad = _load(p, f"config/{name}"), Undecided(f"config/{name} is malformed")
+    if not isinstance(doc, dict) or set(doc) != {"schema_version", key} or doc["schema_version"] != "1.0.0":
         raise bad
-    r = doc["r11_identity"]
+    r = doc[key]
     if r is None:
         return None
     if isinstance(r, dict) and set(r) == {"provider", "id"} and r["provider"] == "github" and type(r["id"]) is int and r["id"] > 0:
         return r["id"]
     raise bad
+
+
+def read_r11(old):
+    return _read_identity(old, "r11-identity.json", "r11_identity")
+
+
+def read_pipeline(old):
+    """R12's identity from config/pipeline-identity.json at the merge-base, by the same rules as read_r11."""
+    return _read_identity(old, "pipeline-identity.json", "pipeline_identity")
 
 
 def reserved_org(old):
@@ -308,7 +320,8 @@ def _decide(repo, event_path, pr_path, status, classify_only, tools_dir, lim):
     else:
         old, new = (tempfile.mkdtemp(prefix=f"wom-{n}-", dir=lim["tmp_parent"]) for n in ("old", "new"))
         try:
-            if materialise(repo, mb, old, ("mods", "reserved-namespaces.json", "config/r11-identity.json"), **lim["mat"]):
+            if materialise(repo, mb, old, ("mods", "reserved-namespaces.json", "config/r11-identity.json",
+                                      "config/pipeline-identity.json"), **lim["mat"]):
                 raise Undecided("the merge-base tree holds an entry that is neither a file nor a symlink")
             odd = materialise(repo, who["head"], new, ("mods",), **lim["mat"])
             for root in (old, new):
@@ -317,7 +330,10 @@ def _decide(repo, event_path, pr_path, status, classify_only, tools_dir, lim):
             reserved_path = Path(old, "reserved-namespaces.json")
             if reserved_path.is_symlink() or not reserved_path.is_file():
                 raise Undecided("reserved-namespaces.json is not a regular file at the merge-base")
-            r11, tools = read_r11(old), Path(tools_dir or Path(repo) / "tools" / "registry")
+            r11, pipeline = read_r11(old), read_pipeline(old)
+            if r11 is not None and r11 == pipeline:
+                raise Undecided("I9: config/pipeline-identity.json and config/r11-identity.json hold the same identity")
+            tools = Path(tools_dir or Path(repo) / "tools" / "registry")
             rsv = str(reserved_path)
             plan = [("classify", "cli.py", ["classify", "--reserved-file", rsv, "--", *paths])]
             if not classify_only:
@@ -325,6 +341,7 @@ def _decide(repo, event_path, pr_path, status, classify_only, tools_dir, lim):
                        "--old-root", old, "--new-root", new, "--reserved-file", rsv]
                 own += [] if status in (None, "none") else ["--membership-status", status]
                 own += [] if r11 is None else ["--r11-identity", f"github:{r11}"]
+                own += [] if pipeline is None else ["--pipeline-identity", f"github:{pipeline}"]
                 plan += [("schema", "cli.py", ["schema", "--root", new, "--", *paths]),
                          ("append-only", "cli.py", ["append-only", "--old-root", old, "--new-root", new, "--", *paths]),
                          ("ownership", "ownership_cli.py", own + ["--", *paths])]

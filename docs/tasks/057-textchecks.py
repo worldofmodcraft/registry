@@ -50,7 +50,7 @@ OLD_SCHEMA = {
 # Full sentences that must appear (new contract text), by id.
 REQUIRED = {
     "born-pending": "Every newly appended element must be `pending` and carry exactly the four keys `version`, `commit`, `source_url` and `status`.",
-    "fail-closed": "Until `ownership.md` carries the pipeline-identity carve-out for T1 and T3, a checker implementing T1 or T3 must reject every PR that contains a T1 or T3 mutation, whoever authors it.",
+    "fail-closed": "Until a checker implements the pipeline-identity carve-out for T1 and T3, which is `ownership.md`'s `R12`, it must reject every PR that contains a T1 or T3 mutation, whoever authors it.",
     "t1-exactly-once": 'T1 happens exactly once, by structure: it requires `old.versions[i].status == "pending"`, and a `pending` element has none of the five pipeline-written fields. After T1 the element is `published`, and a `published` element is covered by plain deep-equality under rule 1 (or by T2), so the five fields can never be written a second time.',
     "t1-condition-4": "`new.versions[i]` has exactly the nine keys of the `published` row of the shape table, so no key outside them, and in particular no `reason` and no `build_log_url`.",
     "t3-condition-4": "`new.versions[i]` has exactly the keys of the `rejected` row of the shape table: none of the five pipeline-written fields of T1, and nothing else.",

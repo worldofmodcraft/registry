@@ -39,7 +39,7 @@ NAME_RE = r"[A-Za-z0-9](-?[A-Za-z0-9]){0,38}"
 STRICT_LINES = [re.compile(p) for p in (
     r"class=(entry|page-only|reserved-namespace|other)", r"result=(accepted|rejected|undecided)",
     r"route=(infra|content|empty)", r"pr=[0-9]+", r"head_sha=[0-9a-f]{40}", r"merge_base=[0-9a-f]{40}",
-    f"org={NAME_RE}", f"login={NAME_RE}")]
+    f"org={NAME_RE}", f"login={NAME_RE}(\\[bot\\])?")]
 
 
 class Link:
@@ -383,7 +383,7 @@ class AC2aHostileStrings(Base):
     def test_hostile_login_exits_2_and_writes_no_free_text_output(self):
         w = self.world()
         head = w.pr(add_version_changes())
-        for login in ("evil\nclass=entry", "a b", "x=y", "-lead", "bot[bot]", "A" * 40):
+        for login in ("evil\nclass=entry", "a b", "x=y", "-lead", "[bot]", "A" * 40):
             res = self.check(run_cli(w, head, login=login), 2)
             self.assertNotIn("evil", res.outputs)
 
@@ -714,6 +714,168 @@ class AC5MergeBaseReads(Base):
         self.check(run_cli(w, head, uid=MEMBER, login="memberbob", status="204"), 0)
         res = run_cli(w, head, uid=MEMBER, login="memberbob", status="204")
         self.assertNotIn("R7", res.comment)
+
+
+class AC12PipelineIdentity(Base):
+    """Task 120: R12's identity is configuration read at the merge-base (config/pipeline-identity.json), and I9."""
+    PIPE_FILE = (FIX / "pipeline-identity.test-only.json").read_text()  # github id 556
+    PIPE = 556
+    R11_FILE = (FIX / "r11-identity.test-only.json").read_text()  # github id 555
+
+    @staticmethod
+    def pending_base(**extra):
+        return {**base_files(), "mods/alice.demo/entry.json": js(alice_entry(pending())), **extra}
+
+    T1 = {"mods/alice.demo/entry.json": js(alice_entry(published()))}
+    T3 = {"mods/alice.demo/entry.json": js(alice_entry(support.rejected()))}
+
+    def cfg(self, doc):
+        return js({"schema_version": "1.0.0", "pipeline_identity": doc})
+
+    def test_absent_and_null_mean_unconfigured_and_a_valid_identity_is_configured(self):
+        files = base_files()
+        self.assertNotIn("config/pipeline-identity.json", files)
+        for label, extra in (("absent", {}), ("null", {"config/pipeline-identity.json": self.cfg(None)}),
+                             ("configured", {"config/pipeline-identity.json": self.cfg({"provider": "github", "id": 342916936})})):
+            with self.subTest(config=label):
+                w = self.world({**base_files(), **extra})
+                self.check(run_cli(w, w.pr(add_version_changes())), 0)
+
+    def test_malformed_pipeline_config_is_exit_2_for_every_pr_with_a_mods_path(self):
+        good = {"provider": "github", "id": 342916936}
+        bad = ("{not json", "[]", js({"schema_version": "1.0.0"}), self.cfg({"provider": "github", "id": "342916936"}),
+               self.cfg({"provider": "github", "id": True}), self.cfg({"provider": "github", "id": 0}),
+               self.cfg({"provider": "github", "id": -1}), self.cfg({"provider": "gitlab", "id": 5}),
+               self.cfg({**good, "x": 1}), self.cfg(5), js({"schema_version": "9", "pipeline_identity": None}),
+               js({"schema_version": "1.0.0", "pipeline_identity": None, "extra": 1}),
+               '{"schema_version": "1.0.0", "pipeline_identity": null, "pipeline_identity": null}')
+        for i, doc in enumerate(bad):
+            w = self.world({**base_files(), "config/pipeline-identity.json": doc})
+            with self.subTest(doc=doc):
+                self.check(run_cli(w, w.pr(add_version_changes()), status="none"), 2, "pipeline-identity")
+                self.check(run_cli(w, w.pr(first_publish_changes("alice", "second"), "p2")), 2, "pipeline-identity")
+
+    def test_a_symlink_or_a_directory_as_the_pipeline_config_is_exit_2(self):
+        w = self.world({**base_files(), "config/pipeline-identity.json": Link("r11-identity.json")})
+        self.check(run_cli(w, w.pr(add_version_changes())), 2, "pipeline-identity")
+        w = self.world({**base_files(), "config/pipeline-identity.json/inner.json": "{}\n"})
+        self.check(run_cli(w, w.pr(add_version_changes())), 2, "pipeline-identity")
+
+    def test_a_pr_without_a_mods_path_never_reads_the_config(self):
+        w = self.world({**base_files(), "config/pipeline-identity.json": "{not json"})
+        res = self.check(run_cli(w, w.pr({"README.md": "x\n"})), 0, "green does not mean safe")
+        self.assertEqual(res.verdict["route"], "infra")
+
+    def test_the_configured_pipeline_identity_writes_back_one_t1_or_one_t3_end_to_end(self):
+        w = self.world(self.pending_base(**{"config/pipeline-identity.json": self.PIPE_FILE}))
+        for i, changes in enumerate((self.T1, self.T3)):
+            res = self.check(run_cli(w, w.pr(changes, f"p{i}"), uid=self.PIPE, login="pipeline-bot"), 0)
+            self.assertEqual(res.verdict["checkers"]["ownership"]["verdict"]["authorised_writeback"], True)
+
+    def test_everyone_else_is_rejected_by_r12_and_so_is_everyone_when_unconfigured(self):
+        w = self.world(self.pending_base(**{"config/pipeline-identity.json": self.PIPE_FILE}))
+        for uid, login in ((ALICE, "alice"), (MALLORY, "pipeline-bot"), (555, "platform")):
+            self.check(run_cli(w, w.pr(self.T1, f"p{uid}"), uid=uid, login=login), 1, "R12")
+        w = self.world(self.pending_base())
+        self.check(run_cli(w, w.pr(self.T1), uid=self.PIPE, login="bot"), 1, "R12", "authorises nobody")
+
+    def test_the_config_is_read_from_the_merge_base_never_from_the_pr(self):
+        w = self.world(self.pending_base())
+        sets_own = {**self.T1, "config/pipeline-identity.json": self.PIPE_FILE}
+        self.check(run_cli(w, w.pr(sets_own), uid=self.PIPE, login="bot"), 1, "R12")  # also touches another path
+        res = self.check(run_cli(w, w.pr({"config/pipeline-identity.json": self.PIPE_FILE}, "p2"), uid=self.PIPE,
+                                 login="bot"), 0, "green does not mean safe")
+        self.check(run_cli(w, w.pr(self.T1, "p3"), uid=self.PIPE, login="bot"), 1, "R12", "authorises nobody")
+        w = self.world(self.pending_base(**{"config/pipeline-identity.json": self.PIPE_FILE}))
+        unset = {**self.T1, "config/pipeline-identity.json": self.cfg(None)}
+        self.check(run_cli(w, w.pr(unset), uid=self.PIPE, login="bot"), 1, "R12")  # extra path: not exactly one change
+        self.check(run_cli(w, w.pr(self.T1, "p4"), uid=self.PIPE, login="bot"), 0)
+
+    BOT = "worldofmodcraft-pipeline[bot]"  # the real login GitHub reports for the App's bot account (id 342916936, type Bot)
+
+    def test_the_real_bot_login_reaches_an_r12_accept_end_to_end_and_authorises_nothing_by_itself(self):
+        cfg = self.cfg({"provider": "github", "id": 342916936})
+        w = self.world(self.pending_base(**{"config/pipeline-identity.json": cfg}))
+        res = self.check(run_cli(w, w.pr(self.T1), uid=342916936, login=self.BOT), 0)
+        self.assertTrue(res.verdict["checkers"]["ownership"]["verdict"]["authorised_writeback"])
+        # the login never authorises: the same login with another id is rejected by R12, and the id alone is enough
+        self.check(run_cli(w, w.pr(self.T1, "p2"), uid=900800700, login=self.BOT), 1, "R12")
+        self.check(run_cli(w, w.pr(self.T1, "p3"), uid=342916936, login="anything"), 0)
+
+    def test_the_bot_login_is_also_a_valid_metadata_login_for_the_classify_pre_pass(self):
+        w = self.world()
+        res = run_cli(w, w.pr(reserved_publish()), uid=MEMBER, login=self.BOT, classify_only=True)
+        self.check(res, 0)
+        self.assertIn(f"login={self.BOT}\n", res.outputs)
+
+    def test_hostile_logins_are_undecided(self):
+        w = self.world(self.pending_base(**{"config/pipeline-identity.json": self.cfg({"provider": "github", "id": 342916936})}))
+        for i, login in enumerate(("[bot]", "a[bot][bot]", "a[BOT]", "a[bot]x", "a [bot]", "-a[bot]", "a[bot]\n", "a[bot", "a]bot[",
+                                   "a-[bot]", "a[bot] ", "a\n[bot]")):
+            with self.subTest(login=login):
+                self.check(run_cli(w, w.pr(self.T1, f"h{i}"), uid=342916936, login=login), 2, "malformed")
+                self.check(run_cli(w, w.pr(self.T1, f"c{i}"), uid=342916936, login=login, classify_only=True), 2)
+
+    def test_t1_plus_a_path_in_any_status_is_rejected_by_r12_end_to_end(self):
+        """Contract 116282e: 'no other path' counts deletions and mode-only changes too."""
+        w = self.world(self.pending_base(**{"config/pipeline-identity.json": self.PIPE_FILE}))
+        self.check(run_cli(w, w.pr(self.T1, "ok"), uid=self.PIPE, login="bot"), 0)  # control: the T1 alone
+        self.check(run_cli(w, w.pr({**self.T1, "mods/alice.demo/page.json": None}, "del"), uid=self.PIPE, login="bot"), 1, "R12")
+        w.git("checkout", "-q", "-b", "mode", "main")
+        w.apply(self.T1)
+        os.chmod(w.repo / "mods/alice.demo/page.json", 0o755)
+        w.git("add", "-A")
+        w.git("commit", "-q", "-m", "mode")
+        head = w.git("rev-parse", "HEAD").strip()
+        w.git("checkout", "-q", "-f", "main")
+        self.assertIn("mods/alice.demo/page.json", w.git("diff", "--name-only", "main", head))
+        self.check(run_cli(w, head, uid=self.PIPE, login="bot"), 1, "R12")
+
+    def test_a_pr_that_repairs_or_equalises_the_config_is_still_judged_by_the_merge_base_value(self):
+        w = self.world({**base_files(), "config/pipeline-identity.json": "{not json"})
+        fixed = {**add_version_changes(), "config/pipeline-identity.json": self.cfg(None)}
+        self.check(run_cli(w, w.pr(fixed)), 2, "pipeline-identity")  # the broken merge-base value decides, not the repair
+        w = self.world({**base_files(), "config/r11-identity.json": self.R11_FILE})
+        equal = {**add_version_changes(), "config/pipeline-identity.json": self.cfg({"provider": "github", "id": 555})}
+        # a rejection (mixed paths), not "undecided": I9 reads both identities at the merge-base, never the PR's own value
+        self.check(run_cli(w, w.pr(equal)), 1, "unrecognised-path")
+
+    def test_i9_equal_identities_are_undecided_for_every_pr_with_a_mods_path(self):
+        same = self.cfg({"provider": "github", "id": 555})
+        w = self.world(self.pending_base(**{"config/pipeline-identity.json": same, "config/r11-identity.json": self.R11_FILE}))
+        for i, changes in enumerate((self.T1, add_version_changes(), first_publish_changes("alice", "second"))):
+            self.check(run_cli(w, w.pr(changes, f"p{i}"), uid=555, login="platform"), 2, "I9")
+
+    def test_i9_is_enforced_by_the_composer_itself_not_only_by_the_checker_it_calls(self):
+        """Stub checkers accept everything, so only the composer's own I9 check can produce exit 2 here."""
+        same = self.cfg({"provider": "github", "id": 555})
+        w = self.world({**base_files(), "config/pipeline-identity.json": same, "config/r11-identity.json": self.R11_FILE})
+        self.check(run_lib(w, w.pr(add_version_changes()), tools_dir=write_stubs(w.ws / "s", ALL_OK), status="204"), 2, "I9")
+        w = self.world({**base_files(), "config/pipeline-identity.json": self.PIPE_FILE, "config/r11-identity.json": self.R11_FILE})
+        self.check(run_lib(w, w.pr(add_version_changes()), tools_dir=write_stubs(w.ws / "s", ALL_OK), status="204"), 0)
+
+    def test_i9_distinct_or_unconfigured_identities_still_give_a_verdict(self):
+        both = {"config/pipeline-identity.json": self.PIPE_FILE, "config/r11-identity.json": self.R11_FILE}
+        w = self.world(self.pending_base(**both))
+        self.check(run_cli(w, w.pr(self.T1), uid=self.PIPE, login="bot"), 0)
+        self.check(run_cli(w, w.pr({"mods/alice.demo/entry.json": js(alice_entry(removed()))}, "p2"), uid=555, login="platform"), 1)
+        for only in ("config/pipeline-identity.json", "config/r11-identity.json"):
+            w = self.world({**base_files(), only: self.PIPE_FILE if "pipe" in only else self.R11_FILE})
+            self.check(run_cli(w, w.pr(add_version_changes())), 0)
+
+    def test_the_composer_passes_the_identity_flag_only_when_configured(self):
+        for cfg, want in ((self.PIPE_FILE, "github:556"), (None, None)):
+            w = self.world({**base_files(), **({"config/pipeline-identity.json": cfg} if cfg else {})})
+            argvs = w.ws / "argvs"
+            d = write_stubs(w.ws / "s", ALL_OK)
+            src = (d / "ownership_cli.py").read_text()
+            (d / "ownership_cli.py").write_text(src.replace("import json, sys, time\n", "import json, sys, time\nopen(%r, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n" % str(argvs)))
+            self.check(run_lib(w, w.pr(add_version_changes()), tools_dir=d, status="204"), 0)
+            argv = json.loads(argvs.read_text().splitlines()[0])
+            if want:
+                self.assertEqual(argv[argv.index("--pipeline-identity") + 1], want)
+            else:
+                self.assertNotIn("--pipeline-identity", argv)
 
 
 class AC6TreeHandlingAndArgv(Base):

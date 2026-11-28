@@ -3,7 +3,7 @@
 
     python3 tools/registry/ownership_cli.py --author-provider github --author-id N [--author-login NAME]
         --old-root DIR --new-root DIR --reserved-file MERGE_BASE_reserved-namespaces.json
-        [--membership-status HTTP_STATUS] [--r11-identity PROVIDER:ID] PATH...
+        [--membership-status HTTP_STATUS] [--r11-identity PROVIDER:ID] [--pipeline-identity PROVIDER:ID] PATH...
 
 PATHs are repository-relative changed paths (`git diff --no-renames`). --old-root is the merge-base checkout and
 --new-root the PR branch; a PATH missing under a root is absent on that side. The reserved list MUST be the
@@ -11,7 +11,12 @@ merge-base revision of reserved-namespaces.json (I4). The author id MUST be the 
 (I1), never a commit author or GITHUB_ACTOR. --membership-status is the recorded HTTP status of the one live
 question "is the author a member of the reserved namespace's organisation" (204 member, 404 not, anything else,
 or no value at all, is R9's closed rejection); task 039 makes that call. --r11-identity defaults to none, and
-none means R11 authorises nobody: every takedown PR is rejected.
+none means R11 authorises nobody: every takedown PR is rejected. --pipeline-identity is the same for R12 (the
+pipeline's write-back of one T1 or one T3): it defaults to none, and none means R12 authorises nobody, so every PR
+containing a T1 or T3 mutation is rejected by R12. Both identities are configuration read at the merge-base (task 039
+passes them in), never data from the PR; when both are given and equal the CLI exits 2 without a verdict (I9).
+An entry.json that does not parse (or has a duplicate key) is rejected, and R12 is named too: whether the PR carries
+a T1 or T3 cannot be evaluated, so it fails closed.
 
 Output: a JSON verdict on stdout, one 'REJECTED ...' line per finding on stderr.
 Exit codes: 0 accepted, 1 rejected, 2 usage or internal error (NOT a rejection).
@@ -43,6 +48,15 @@ def _oracle(status):
     return ask
 
 
+def _identity(text, flag):
+    if not text:
+        return None
+    prov, _, ident = text.rpartition(":")
+    if not prov or not ident.isdigit():
+        raise report.ToolError(f"{flag} must be PROVIDER:NUMERIC_ID")
+    return (prov, int(ident))
+
+
 def main(argv):
     ap = argparse.ArgumentParser(prog="registry-ownership", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -54,18 +68,15 @@ def main(argv):
     ap.add_argument("--reserved-file", required=True)
     ap.add_argument("--membership-status", type=int)
     ap.add_argument("--r11-identity")
+    ap.add_argument("--pipeline-identity")
     ap.add_argument("paths", nargs="+")
     a = ap.parse_args(argv)
     try:
         reserved = json.loads(Path(a.reserved_file).read_text())
     except (OSError, ValueError) as exc:
         raise report.ToolError(f"cannot read the merge-base reserved list {a.reserved_file}: {exc}") from exc
-    r11 = None
-    if a.r11_identity:
-        prov, _, ident = a.r11_identity.rpartition(":")
-        if not prov or not ident.isdigit():
-            raise report.ToolError("--r11-identity must be PROVIDER:NUMERIC_ID")
-        r11 = (prov, int(ident))
+    r11, pipeline = (_identity(a.r11_identity, "--r11-identity"), _identity(a.pipeline_identity, "--pipeline-identity"))
+    ownership.separate_identities(r11, pipeline)  # I9, before anything else: no verdict, not even a parse rejection
     files, errors, base = {}, [], {}
     for rel in a.paths:
         old, e1 = cli._read(a.old_root, rel)
@@ -99,9 +110,16 @@ def main(argv):
             owners.setdefault(p[0], pair)
             src.setdefault(p[0], d.name.split(".", 1)[1])
     if errors:  # a file we cannot parse unambiguously is not evidence; reject, never guess
-        return report.make("ownership", cli._parse_error_findings(errors), merge_signal=False)
+        found = cli._parse_error_findings(errors)
+        found += [report.finding(
+            ["R12"], f"{rel}: the file does not parse unambiguously, so whether this PR contains a T1 or T3 mutation "
+            "cannot be evaluated; rejected fail-closed, whoever opened it", "make the entry.json valid JSON with unique "
+            "keys", ownership.R12_CITE, path=rel)
+            for rel in sorted({rel for rel, _ in errors if rel in a.paths and (classify.parse_mod_path(rel) or (0, 0, ""))[2] == "entry"})]
+        return report.make("ownership", found, merge_signal=False)
     return ownership.check((a.author_provider, a.author_id), files, reserved, _oracle(a.membership_status),
-                           login=a.author_login, r11_identity=r11, base_entries=base, namespace_owners=owners)
+                           login=a.author_login, r11_identity=r11, pipeline_identity=pipeline, base_entries=base,
+                           namespace_owners=owners)
 
 
 if __name__ == "__main__":

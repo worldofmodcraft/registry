@@ -37,7 +37,7 @@ SHAPE_GATE = '''        if v["findings"] or "T2" not in kinds or any(k not in ("
 PATHGATE = '''        if p is None or p[2] != "entry" or old is None or new is None:
             return False'''
 R3GATE = 'if not ctx["authorised"] and _owner_pair(existing) != author:'
-FC = 'findings = _fail_closed(files) + classify.classify(sorted(files), reserved_base)["findings"]'
+FC = 'findings = _fail_closed(files, hits, why) + classify.classify(sorted(files), reserved_base)["findings"]'
 
 # ---- B4 required mutations -----------------------------------------------------------------------------------
 mut("b4-owner-from-new-i3", [('            if old is not None:\n                existing = old\n',
@@ -63,12 +63,14 @@ mut("b4-namespaces-evaluated-jointly-i7", [('    for ns in sorted(by_ns):\n     
     ["test_i7_reject_an_unauthorised_second_namespace"])
 mut("b4-skip-fail-closed", [(FC, 'findings = classify.classify(sorted(files), reserved_base)["findings"]')],
     ["test_b1_matrix_every_cell", "test_b6_truncation", "test_b1_deleting_the_file"])
-mut("b4-fail-closed-keyed-on-007a-classification", [(
-    'elif not append_only._same(o, nv[i]) and (_status(o) == "pending" or _status(nv[i]) in ("published", "rejected")):',
-    'elif not append_only._same(o, nv[i]) and append_only.check_entry(old, new)["elements"][i]["classification"] in ("T1", "T3"):')],
+mut("b4-fail-closed-keyed-on-007a-classification", [(  # task 120: re-anchored from the elif of _fail_closed to R12's detection
+    'if _status(n) in T1_T3_TARGETS and (i >= len(ov) or _status(ov[i]) == "pending"):',
+    'if i < len(ov) and _status(ov[i]) == "pending" and _status(n) in T1_T3_TARGETS and append_only.check_entry(old, new)["elements"][i]["classification"] in ("T1", "T3"):')],
     ["test_b1_matrix_every_cell", "test_fail_closed_key_is_independent"])
-mut("b4-pipeline-app-id-bypasses-fail-closed", [(FC, 'findings = (_fail_closed(files) if author[1] != pipeline_app_id else []) + classify.classify(sorted(files), reserved_base)["findings"]')],
-    ["test_b1_matrix_every_cell"])
+mut("b4-pipeline-identity-matched-on-login-r12", [(  # replaces b4-pipeline-app-id-bypasses-fail-closed (008b-3a, F4)
+    'why = _writeback(author, pipeline, files, hits)',
+    'why = _writeback((pipeline if pipeline and (login or "").endswith("[bot]") else author), pipeline, files, hits)')],
+    ["test_r12_reject_a_login_that_matches_the_bot_when_the_id_differs"])
 mut("b4-any-author-may-use-r11", [(A, 'authorised = shape')],
     ["test_r11_reject_everyone_else", "test_r11_reject_when_unconfigured"])
 mut("b4-r11-admits-non-takedown-changes", [(SHAPE_GATE, '        if "T2" not in kinds:')],
@@ -76,7 +78,7 @@ mut("b4-r11-admits-non-takedown-changes", [(SHAPE_GATE, '        if "T2" not in 
 mut("b4-r11-admits-page-edit", [(PATHGATE, '        if p is None or old is None or new is None:\n            return False\n        if p[2] == "page":\n            continue')],
     ["test_r11_reject_a_takedown_plus_any_other_change"])
 mut("b4-r11-precedence-shape-based-attempt-9", [
-    ('"authorised": authorised,', '"authorised": authorised, "shape": shape,'),
+    ('"authorised": authorised or pipeline_ok,', '"authorised": authorised or pipeline_ok, "shape": shape,'),  # task 120: re-anchored
     (R3GATE, 'if not ctx["shape"] and _owner_pair(existing) != author:'),
     ('    if reserved and not ctx["authorised"]:', '    if reserved and not ctx["shape"]:')],
     ["test_r11_precedence_is_authority_based", "test_r11_reject_owner_stranger_and_member"])
@@ -180,16 +182,58 @@ mut("i7-namespaces-pooled-accept-if-any-passes", [(
     ["test_i7_reject_one_foreign_namespace"])
 mut("i8-verdict-claims-merge-signal", [("merge_signal=False)", "merge_signal=True)")], ["test_i8_accept_a_green_verdict"])
 
+# ---- R12 and I9 (task 120) -------------------------------------------------------------------------------
+mut("r12-identity-comparison-dropped", [('    if author != pipeline:\n        return f"its author', '    if False:\n        return f"its author')],
+    ["test_r12_reject_the_same_diffs_by_a_different_id", "test_r12_reject_a_login_that_matches_the_bot_when_the_id_differs"])
+mut("r12-unconfigured-authorises-the-author", [('    if pipeline is None:\n        return "R12 is not configured', '    if False:\n        return "R12 is not configured'),
+                                               ('    if author != pipeline:\n        return f"its author', '    if pipeline is not None and author != pipeline:\n        return f"its author')],
+    ["test_r12_reject_when_the_identity_is_not_configured"])
+mut("r12-two-t1s-accepted", [
+    ('    if len(files) != 1 or len(hits) != 1 or sum(len(v) for v in hits.values()) != 1:', '    if len(files) != 1:'),
+    ('    (path, [(i, born)]), = hits.items()', '    (path, [(i, born), *_]), = hits.items()'),
+    ('    if not append_only._same(only, new):', '    if False:')],
+    ["test_r12_reject_two_t1s_a_t1_and_a_t3"])
+mut("r12-two-entries-accepted", [
+    ('    if len(files) != 1 or len(hits) != 1 or sum(len(v) for v in hits.values()) != 1:', '    if False:'),
+    ('    (path, [(i, born)]), = hits.items()', '    path, [(i, born)] = sorted(hits.items())[0]')],
+    ["test_r12_reject_two_t1s_a_t1_and_a_t3_and_two_entries"])
+mut("r12-another-path-allowed", [('    if len(files) != 1 or len(hits) != 1 or', '    if len(hits) != 1 or')],
+    ["test_r12_reject_a_t1_plus_any_change_to_another_file", "test_r12_reject_a_t1_plus_a_new_version_a_page_edit"])
+mut("r12-detection-misses-deleted-entry", [('        if new is None:  # a deleted entry.json', '        if False:  # a deleted entry.json')],
+    ["test_r12_reject_a_created_or_deleted_entry_json"])
+mut("r12-unchanged-paths-not-counted", [('    if len(files) != 1 or len(hits) != 1 or', '    if len([1 for f in files.values() if f[0] != f[1]]) != 1 or len(hits) != 1 or')],
+    ["test_r12_reject_a_t1_plus_a_path_in_any_status"])
+mut("r12-parsed-equality-check-skipped", [('    if not append_only._same(only, new):', '    if False:')],
+    ["test_r12_reject_a_t1_plus_a_new_version_a_page_edit"])
+mut("r12-shape-classification-skipped", [('    if v["findings"] or kind not in ("T1", "T3"):', '    if False:')],
+    ["test_r12_reject_a_t1_that_is_not_classified_as_one", "test_r12_reject_a_t3_with_a_blank_reason"])
+mut("r12-detection-misses-born-published", [('(i >= len(ov) or _status(ov[i]) == "pending")', '(i < len(ov) and _status(ov[i]) == "pending")')],
+    ["test_r12_reject_a_newly_added_element_born_published_or_rejected"])
+mut("r12-does-not-lift-r3-and-r7", [('"authorised": authorised or pipeline_ok,', '"authorised": authorised,')],
+    ["test_r12_accept_exactly_one_t1_or_one_t3", "test_r12_accept_on_the_reserved_namespace_test"])
+mut("r12-lifts-r3-and-r7-for-every-pr", [('pipeline_ok = why == ""', 'pipeline_ok = why in ("", None)')],
+    ["test_r3_reject_stranger"])
+mut("r12-finding-dropped", [('    if why and path in hits:', '    if False:')],
+    ["test_r12_reject_the_same_diffs_by_a_different_id", "test_r12_reject_when_the_identity_is_not_configured"])
+mut("r12-cli-unparseable-entry-not-tagged", [('["R12"], f"{rel}: the file does not parse', '["R0"], f"{rel}: the file does not parse', "tools/registry/ownership_cli.py")],
+    ["test_r12_reject_is_in_the_cli_for_an_entry"])
+mut("i9-equal-identities-give-a-verdict", [(
+    '    pipeline = None if pipeline_identity is None else _pair(pipeline_identity, "pipeline_identity")\n    separate_identities(r11, pipeline)\n',
+    '    pipeline = None if pipeline_identity is None else _pair(pipeline_identity, "pipeline_identity")\n')],
+    ["test_i9_reject_equal_identities_raise_a_tool_error"])
+mut("i9-compares-the-id-only", [('    if r11 is not None and pipeline is not None and r11 == pipeline:', '    if r11 is not None and pipeline is not None and r11[1] == pipeline[1]:')],
+    ["test_i9_reject_the_comparison_is_on_provider_and_id"])
+
 # ---- amendment 1 / F1: a new entry in an owned namespace is judged by R3 on the recorded owner's id ----------
 mut("f1-namespace-owners-ignored-per-path-first-publish",
     [('elif first is not None and not reserved and ns in ctx["owners"]:', 'elif first is not None and not reserved and False:')],
     ["test_r3_reject_new_sibling_entry_by_a_stranger", "test_r3_accept_renamed_owner_adds_a_second_mod"])
 mut("f1-namespace-owners-read-from-the-prs-own-files",
-    [('"base_entries": base_entries or {}, "owners": owners}',
-      '"base_entries": base_entries or {}, "owners": {classify.parse_mod_path(p)[0]: _owner_pair(f[1]) for p, f in files.items() if classify.parse_mod_path(p) and f[1]}}')],
+    [('"owners": owners}',
+      '"owners": {classify.parse_mod_path(p)[0]: _owner_pair(f[1]) for p, f in files.items() if classify.parse_mod_path(p) and f[1]}}')],
     ["test_r3_reject_new_sibling_entry_by_a_stranger", "test_r3_reject_owners_are_not_read_from_the_prs_own_files"])
 mut("f1-none-namespace-owners-treated-as-empty",
-    [('"base_entries": base_entries or {}, "owners": owners}', '"base_entries": base_entries or {}, "owners": owners or {}}')],
+    [('"owners": owners}', '"owners": owners or {}}')],
     ["test_r3_reject_missing_namespace_owners_fails_closed"])
 mut("f1-sibling-entry-judged-by-login-not-id",
     [('if ctx["owners"][ns] != author:', 'if (login or "").lower() != ns.lower():')],
@@ -278,9 +322,9 @@ class MutationCoverage(unittest.TestCase):
                 names |= set(unittest.defaultTestLoader.getTestCaseNames(obj))
         cls.names = names
 
-    def test_b3_the_contract_still_declares_eleven_r_rules_and_eight_i_rules(self):
-        self.assertEqual(len([r for r in self.rules if r[0] == "R"]), 11, self.rules)
-        self.assertEqual(len([r for r in self.rules if r[0] == "I"]), 8, self.rules)
+    def test_b3_the_contract_still_declares_twelve_r_rules_and_nine_i_rules(self):
+        self.assertEqual(len([r for r in self.rules if r[0] == "R"]), 12, self.rules)
+        self.assertEqual(len([r for r in self.rules if r[0] == "I"]), 9, self.rules)
 
     def test_b3_every_rule_has_an_accepting_and_a_rejecting_test(self):
         for r in self.rules:
@@ -309,7 +353,7 @@ class MutationCoverage(unittest.TestCase):
                      "b4-compare-logins-not-ids", "b4-302-is-member-r9-i5", "b4-302-is-not-member-r9-i5",
                      "b4-oracle-exception-is-member-r9", "b4-page-only-without-entry-accepted-r10",
                      "b4-namespaces-evaluated-jointly-i7", "b4-skip-fail-closed",
-                     "b4-fail-closed-keyed-on-007a-classification", "b4-pipeline-app-id-bypasses-fail-closed",
+                     "b4-fail-closed-keyed-on-007a-classification", "b4-pipeline-identity-matched-on-login-r12",
                      "b4-any-author-may-use-r11", "b4-r11-admits-non-takedown-changes",
                      "b4-r11-precedence-shape-based-attempt-9", "b4-binding-pr-rebinds-existing-namespace",
                      "b4-reject-everything-positive-control", "b6-truncation-ignored",

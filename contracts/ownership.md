@@ -32,15 +32,15 @@ This document does **not** govern:
 Every requirement below is declared as a numbered rule at the start of its own paragraph, in one
 of two classes:
 
-- **Verdict rules, `R1`-`R11`.** Each one can reject a PR. Each has exactly one row in "Where the
+- **Verdict rules, `R1`-`R12`.** Each one can reject a PR. Each has exactly one row in "Where the
   check runs and what it does on failure" below, naming what the rejection message says.
-- **Checker rules, `I1`-`I8`.** These constrain how the check is built and what its verdict means.
+- **Checker rules, `I1`-`I9`.** These constrain how the check is built and what its verdict means.
   Breaking one is a defect in the checker, or in the process around it, rather than a reason to
   reject a particular PR, so they have no taxonomy row.
 
 **Where one rule disapplies another, both ends say so.** A verdict rule may be overridden by
 another verdict rule — `R8` replaces `R4`, `R5` and `R6` for a reserved namespace; `R11` lifts `R3`
-and `R7` for an authorised takedown. Every such pair is declared **in the overriding rule's own
+and `R7` for an authorised takedown, and `R12` lifts the same two for an authorised pipeline write-back. Every such pair is declared **in the overriding rule's own
 paragraph**, in the exact form **`Precedence: R8 over R4, R5, R6`**, and every rule named after
 `over` cites the overriding rule in its own declaring paragraph. Both halves are required, and
 `docs/tasks/032-verify.sh`'s `T10`-`T13` fail the verification run if either is missing. The fence
@@ -112,15 +112,15 @@ every well-behaved input and silently authorises the one attack this document ex
 
 **R3 (MUST)** — for a namespace that already exists at the PR's merge-base and is not on the
 reserved list, the PR author's real `(provider, id)` pair MUST equal `old.owner.provider` and
-`old.owner.id`, **unless `R11` authorises the PR as a takedown** — the single exception to this
-rule, stated here at the point the ordinary rule is made, in the same form `R8`'s reserved-list
+`old.owner.id`, **unless `R11` authorises the PR as a takedown, or `R12` authorises it as the pipeline's
+write-back** — the only two exceptions to this rule, stated here at the point the ordinary rule is made, in the same form `R8`'s reserved-list
 exception takes, so that the two never have to be reconciled by a reader. This is the ordinary
 case and the most common rejection; it is stated as a rule here, beside the comparison model it
 depends on, so that the model and the requirement cannot drift apart. **The precedence, stated so
 that a faithful checker has no choice left to make: `R11` is evaluated first, and if, and only if,
 `R11` authorises a PR as a takedown — its author is the platform's own identity *and* its diff is
 nothing but the takedown mutation `contracts/append-only.rules.md` defines — `R3` does not apply to
-that PR at all**, so `I7`'s "every rule that applies to it" is satisfied without it. In every other
+that PR at all**, so `I7`'s "every rule that applies to it" is satisfied without it. `R12` lifts `R3` on the same terms for the pipeline's write-back: `R12` is evaluated too, and if, and only if, it authorises a PR, `R3` does not apply to that PR. In every other
 case, and specifically including a PR that makes the takedown mutation *and* any other change,
 `R11` authorises nothing, `R3` applies in full, and the PR is rejected exactly as any other
 unauthorised PR is — and `R11` rejects it as well: a PR that makes the takedown mutation *and* any
@@ -620,11 +620,11 @@ itself, applied to list membership instead of the ownership field.
 
 **R7 (MUST)** — a PR touching a namespace on the reserved list is authorised only if the PR author
 is a **current member** of the organisation `reserved-namespaces.json` records as that namespace's
-owner, **unless `R11` authorises the PR as a takedown**, on exactly the terms and with exactly the
+owner, **unless `R11` authorises the PR as a takedown, or `R12` authorises it as the pipeline's write-back**, on exactly the terms and with exactly the
 precedence `R3` states above: `R11` is evaluated first, and only a PR whose author is the
 platform's own identity and whose diff is nothing but the takedown mutation escapes this rule; every
 other takedown PR, and any PR that bundles the takedown mutation with another change, is rejected by `R11`
-as well as by this rule (task 075). The
+as well as by this rule (task 075). `R12` lifts this rule on the same terms for the one PR it authorises, and for no other PR. The
 exception is load-bearing here rather than decorative: **a GitHub organisation is not a member of
 itself**, so the platform's own identity fails this rule's membership test outright, and `R11` is
 the only thing that can authorise the platform's own legally-mandated takedown of a version inside
@@ -680,15 +680,16 @@ one: it is exactly as long as the set of verdict rules is, and it grows when the
 |---|---|---|
 | `R1` | a touched path under `mods/` does not parse as `mods/<namespace>.<name>/entry.json` or `.../page.json` | the offending path, and that no namespace could be attributed to it |
 | `R2` | an `entry.json`'s `id` names a different namespace than its own directory does | the path's namespace, the `id`'s namespace, and that the path is authoritative (`I2`) |
-| `R3` | an existing, non-reserved namespace's `old.owner` `(provider, id)` is not the PR author's, and `R11` has not authorised the PR as a takedown | the namespace, the author's real `(provider, id)`, and the `owner.id` it did not match |
+| `R3` | an existing, non-reserved namespace's `old.owner` `(provider, id)` is not the PR author's, and neither `R11` has authorised the PR as a takedown nor `R12` as the pipeline's write-back | the namespace, the author's real `(provider, id)`, and the `owner.id` it did not match |
 | `R4` | at a first publish, the namespace string is not the author's username, folded to lowercase | the namespace, the author's username, and that a first publish binds the namespace to the name it derives from (ADR-0039) |
 | `R5` | at a first publish, the proposed `new.owner` `(provider, id)` is not the submitter's own | the namespace, the author's real `(provider, id)`, and the `owner` the PR proposed instead |
 | `R6` | at a first publish, `new.owner.name_at_registration` is not the author's username | the namespace, the author's username, and the value the PR proposed instead |
-| `R7` | the PR author is not a current member of the organisation owning a reserved namespace, and `R11` has not authorised the PR as a takedown | the namespace, the organisation, and ADR-0119 by name, per ADR-0119 §3 |
+| `R7` | the PR author is not a current member of the organisation owning a reserved namespace, and neither `R11` has authorised the PR as a takedown nor `R12` as the pipeline's write-back | the namespace, the organisation, and ADR-0119 by name, per ADR-0119 §3 |
 | `R8` | at a reserved namespace's first publish, `new.owner` is not what `reserved-namespaces.json` records | the namespace, the recorded owner, and the `owner` the PR proposed instead |
 | `R9` | the membership question answered neither `204` nor `404` — a `302`, or anything else | the status received, that membership could not be determined, and that the check fails closed rather than guessing |
 | `R10` | a `page.json` is touched where no `entry.json` exists at the merge-base and none is created in the same PR | the path, and that no entry exists for that namespace to own it |
 | `R11` | a takedown PR is opened by an account other than the platform's own identity, or a takedown mutation appears in a PR that is not nothing but takedown mutations (whoever opened it) | the namespace, the author's real `(provider, id)`, and that only the platform's own account may open a takedown (Ludwig, 2026-09-07) |
+| `R12` | a PR contains a T1 or T3 mutation that `R12` does not authorise: its author is not the pipeline identity, or it is not exactly one T1 element or exactly one T3 element in one `entry.json` and nothing else, or the T1/T3 classification cannot be decided | the namespace, the author's real `(provider, id)`, and that only the pipeline identity may write back a build result, one transition per PR |
 
 This is the same actionable-rejection standard `append-only.rules.md` and the asset scanner already
 meet — no generic "ownership check failed," always the specific mismatch a reader can act on.
@@ -914,6 +915,92 @@ and removing either one opens one of the two attempts. `docs/tasks/032-verify.sh
 if either clause leaves the document, and its `T10`-`T13` fail if the precedence is ever declared
 at one end only. Found in review round 3 (finding 2).
 
+**Attempt 10 — write your own T1.** An author whose entry holds a `pending` version opens a PR from their
+own account that sets it to `published` (or `rejected`) with hashes they invented, betting that because the
+entry is theirs `R3` passes and nothing else looks. **What the contract does about it:** `R3` would pass
+for the owner, but `R3` is lifted only for a PR `R12` authorises, and `R12` authorises only the pipeline
+identity. The PR contains a T1 mutation that `R12` does not authorise, so it is rejected by `R12` itself,
+whoever opened it. Without `R12`'s rejection of its own, only `append-only.rules.md`'s shape rules and the
+verification on install would stand between a forged object and users.
+
+**Attempt 11 — the pipeline's PR adds a new version beside a T1.** The pipeline identity opens a PR that
+completes one `pending` element and, in the same diff, appends a second `pending` element. **What the
+contract does about it:** the parsed `new` `entry.json` then differs from `old` by more than one element's
+transition, and `R12`'s authorisation requires that it does not, so the PR is rejected by `R12`
+although its author is the pipeline identity. Detection is broad and authorisation narrow for this
+reason: the T1 element makes the PR one `R12` must judge, and the appended element makes it one `R12`
+refuses.
+
+**Attempt 12 — the pipeline's PR splices a takedown into a write-back.** The pipeline identity opens a PR
+that does one T1 and, in the same diff, sets another version's `status` to `"removed"`. **What the
+contract does about it:** `R12` rejects it, because the diff is not exactly one T1 element, and `R11`
+rejects it as well, because the PR contains a takedown mutation and is not nothing but takedown
+mutations, and its author is not the platform's own identity. Neither identity can carry the other's
+power: `R11` has no write-back and `R12` has no takedown. The same holds for a T3 in place of the T1.
+
+**Attempt 13 — the pipeline's PR edits `page.json` or `config/pipeline-identity.json`.** The pipeline
+identity opens a write-back PR that also rewrites the mod's `page.json`, or that also changes
+`config/pipeline-identity.json` to another id. **What the contract does about it:** `R12` authorises only
+a PR that touches no other path, whether under `mods/` or not, so either addition makes the PR one `R12`
+rejects. A PR that changes `config/pipeline-identity.json` and contains no T1 or T3 mutation is not
+`R12`'s to judge at all, and is the case Attempt 16 answers.
+
+**Attempt 14 — a look-alike login opens a T1.** An account whose login resembles
+`worldofmodcraft-pipeline[bot]` opens a T1 PR. **What the contract does about it:** `I1` and `I6` make the
+comparison one of `(provider, id)` against `pulls.user.id`, and a login is never read for
+authorisation, so the look-alike's different id fails the identity condition and the PR is rejected by
+`R12`. A regression test for exactly this input belongs to the checker task, not to this contract.
+
+**Attempt 15 — a checker configured with the App id.** Whoever configures the checker puts `5327993`, the
+id of the GitHub App, in `config/pipeline-identity.json` instead of the bot account's user id
+`342916936`. **What the contract does about it:** `R12` names both numbers and says which one is the
+identity, so the configuration is a defect against this document, not a second reading of it. Such a
+checker fails closed for the real pipeline (its PRs are rejected by `R12`), which the 008b-2 dry run
+would show at once, and it would authorise an account whose user id equals the App id, if one exists;
+that was not checked here. The merge gate reads the change to the configuration file.
+
+**Attempt 16 — a PR sets `config/pipeline-identity.json` to its own id.** *Same PR:* an account
+changes the file to its own id and, in the same diff, writes its own T1. **What the contract does about
+it:** the checker reads the file at the PR's merge-base, so the PR is judged against the identity as it
+stood before the PR, and it is rejected by `R12`; the PR cannot benefit from its own edit, exactly as `I4`
+says for the reserved list. *Two PRs:* the first changes only `config/pipeline-identity.json`, the second,
+opened later by the account named in it, writes a T1. **What the contract does about it:** nothing in
+this document stops the first PR, because it contains no T1 or T3 mutation and touches nothing under
+`mods/`, so `R12` and every other rule have nothing to judge in it, as for a PR that changes only
+the reserved list, below. The control is the merge gate (MANAGER.md §7), the same one that
+protects `config/r11-identity.json`, and Question 3 books the question of a stronger one. This is a
+stated limit, not a closed attack.
+
+**Attempt 17 — a compromised pipeline writes a well-formed wrong hash.** The pipeline identity opens an
+exactly-one-T1 PR whose `source_sha256` is well formed and wrong. **What the contract does about it:**
+nothing, and this is a known limit: `R12` and `append-only.rules.md` check shape only, as the latter's T1
+section says, and a T1 happens once per version. The remedy is a new version or a takedown by `R11`
+(task 057 records the same), and the verifiers of `signature-format.md`, the site and the launcher are the
+controls on the content.
+
+**Attempt 18 — the pipeline identity writes back a version it did not build.** The pipeline identity
+opens an exactly-one-T1 PR for a `pending` version that no build ran for. **What the contract does about
+it:** nothing, and this is a known limit: `R12` authorises an identity and a diff shape, and is not bound
+to a build trigger, a run or a hash. Whether a write-back corresponds to a real build is the pipeline's
+own integrity, which the signature verification downstream, not this check, tests.
+
+**Attempt 19 — the PR changes after it is opened.** An author, or whoever controls the PR's branch,
+opens a PR that looks like a write-back and pushes further changes afterwards. **What the contract does
+about it:** the check runs on every CI evaluation (Question 1), and the evaluation that counts is the one
+at the head SHA that is merged; an earlier green on a different head authorises nothing. A push that adds
+any change beyond one element's transition makes `R12` reject the PR at the new head.
+
+**Attempt 20 — claim `R12`'s precedence without being the pipeline identity (the mirror of Attempt 9).**
+An account that is **not** the pipeline identity opens a PR whose diff is nothing but one T1 element, in
+exactly the shape `append-only.rules.md` defines. The bet is on how a checker implements `R3`'s second
+exception: that it reads the precedence as a property of the **diff's shape** ("this PR looks like a
+write-back, so `R3` does not apply to it") instead of as a consequence of `R12` having **authorised** the
+PR. **What the contract does about it:** the precedence in `R3`, `R7` and `R12` is conditional on `R12`
+authorising the PR, and the authorisation names the identity. Until the identity is configured it names
+nobody. The two clauses are load-bearing in opposite directions, **who** (the identity) and **what**
+(exactly one element, nothing else), as in Attempt 9, and removing either one opens Attempt 10 or
+Attempt 11.
+
 **On GitHub's documented username-recycling behaviour, quoted verbatim, underpinning attempts 1
 and 4 above:**
 > "After changing your username, your old username becomes available for anyone else to claim."
@@ -1051,7 +1138,7 @@ rejected by `R11` itself. This sentence exists because
 review round 3 (finding 2) found the ruling written into this document's prose while its logic left
 `R3` unconditional, so a checker built faithfully from the text still rejected the platform's own
 legally-mandated takedown — review round 1's finding B5, unchanged. **A decision that lives in
-prose but not in the logic is not a decision** (Ludwig, 2026-09-07, ruling on that finding).
+prose but not in the logic is not a decision** (Ludwig, 2026-09-07, ruling on that finding). The pipeline's write-back is `R12`'s and not this rule's, so a PR that mixes a takedown mutation with a T1 or T3 element is rejected by `R11` and by `R12`, the platform's own identity has no write-back power under `R12`, and the pipeline identity has no takedown power under this rule.
 
 **The mechanism, marked rather than assumed (guardrail 6b).** A GitHub Organization does not itself
 authenticate, so which concrete `pulls.user.id` a PR opened on the organisation's behalf actually
@@ -1071,6 +1158,98 @@ merged, and this check neither represents nor replaces it: registry CI cannot ve
 decided anything. `R11` decides who may open; §7 decides who may merge. A green ownership check on
 a takedown PR means only that the opener was the platform's own account — never that the takedown
 was approved.
+
+## Pipeline write-back: who may record a build result (task 118)
+
+The build pipeline writes the result of a build back into a registry entry exactly once per version:
+T1, `pending -> published`, or T3, `pending -> rejected` (ADR-0121). `contracts/append-only.rules.md`
+defines those two shapes and declines to define who may carry them: "Authority for T1 and T3 is
+therefore not defined by this document." This section is that authority. Before it existed, that
+document's "Fail closed" default was the only rule, and it rejected every T1 and T3 PR whoever opened it
+(task 008b-3a, security review of 2026-11-07, finding F1).
+
+**R12 (MUST)** — a PR is authorised as the pipeline's write-back only when its author is the pipeline
+identity **and** its whole change is exactly one T1 element or exactly one T3 element, in exactly one
+`entry.json`, and the PR touches no other path; for the one PR `R12` authorises, `R3` and `R7` do not
+apply. **Precedence: R12 over R3, R7.** For every other PR `R12` lifts nothing, and `R3` and `R7` apply in
+full. **The identity** is `(provider: "github", id: 342916936)`, where `342916936` is the numeric user id
+of the bot account `worldofmodcraft-pipeline[bot]`, read from GitHub's public API on 2026-11-07 (task
+008b-3a log, umbrella finding F4). It is **not** `5327993`, which is the id of the GitHub App
+`worldofmodcraft-pipeline` itself. It is matched on `pulls.user.id` and the provider, as `I1` and `I6`
+require, and never on a login, and never on `GITHUB_ACTOR` or `GITHUB_ACTOR_ID`. **Unverified, marked
+here at the point it is made (guardrail 6b):** that a PR opened by an installation of that App reports the
+bot account's user id (and not the App id) as `pulls.user.id` was not checked against GitHub's
+documentation for this task; the live confirmation is the 008b-2 dry run, whose first write-back PR must
+be read before the id is configured. **Where a checker reads the identity:** from
+`config/pipeline-identity.json` at the PR's merge-base revision of that file, never the revision the PR
+itself proposes, exactly as `I4` requires for every other reading of a merge-base file, in the shape
+`{"schema_version": "1.0.0", "pipeline_identity": null}` or `{"schema_version": "1.0.0",
+"pipeline_identity": {"provider": "github", "id": 342916936}}`, by the same reading rules as
+`config/r11-identity.json`. An absent file, or `null`, means unconfigured, and an unconfigured `R12`
+authorises nobody. A symlink, a file that is not a regular file, malformed JSON, a key set other than the
+two above, a `schema_version` other than `"1.0.0"`, a provider other than `"github"`, or an `id` that is
+not an integer greater than zero (a string `"342916936"` or a boolean `true` never matches) gives **no
+verdict**: the checker stops and reports that it could not decide, as it does for `config/r11-identity.json`. **Detection
+is broad:** a PR *contains* a T1 or T3 mutation if some `entry.json` it changes has an element whose
+`status` goes from `"pending"` to `"published"` or from `"pending"` to `"rejected"`, or a newly added
+element whose `status` is `"published"` or `"rejected"`, and that includes an `entry.json` the PR creates
+or deletes: a created file holding such an element, or a deleted file that held one, counts as containing
+a T1 or T3 mutation and is rejected by `R12`, because there is no `old` (or no `new`) for the parsed object
+to equal, whatever else is wrong with that file or PR; if
+that cannot be evaluated (the file does not parse, or has a duplicate key) the PR is rejected by `R12`
+(fail closed, ADR-0121). **Authorisation is narrow:** `R12` authorises a PR that contains a T1 or T3
+mutation only when, in addition to its author being the pipeline identity, that one element is classified
+by `append-only.rules.md` as a T1 or a T3, the parsed `new` `entry.json` equals the parsed `old` one
+except for that one element's transition (no top-level key added or changed, no other element changed,
+`id` and `owner` untouched), and the PR touches no other path, where "path" counts every path in the diff whatever its status (added,
+deleted, renamed, copied, or changed in mode only). Differences in bytes that leave the parsed
+object equal (whitespace, key order) are not a change for `R12`'s purposes; they stay the business of the
+append-only and schema layers. The two conditions, the pipeline identity as author and that diff, are not
+merely necessary but jointly **sufficient** for `R12`'s own authorisation, that is, for lifting `R3` and `R7` for that
+PR: a PR meeting both is authorised by `R12`, and no third condition is held back for that lift elsewhere in this
+document. The sufficiency reaches no further: the rules named in the paragraph below as still applying
+reject such a PR separately, whatever `R12` has authorised. A PR that contains a T1 or T3 mutation and that `R12` does not
+authorise is **rejected by `R12` itself, whoever opened it**, the pipeline identity and the
+organisation's members included, with a finding that names `R12`; because `R3` and `R7` are lifted only
+for a PR `R12` authorises, they apply to such a PR in full. Until the pipeline identity is configured,
+`R12` authorises nobody, so every PR that contains a T1 or T3 mutation is rejected, which is the
+fail-closed state `append-only.rules.md` already requires; it never fails the other way, into accepting a
+PR because it looks like a write-back. **The interaction with `R11`:** a PR that mixes a takedown mutation
+with a T1 or T3 element is rejected by both `R11` and `R12`, the pipeline identity has no takedown power, and the platform's own identity has no write-back power.
+
+**What `R12` lifts, and why it never reaches the rest.** `R12` lifts `R3` and `R7` and nothing else, and
+only for the one PR it authorises. `R1`, `R2` and `R10` still apply to that PR: a path that does not parse, an
+`id` that disagrees with its directory, or a `page.json` with no entry is rejected exactly as before.
+`R4`, `R5`, `R6` and `R8` are never reached, because a T1 or a T3 needs an existing `pending` element in
+`old`, so `R12` never authorises a first publish, and those four govern first publishes only. With `R7`
+lifted, no organisation-membership call is made for the pipeline identity, so `R9` cannot fire for an
+authorised write-back; for any other PR touching a reserved namespace `R7` applies in full and `R9` is
+unchanged. `R12` applies to the reserved namespaces `mc` and `test` as well, and that is a **deliberate
+widening of ADR-0119 §3's reservation for this one transition** (ADR-0119 §3 authorises an organisation
+member to touch a reserved namespace, and says nothing of a pipeline write-back): whether or not the
+pipeline's bot account is a member of `worldofmodcraft`, `R12` does not ask. **Worked example:**
+`test:hello-world`, the permanent pipeline canary (ADR-0119), has a `pending` version at the merge-base. A
+PR by `(github, 342916936)` that changes only that element to `published`, with the five pipeline-written
+fields, and touches no other path, is authorised once the identity is configured, and `R3`, `R7` and `R9`
+are not consulted. The same diff opened by an organisation member such as `womcraft` is rejected by
+`R12`, because only the pipeline identity may write back a build result.
+
+**Where the identity lives, and what protects the file.** `config/pipeline-identity.json` is outside
+`mods/`, which is all `R1` governs, so this document does not protect it; the control is the merge gate,
+exactly as for `config/r11-identity.json`: every registry merge is the manager's under MANAGER.md §7, and
+as of task 118's spec (2026-11-26) no CODEOWNERS or branch-protection rule exists on the registry. A
+malformed `config/pipeline-identity.json` stops the checker for **every** PR with a path under `mods/`, not only for PRs that
+contain a T1 or T3 mutation (the checker routes a PR with no path under `mods/` to its infrastructure route, which reads no config, and the same holds for `config/r11-identity.json` today), as a malformed `config/r11-identity.json` already does; that is deliberate,
+and the merge gate is what keeps such a file from landing. This task does not create the file: the
+008b-3a fix round creates it with `null`, and 008b-3b sets the id. Whether `config/` should have a
+CODEOWNERS or branch-protection rule is booked as Question 3 below.
+
+**I9 (MUST)** — `R12`'s identity is read at the PR's merge-base, and the comparison below is made only
+when both identities are configured, that is, when `config/pipeline-identity.json` and
+`config/r11-identity.json` each hold a non-null identity at that merge-base. When both are configured and
+the pipeline identity equals `R11`'s identity, the checker stops without a verdict, for every PR with a path under `mods/`: one
+account holding both the takedown power of `R11` and the write-back power of `R12` would erase the
+separation those two rules state.
 
 ## Questions
 
@@ -1094,6 +1273,12 @@ was approved.
    new namespace). **What rests on this:** nothing yet — this is a known, accepted consequence of
    two already-accepted ADRs, not a defect in this document, and is booked only so it is visible
    next to the attack attempt that demonstrates it rather than left to be rediscovered.
+3. **Whether `config/` (`r11-identity.json`, `pipeline-identity.json`) should be protected by CODEOWNERS
+   or a branch-protection rule.** Today the only control over those files is the manager's merge gate
+   (MANAGER.md §7), stated under "Pipeline write-back" above. Adding either would be a change to the remote repository
+   (MANAGER.md §3.9) and is not part of task 118. **Assumed meanwhile:** the merge gate is the control.
+   **What rests on this:** a mistaken or hostile merge of a change to either file, which no rule in
+   this document can see.
 
 Both of the other questions this document booked — the case-folding rule and who may open a
 takedown PR — were answered by Ludwig on 2026-09-07 and are recorded in the next section, so no
